@@ -1,7 +1,7 @@
 {
   "name": "project-kit",
   "version": "0.1.0",
-  "description": "Create, audit and upgrade software projects from the cookiecutter-gi templates, with spec-kit, linting and a changelog set up.",
+  "description": "Create, audit and upgrade software projects from the cookiecutter-gi templates, with spec-kit, linting and a changelog set up, and maintain their changelogs, releases, pull requests and documentation.",
   "author": {
     "name": "Samuel Letellier-Duchesne",
     "url": "https://github.com/samuelduchesne"
@@ -9,5 +9,5 @@
   "homepage": "https://github.com/samuelduchesne/project-kit",
   "repository": "https://github.com/samuelduchesne/project-kit",
   "license": "MIT",
-  "keywords": ["scaffolding", "templates", "cookiecutter", "cruft", "spec-kit", "changelog"]
+  "keywords": ["scaffolding", "templates", "cookiecutter", "cruft", "spec-kit", "changelog", "release", "documentation"]
 }

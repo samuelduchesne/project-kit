@@ -17,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MARKETPLACE = ROOT / ".claude-plugin" / "marketplace.json"
-FORBIDDEN = ("bin", "CLAUDE.md", "hooks", "agents", ".mcp.json")
+FORBIDDEN = ("bin", "CLAUDE.md", "hooks", ".mcp.json")
 
 
 def load_json(path: Path, errors: list[str]) -> dict | None:

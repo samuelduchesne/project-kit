@@ -11,8 +11,16 @@ The plugin works in claude.ai chat, the Claude desktop app, Cowork and Claude Co
 | `/project-kit:new-project` | Create a new Python or Node project from the cookiecutter-gi templates, with spec-kit, linting and a changelog set up | Planned |
 | `/project-kit:upgrade-project` | Bring an existing project up to the latest template, linking it to the template first if needed | Planned |
 | `/project-kit:audit-project` | Check a project against the standards and report drift without changing anything | Planned |
+| `/project-kit:changelog-keeper` | Create a `CHANGELOG.md` from git history, or audit and fix an existing one, following Keep a Changelog 1.1.0 | Available |
+| `/project-kit:create-release` | Cut a Python or Node release: bump the version, update the changelog, draft release notes and create the GitHub release | Available |
+| `/project-kit:stacked-prs` | Split uncommitted changes into stacked pull requests and merge them in dependency order | Available |
+| `/project-kit:diataxis` | Write, place and reorganize documentation using the Diátaxis framework | Available |
+| `/project-kit:editorial` | Apply the house writing style, after Jean-Luc Doumont's *Trees, maps and theorems* | Available |
+| `/project-kit:review-docs` | Review documentation against a scoped code diff and report misalignments (requires a saved `review-docs` workflow in `~/.claude/workflows/`, which the plugin does not ship) | Available |
 
-In this version each skill is a placeholder: it explains what the workflow will do and that it isn't available yet, and it changes nothing.
+Skills marked Planned are placeholders: each explains what the workflow will do and that it isn't available yet, and it changes nothing.
+
+The plugin also includes the `editor` agent, which writes and revises prose to the `editorial` standard. `diataxis` and `review-docs` delegate prose work to it. Agents are not available on every surface; where it is unavailable, apply the `editorial` skill directly.
 
 ## Install
 
@@ -53,6 +61,7 @@ To update, run `claude plugin update project-kit@project-kit`, or open `/plugin`
 plugins/project-kit/              the plugin (the only folder that gets installed)
   .claude-plugin/plugin.json
   skills/<name>/SKILL.md
+  agents/<name>.md
 .github/                          CI workflow and the manifest consistency check
 specs/                            spec-kit feature specs, plans and tasks
 .specify/, .claude/skills/        spec-kit development files (not packaged)
