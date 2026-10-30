@@ -78,8 +78,15 @@ class AuditProjectTests(unittest.TestCase):
 
     def audit(self, *extra: str, project: Path | None = None) -> dict:
         proc = subprocess.run(
-            [sys.executable, str(SCRIPT), "--project", str(project or self.project), "--template", str(self.template)]
-            + list(extra),
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--project",
+                str(project or self.project),
+                "--template",
+                str(self.template),
+                *extra,
+            ],
             capture_output=True,
             text=True,
             check=False,
@@ -91,7 +98,7 @@ class AuditProjectTests(unittest.TestCase):
     def ids(self, out: dict) -> dict[str, str]:
         return {f["id"]: f["severity"] for f in out["findings"]}
 
-    def change(self, message: str, edit) -> None:  # noqa: ANN001
+    def change(self, message: str, edit) -> None:
         edit(self.project)
         commit_all(self.project, message)
 

@@ -40,7 +40,8 @@ from new_project import (
     check_option_values,
     check_tools,
     commit_matches,
-    cruft_failure,
+    cookiecutter_config,
+    cruft_create,
     default_branch,
     directory_args,
     finish,
@@ -80,8 +81,13 @@ def git_state(project: Path) -> dict[str, Any]:
         return {"repository": False, "clean": False, "first_commit_date": None}
     clean = run(["git", "status", "--porcelain"], cwd=project).stdout.strip() == ""
     roots = git_out("rev-list", "--max-parents=0", "HEAD", cwd=project).split()
-    dates = sorted(git_out("log", "-1", "--format=%cI", root, cwd=project) for root in roots)
-    return {"repository": True, "clean": clean, "first_commit_date": dates[0] if dates else None}
+    # Compare Unix timestamps: ISO dates with different UTC offsets don't sort chronologically as strings.
+    dates = []
+    for root in roots:
+        stamp, _, iso = git_out("log", "-1", "--format=%ct %cI", root, cwd=project).partition(" ")
+        if stamp.isdigit():
+            dates.append((int(stamp), iso))
+    return {"repository": True, "clean": clean, "first_commit_date": min(dates)[1] if dates else None}
 
 
 def require_clean_repo(state: dict[str, Any], project: Path) -> None:
@@ -203,8 +209,12 @@ def resolve_commit(clone: Path, commit: str) -> str:
     return sha
 
 
+def definition_path(directory: str) -> str:
+    return f"{directory}/cookiecutter.json" if directory else "cookiecutter.json"
+
+
 def definition_at(clone: Path, commit: str, directory: str) -> dict[str, Any]:
-    path = f"{directory}/cookiecutter.json" if directory else "cookiecutter.json"
+    path = definition_path(directory)
     proc = run(["git", "show", f"{commit}:{path}"], cwd=clone)
     if proc.returncode != 0:
         raise Stop(EXIT_ENVIRONMENT, [f"The template has no {path} at {commit[:12]}."])
@@ -231,28 +241,22 @@ def commits_behind(clone: Path, commit: str, directory: str) -> int | None:
     return int(count) if count.isdigit() else None
 
 
-def base_commit_for(clone: Path, date: str | None) -> dict[str, str] | None:
-    """The template's last commit at or before ``date`` (the project's first commit)."""
+def base_commit_for(clone: Path, date: str | None, directory: str) -> dict[str, str] | None:
+    """The template's last commit at or before ``date`` (the project's first commit).
+
+    Only the branch's own history counts (``--first-parent``): a commit from a feature branch that was merged later
+    was not the template's state at ``date``. ``None`` when the project is older than the template, or than the
+    template folder ``directory`` (the Node template was added after the Python one).
+    """
     if not date:
         return None
-    sha = git_out("rev-list", "-1", f"--before={date}", "HEAD", cwd=clone)
-    if not sha:
+    sha = git_out("rev-list", "-1", "--first-parent", f"--before={date}", "HEAD", cwd=clone)
+    if not sha or run(["git", "cat-file", "-e", f"{sha}:{definition_path(directory)}"], cwd=clone).returncode != 0:
         return None
     return {"commit": sha, "date": git_out("log", "-1", "--format=%cI", sha, cwd=clone)}
 
 
 # --- cruft ---------------------------------------------------------------------
-
-
-def cookiecutter_config(work: Path) -> Path:
-    """Keep cookiecutter's clone cache and replay files out of the user's home folder."""
-    config = work / "cookiecutter.yaml"
-    config.write_text(
-        f"cookiecutters_dir: {json.dumps(str(work / 'cookiecutters'))}\n"
-        f"replay_dir: {json.dumps(str(work / 'replay'))}\n",
-        encoding="utf-8",
-    )
-    return config
 
 
 def render(clone: Path, commit: str, directory: str, answers: dict[str, Any], work: Path) -> Path:
@@ -261,25 +265,9 @@ def render(clone: Path, commit: str, directory: str, answers: dict[str, Any], wo
     answers_file.write_text(json.dumps(answers), encoding="utf-8")
     out = work / "render"
     out.mkdir()
-    proc = run(
-        [
-            *CRUFT,
-            "create",
-            str(clone),
-            *directory_args(directory),
-            "--no-input",
-            "--checkout",
-            commit,
-            "--output-dir",
-            str(out),
-            "--extra-context-file",
-            str(answers_file),
-            "--config-file",
-            str(cookiecutter_config(work)),
-        ]
-    )
-    if proc.returncode != 0:
-        raise cruft_failure(proc)
+    failure = cruft_create(str(clone), commit, out, answers_file, cookiecutter_config(work), directory)
+    if failure:
+        raise failure
     return rendered_project(out, answers["project_name"])
 
 
@@ -325,7 +313,8 @@ def run_update(target: Path, sha: str, answers: dict[str, Any] | None, work: Pat
 def update_report(target: Path) -> dict[str, Any]:
     """Files changed by the update, files with conflict markers, and rejected hunks (``*.rej``)."""
     conflicts = git_out("diff", "--name-only", "--diff-filter=U", cwd=target).splitlines()
-    rejects = [rel for rel in files_under(target) if rel.endswith(".rej")]
+    # Untracked *.rej files, ignored ones included, without walking node_modules or .venv in Python.
+    rejects = sorted(git_out("ls-files", "--others", "--", "*.rej", cwd=target).splitlines())
     changes = {"M": "modified", "A": "added", "D": "deleted", "R": "renamed", "U": "conflict", "?": "added"}
     files = []
     for line in run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=target).stdout.splitlines():
@@ -382,11 +371,12 @@ def cmd_status(args: argparse.Namespace) -> None:
                 new_questions=[q for q in questions if q["name"] not in known],
             )
         else:
-            suggested = base_commit_for(clone, state["first_commit_date"])
+            directory = LANGUAGES[language] if language is not None else ""
+            suggested = base_commit_for(clone, state["first_commit_date"], directory)
             result["suggested_commit"] = suggested
             if language is not None:
                 at = suggested["commit"] if suggested else latest
-                questions, derived = parse_questions(definition_at(clone, at, LANGUAGES[language]))
+                questions, derived = parse_questions(definition_at(clone, at, directory))
                 result.update(questions_at=at, questions=questions, derived=derived)
     finish(EXIT_OK, **result)
 

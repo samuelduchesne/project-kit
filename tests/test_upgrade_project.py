@@ -18,7 +18,7 @@ import unittest
 from pathlib import Path
 
 from test_new_project import SCRIPT as NEW_PROJECT
-from test_new_project import git, make_template
+from test_new_project import git, make_node_template, make_template
 
 SCRIPTS = NEW_PROJECT.parent
 SCRIPT = SCRIPTS / "upgrade_project.py"
@@ -182,6 +182,32 @@ class UpgradeProjectTests(unittest.TestCase):
         self.assertEqual(out["suggested_commit"]["commit"], self.old)
         self.assertEqual(out["questions_at"], self.old)
         self.assertNotIn("use_ci", {q["name"] for q in out["questions"]})
+
+    def test_status_of_node_project_older_than_the_node_template(self) -> None:
+        """A Node project started before node/ existed has no base commit, instead of failing on that commit."""
+        template = self.root / f"late-node-{self.parent.name}"
+        saved = {k: os.environ.get(k) for k in ("GIT_AUTHOR_DATE", "GIT_COMMITTER_DATE")}
+        os.environ.update(GIT_AUTHOR_DATE=OLD_DATE, GIT_COMMITTER_DATE=OLD_DATE)
+        try:
+            make_template(template, with_node=False)
+        finally:
+            for key, value in saved.items():
+                os.environ.pop(key) if value is None else os.environ.__setitem__(key, value)
+        make_node_template(template / "node")
+        latest = commit_all(template, "add the Node template", NEW_DATE)
+
+        project = self.parent / "old-lib"
+        project.mkdir()
+        (project / "package.json").write_text('{"name": "old-lib"}\n', encoding="utf-8")
+        git("init", "-q", "-b", "main", cwd=project)
+        commit_all(project, "initial", PROJECT_DATE)
+
+        code, out = self.run_script(SCRIPT, "status", "--project", str(project), "--template", str(template))
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out["language"], "node")
+        self.assertIsNone(out["suggested_commit"])
+        self.assertEqual(out["questions_at"], latest)
+        self.assertIn("node_version", {q["name"] for q in out["questions"]})
 
     def test_foreign_template_is_refused(self) -> None:
         project = self.linked_project("st-foreign")

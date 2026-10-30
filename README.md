@@ -22,7 +22,7 @@ The plugin also includes the `editor` agent, which writes and revises prose to t
 
 ### new-project
 
-Ask Claude to create a new Python or Node project, for example "start a new Python project called flow-tools" or "create a TypeScript library called flow-kit". Python projects come from the template at the root of cookiecutter-gi, Node projects (pnpm, TypeScript, Vitest, Biome) from its `node/` folder. Claude asks for the name, description and author, shows the template's other options with their defaults, previews what will be created, and creates nothing until you confirm. The result is a folder with the template's files, a `.cruft.json` link for later upgrades, spec-kit set up for Claude, and one git commit. It does not install dependencies, create a remote repository or push. To work on a Node project afterwards you also need Node.js and pnpm (`corepack enable`).
+Ask Claude to create a new Python or Node project, for example "start a new Python project called flow-tools" or "create a TypeScript library called flow-kit". Python projects come from the template at the root of cookiecutter-gi, Node projects (pnpm, TypeScript, Vitest, Biome) from its `node/` folder. Claude asks for the name, description and author, shows the template's other options with their defaults, previews what will be created, and creates nothing until you confirm. The result is a folder with the template's files, a `.cruft.json` link for later upgrades, spec-kit set up for Claude, and one git commit. It does not install dependencies, create a remote repository or push. To work on a Node project afterwards you also need Node.js and pnpm (`npm install -g pnpm`).
 
 ### upgrade-project
 

@@ -375,6 +375,17 @@ def directory_args(directory: str) -> list[str]:
     return ["--directory", directory] if directory else []
 
 
+def cookiecutter_config(work: Path) -> Path:
+    """Keep cookiecutter's clone cache and replay files out of the user's home folder."""
+    config = work / "cookiecutter.yaml"
+    config.write_text(
+        f"cookiecutters_dir: {json.dumps(str(work / 'cookiecutters'))}\n"
+        f"replay_dir: {json.dumps(str(work / 'replay'))}\n",
+        encoding="utf-8",
+    )
+    return config
+
+
 def cruft_create(
     template: str, ref: str, output_dir: Path, answers_file: Path, config: Path, directory: str = ""
 ) -> Stop | None:
@@ -514,13 +525,7 @@ def cmd_create(args: argparse.Namespace) -> None:
         work = Path(tmp)
         answers_file = work / "answers.json"
         answers_file.write_text(json.dumps(answers), encoding="utf-8")
-        # Keep cookiecutter's clone cache and replay files out of the user's home folder.
-        config = work / "cookiecutter.yaml"
-        config.write_text(
-            f"cookiecutters_dir: {json.dumps(str(work / 'cookiecutters'))}\n"
-            f"replay_dir: {json.dumps(str(work / 'replay'))}\n",
-            encoding="utf-8",
-        )
+        config = cookiecutter_config(work)
 
         if args.dry_run:
             render = work / "render"

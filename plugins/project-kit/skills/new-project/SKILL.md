@@ -82,7 +82,7 @@ NP create --answers <file> --dest <parent> --expect-commit <commit>
     2. create a remote repository and push (for example `gh repo create`)
     3. start a first spec: `/speckit-constitution`, then `/speckit-specify`
   - next steps for Node (needs Node.js at the chosen version or newer):
-    1. `cd <project_dir>`, `corepack enable` (installs the pinned pnpm), then `make install` to install dependencies and pre-commit hooks
+    1. `cd <project_dir>`, `npm install -g pnpm` if pnpm is missing (it switches to the version pinned in `package.json`), then `make install` to install dependencies and pre-commit hooks
     2. commit the new `pnpm-lock.yaml` (CI installs with `--frozen-lockfile`)
     3. create a remote repository and push (for example `gh repo create`)
     4. start a first spec: `/speckit-constitution`, then `/speckit-specify`
