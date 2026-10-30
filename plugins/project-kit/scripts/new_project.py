@@ -308,7 +308,8 @@ def planned_steps(template: str, ref: str, author: str, email: str) -> list[str]
     return [
         f"uvx cruft create {template_arg(template)} --no-input --checkout {ref} --output-dir <parent> "
         "--extra-context-file <answers>",
-        f"uvx --from {SPECKIT_SOURCE} specify init --here --integration claude --script sh --non-interactive --force",
+        f"uvx --from {SPECKIT_SOURCE} specify init --here --integration claude --script sh --non-interactive --force "
+        "--ignore-agent-tools",
         "git init -b main",
         "git add -A",
         f'git -c user.name="{author}" -c user.email="{email}" commit -m "Initial commit from cookiecutter-gi <commit>"',
@@ -463,6 +464,8 @@ def cmd_create(args: argparse.Namespace) -> None:
             "sh",
             "--non-interactive",
             "--force",
+            # The claude CLI may not be on PATH (Cowork, desktop app, CI); spec-kit only needs it for its check.
+            "--ignore-agent-tools",
         ],
         cwd=project,
     )

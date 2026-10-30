@@ -35,8 +35,8 @@ All findings below were verified by running the tools in this environment (cruft
 
 ## R6. spec-kit setup
 
-- **Decision**: in the new project, `uvx --from git+https://github.com/github/spec-kit.git@v1.2.5 specify init --here --integration claude --script sh --non-interactive --force`.
-- **Rationale**: same pinned version and flags used to set up this repository; `--force` is needed because the folder is not empty; `--non-interactive` never prompts. Verified: exits 0 in about 3 seconds and adds `.specify/` and `.claude/skills/speckit-*`.
+- **Decision**: in the new project, `uvx --from git+https://github.com/github/spec-kit.git@v1.2.5 specify init --here --integration claude --script sh --non-interactive --force --ignore-agent-tools`.
+- **Rationale**: same pinned version and flags used to set up this repository; `--force` is needed because the folder is not empty; `--non-interactive` never prompts; `--ignore-agent-tools` skips spec-kit's check that the `claude` CLI is on PATH, which fails in Cowork, the desktop app and CI even though the Claude integration files are still installed (found when CI failed without the CLI). Verified: exits 0 in about 3 seconds and adds `.specify/` and `.claude/skills/speckit-*`.
 - **Alternatives considered**: unpinned `specify` (Principle IV requires pins); `--script ps` (Windows only; the workflow targets macOS/Linux shells, noted as an assumption).
 
 ## R7. Git
