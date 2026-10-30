@@ -16,7 +16,7 @@ Rationale: a template is deterministic, testable and upgradable. A file the mode
 
 - Generation, linking, checking and auditing MUST run through scripts or the underlying CLIs (cookiecutter, cruft, specify, git), invoked with explicit, logged arguments.
 - The model is reserved for steps that need judgment: interviewing the user for template answers, inferring answers for unlinked projects, resolving `cruft update` conflicts and `.rej` files, and explaining audit findings.
-- Every script MUST support a dry-run mode that prints what it would do.
+- Every script that creates or changes files MUST support a dry-run mode that prints what it would do. Read-only scripts (checks, audits) need none.
 
 Rationale: the same inputs must always produce the same project; the model's value is in the cases a script can't decide.
 
@@ -56,4 +56,4 @@ Rationale: the plugin is installed per account and syncs to every surface, and c
 - This constitution overrides other practices in this repository. Specs and plans MUST include a check against each principle and justify any exception in writing.
 - Amendments are made by pull request, state their reason, and bump the version: MAJOR for removing or redefining a principle, MINOR for adding one, PATCH for clarifications.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-10-30
+**Version**: 1.0.1 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-10-30
