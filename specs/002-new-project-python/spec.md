@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-30
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: "new-project skill, Python only. Replace the new-project placeholder skill in the project-kit plugin with a working workflow that creates a new Python project from the samuelduchesne/cookiecutter-gi template. Claude interviews the user for the template's answers (project name, description, layout, Python versions, type checker, optional features, license, agent instructions…), taking the questions, choices and defaults from the template's own cookiecutter.json rather than a copy kept in the plugin. It shows a summary and a preview of what will be created, gets confirmation, then generates the project with cruft so the project stays linked to the template for later upgrades, initializes spec-kit (pinned version, Claude integration) in the new project, initializes a git repository and makes an initial commit, and reports what was created and the next steps. The project's linting/formatting and CHANGELOG.md come from the template itself; the skill adds nothing the template doesn't provide. A script in the plugin does the predictable steps (fetch template options, validate answers, build and run the commands) and supports a dry-run mode. The skill checks that the required tools (git, uv/uvx) and access to the private template are available and explains clearly what is missing; it refuses to write into an existing non-empty directory. Node projects are out of scope: if the user asks for one, the skill says Node support is planned. Out of scope also: creating a GitHub repository, pushing, installing dependencies, upgrade-project and audit-project (they stay placeholders)."
 

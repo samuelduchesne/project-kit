@@ -1,17 +1,81 @@
 ---
 name: new-project
-description: "Placeholder (not yet implemented): create a new Python or Node project from the cookiecutter-gi templates, with spec-kit, linting and a changelog set up. Use when the user asks project-kit to start, scaffold or bootstrap a new repository, so you can tell them this workflow is planned but not available yet."
+description: "Create a new Python project from the cookiecutter-gi template: interview the user for the template's answers, preview, then generate it with cruft (linked for later upgrades), set up spec-kit and make an initial git commit. Use when the user asks project-kit to start, scaffold, bootstrap or create a new repository or Python project. Node projects are planned but not supported yet."
 ---
 
-# new-project (planned)
+# new-project
 
-**Status: not implemented yet in this version of project-kit.**
+Create a new Python project from [cookiecutter-gi](https://github.com/samuelduchesne/cookiecutter-gi). The template provides every project file (linting, formatting, changelog, agent instructions); this workflow adds only spec-kit and an initial git commit.
 
-When this workflow ships, it will create a new Python or Node project from the [cookiecutter-gi](https://github.com/samuelduchesne/cookiecutter-gi) templates, set up spec-kit, apply the standard linting and formatting rules, and start a `CHANGELOG.md`.
+All predictable steps go through one script. Run it exactly like this (call it `NP` below):
 
-## What to do now
+```bash
+uv run --no-project "${CLAUDE_PLUGIN_ROOT}/scripts/new_project.py" <command> [options]
+```
 
-1. Tell the user, in one or two sentences, what this workflow will do (above).
-2. Say plainly that it is not implemented yet in this version of project-kit.
-3. Do not run any commands, and do not create, edit or delete any files as part of this skill. Do not try to carry out the workflow by other means.
-4. Point the user to https://github.com/samuelduchesne/project-kit for status. If they then ask you to help with the task another way, that is a new request and you may help with it as you normally would.
+Each command prints one JSON object on stdout (`status` is `ok`, `invalid`, `environment`, `destination` or `failed`, with `messages` on failure). Read the JSON; don't show it raw to the user.
+
+## Rules
+
+- Never create anything before the user confirms the preview.
+- Never delete the user's files or folders, including the project folder after a failure. Say what exists and let the user decide.
+- Never edit generated files, install dependencies, create a remote repository or push.
+- Relay errors from the template word for word, then ask for a corrected answer.
+- Don't invent answers the user didn't give, except the template's own defaults that they accepted.
+
+## Steps
+
+### 1. Language
+
+This workflow creates **Python** projects only. If the user asks for Node or another language, say Node support is planned and not available yet in project-kit, and stop. Continue only if they then ask for a Python project.
+
+### 2. Environment
+
+Run `NP check`. If you cannot run shell commands at all (for example in a chat without a local environment), say this workflow needs Claude Code or Cowork on the user's computer, and stop.
+
+If `status` is `environment`, tell the user each message (missing git or uv with the install hint, or no access to `samuelduchesne/cookiecutter-gi`), and stop.
+
+### 3. Questions
+
+Run `NP options`. It returns the template's `questions` (name, type `text`/`bool`/`choice`, default, choices, prompt, choice labels), the derived names, and the template `commit`.
+
+Ask the user, in one message:
+
+- project name (letters, digits and `-`; this is also the folder name)
+- a one-line description
+- author name, email and GitHub handle (suggest `git config user.name` / `user.email` if set)
+
+Then show the other questions as one compact list, `prompt: default`, using the choice labels where they help, and ask whether to keep these defaults or change any. Map plain-language changes to the exact allowed values (for example "use mypy" → `type_checker: mypy`, "no Docker" → `dockerfile: false`); if a change is ambiguous, ask.
+
+Ask where to create the project; default is the current folder (the project goes in `<parent>/<project_name>`).
+
+### 4. Preview
+
+Write the answers (only the questions the user set or changed, using exact names and JSON types) to a new temporary file outside any project, for example with `mktemp`. Run:
+
+```bash
+NP create --answers <file> --dest <parent> --dry-run
+```
+
+- `invalid`: relay the messages, ask for corrected answers, update the file and preview again.
+- `destination`: the folder exists and isn't empty; ask for another name or parent.
+- `ok`: show the user the destination (`project_dir`), the template version (`commit`, first 12 characters), the package name (`derived`), the answers that differ from the defaults (`non_default`), and the top-level `files`. Ask for confirmation.
+
+### 5. Create
+
+After the user confirms, run with the commit from the preview:
+
+```bash
+NP create --answers <file> --dest <parent> --expect-commit <commit>
+```
+
+- `failed`: say which `step` failed (`cruft`, `commit-check`, `speckit` or `git`), relay the messages, and say the folder at `project_dir` was kept and nothing was deleted. For `commit-check`, explain the template changed since the preview and offer to preview again in a new location.
+- `ok`: report:
+  - the project folder and the template version it is linked to
+  - the main choices (from `non_default`)
+  - next steps:
+    1. `cd <project_dir>` and `make install` to install dependencies and pre-commit hooks
+    2. create a remote repository and push (for example `gh repo create`)
+    3. start a first spec: `/speckit-constitution`, then `/speckit-specify`
+
+Finally, delete the temporary answers file you created in step 4 (it is yours, not the user's).

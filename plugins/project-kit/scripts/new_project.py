@@ -1,0 +1,575 @@
+#!/usr/bin/env python3
+"""Create a new project from the cookiecutter-gi template.
+
+Used by the project-kit ``new-project`` skill. Commands:
+
+    check    verify git, uv and access to the template
+    options  print the template's questions, read from its cookiecutter.json
+    create   validate answers and create the project (``--dry-run`` to preview)
+
+Every command prints one JSON object on stdout; progress goes to stderr.
+Exit codes: 0 ok, 2 invalid answers, 3 environment, 4 destination, 5 step failed.
+The template's own files and checks are the source of truth: this script keeps
+no copy of the template's questions or rules.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import Any, NoReturn
+
+DEFAULT_TEMPLATE = "https://github.com/samuelduchesne/cookiecutter-gi"
+SPECKIT_REF = "v1.2.5"
+SPECKIT_SOURCE = f"git+https://github.com/github/spec-kit.git@{SPECKIT_REF}"
+
+EXIT_OK = 0
+EXIT_INVALID = 2
+EXIT_ENVIRONMENT = 3
+EXIT_DESTINATION = 4
+EXIT_FAILED = 5
+
+STATUS = {
+    EXIT_OK: "ok",
+    EXIT_INVALID: "invalid",
+    EXIT_ENVIRONMENT: "environment",
+    EXIT_DESTINATION: "destination",
+    EXIT_FAILED: "failed",
+}
+
+
+class Stop(Exception):
+    """Ends the command with a contract exit code and messages."""
+
+    def __init__(self, code: int, messages: list[str], **extra: Any) -> None:
+        super().__init__("; ".join(messages))
+        self.code = code
+        self.messages = messages
+        self.extra = extra
+
+
+def log(message: str) -> None:
+    print(f"[new-project] {message}", file=sys.stderr)
+
+
+def finish(code: int, **payload: Any) -> NoReturn:
+    print(json.dumps({"status": STATUS[code], **payload}, indent=2, default=str))
+    sys.exit(code)
+
+
+def run(cmd: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+    """Run a command, logging it, and capture its output (never raises on failure)."""
+    log("$ " + " ".join(cmd))
+    try:
+        return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=False)
+    except FileNotFoundError:
+        return subprocess.CompletedProcess(cmd, 127, "", f"{cmd[0]}: command not found")
+
+
+def output_of(proc: subprocess.CompletedProcess[str]) -> str:
+    return (proc.stdout or "") + (proc.stderr or "")
+
+
+def template_arg(template: str) -> str:
+    """Local templates are passed as absolute paths; URLs unchanged."""
+    path = Path(template).expanduser()
+    return str(path.resolve()) if path.exists() else template
+
+
+# --- template access ---------------------------------------------------------
+
+
+def default_branch(template: str) -> str:
+    proc = run(["git", "ls-remote", "--symref", template, "HEAD"])
+    if proc.returncode != 0:
+        raise Stop(
+            EXIT_ENVIRONMENT,
+            [
+                f"Could not reach the template at {template}.",
+                "Check that you have read access to it with your git credentials "
+                "(for samuelduchesne/cookiecutter-gi, a GitHub account with access to the private repository) "
+                "and that you are online.",
+                output_of(proc).strip()[-500:],
+            ],
+        )
+    for line in proc.stdout.splitlines():
+        if line.startswith("ref:") and line.endswith("HEAD"):
+            return line.split()[1].removeprefix("refs/heads/")
+    return "main"
+
+
+def fetch_definition(template: str, ref: str | None) -> tuple[str, str, dict[str, Any]]:
+    """Return (ref, commit, cookiecutter.json contents) for the template."""
+    template = template_arg(template)
+    ref = ref or default_branch(template)
+    with tempfile.TemporaryDirectory(prefix="project-kit-template-") as tmp:
+        dest = Path(tmp) / "template"
+        proc = run(
+            [
+                "git",
+                "clone",
+                "--quiet",
+                "--depth",
+                "1",
+                "--branch",
+                ref,
+                template,
+                str(dest),
+            ]
+        )
+        if proc.returncode != 0:
+            raise Stop(
+                EXIT_ENVIRONMENT,
+                [
+                    f"Could not download the template {template} at {ref!r}.",
+                    output_of(proc).strip()[-500:],
+                ],
+            )
+        commit = run(["git", "rev-parse", "HEAD"], cwd=dest).stdout.strip()
+        try:
+            definition = json.loads(
+                (dest / "cookiecutter.json").read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            raise Stop(
+                EXIT_ENVIRONMENT,
+                [f"The template has no readable cookiecutter.json: {exc}"],
+            ) from exc
+    return ref, commit, definition
+
+
+def parse_questions(
+    definition: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Turn cookiecutter.json into questions and derived names (see data-model.md)."""
+    prompts = definition.get("__prompts__", {}) or {}
+    questions: list[dict[str, Any]] = []
+    derived: list[str] = []
+    for name, value in definition.items():
+        if name.startswith("_"):
+            continue
+        if isinstance(value, str) and "{{" in value:
+            derived.append(name)
+            continue
+        prompt_spec = prompts.get(name)
+        prompt = (
+            prompt_spec.get("__prompt__", name)
+            if isinstance(prompt_spec, dict)
+            else (prompt_spec or name)
+        )
+        if isinstance(value, list):
+            question: dict[str, Any] = {
+                "name": name,
+                "type": "choice",
+                "default": value[0] if value else None,
+                "choices": value,
+                "prompt": prompt,
+            }
+            if isinstance(prompt_spec, dict):
+                labels = {
+                    str(c): prompt_spec[str(c)] for c in value if str(c) in prompt_spec
+                }
+                if labels:
+                    question["choice_labels"] = labels
+        elif isinstance(value, bool):
+            question = {
+                "name": name,
+                "type": "bool",
+                "default": value,
+                "prompt": prompt,
+            }
+        else:
+            question = {
+                "name": name,
+                "type": "text",
+                "default": value,
+                "prompt": prompt,
+            }
+        questions.append(question)
+    return questions, derived
+
+
+# --- answers -----------------------------------------------------------------
+
+
+def validate_answers(
+    answers: Any, questions: list[dict[str, Any]], derived: list[str]
+) -> dict[str, Any]:
+    """Check answers against the template definition; return the non-default ones."""
+    if not isinstance(answers, dict):
+        raise Stop(EXIT_INVALID, ["The answers file must contain a JSON object."])
+    by_name = {q["name"]: q for q in questions}
+    problems: list[str] = []
+    if not answers.get("project_name"):
+        problems.append("project_name is required.")
+    for key, value in answers.items():
+        if key in derived:
+            problems.append(f"{key} is computed by the template and cannot be set.")
+            continue
+        question = by_name.get(key)
+        if question is None:
+            problems.append(f"{key} is not a question in this template.")
+        elif question["type"] == "choice" and value not in question["choices"]:
+            allowed = ", ".join(map(str, question["choices"]))
+            problems.append(
+                f"{key}={value!r} is not allowed. Choose one of: {allowed}."
+            )
+        elif question["type"] == "bool" and not isinstance(value, bool):
+            problems.append(f"{key} must be true or false, got {value!r}.")
+        elif question["type"] == "text" and (
+            not isinstance(value, str) or not value.strip()
+        ):
+            problems.append(f"{key} must be a non-empty string.")
+    if problems:
+        raise Stop(EXIT_INVALID, problems)
+    return {k: v for k, v in answers.items() if by_name[k]["default"] != v}
+
+
+def git_identity(
+    answers: dict[str, Any], questions: list[dict[str, Any]]
+) -> tuple[str, str]:
+    """Commit author: template answers ``author``/``email`` if present, else git config."""
+    defaults = {q["name"]: q["default"] for q in questions}
+    merged = {**defaults, **answers}
+    name = merged.get("author") if "author" in answers else None
+    email = merged.get("email") if "email" in answers else None
+    name = name or run(["git", "config", "user.name"]).stdout.strip()
+    email = email or run(["git", "config", "user.email"]).stdout.strip()
+    if not name or not email:
+        raise Stop(
+            EXIT_ENVIRONMENT,
+            [
+                "No author for the initial commit: answer 'author' and 'email', or set git config user.name/user.email."
+            ],
+        )
+    return name, email
+
+
+def template_errors(text: str) -> list[str]:
+    """The template's own error lines from a failed cruft run."""
+    lines = [ln.strip() for ln in text.splitlines()]
+    errors = [ln for ln in lines if ln.startswith("ERROR:")]
+    if errors:
+        return errors
+    tail = [ln for ln in lines if ln and not set(ln) <= set("│╭╮╰╯─ ")]
+    return tail[-3:] or ["The template could not be generated."]
+
+
+# --- generation --------------------------------------------------------------
+
+
+def cruft_create(
+    template: str,
+    ref: str,
+    parent: Path,
+    answers_file: Path,
+    *,
+    into_empty: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    # --overwrite-if-exists is passed only when the target folder exists and is empty.
+    extra = ["--overwrite-if-exists"] if into_empty else []
+    return run(
+        [
+            "uvx",
+            "cruft",
+            "create",
+            template_arg(template),
+            "--no-input",
+            "--checkout",
+            ref,
+            "--output-dir",
+            str(parent),
+            "--extra-context-file",
+            str(answers_file),
+            *extra,
+        ]
+    )
+
+
+def read_cruft(project: Path) -> dict[str, Any]:
+    return json.loads((project / ".cruft.json").read_text(encoding="utf-8"))
+
+
+def new_dirs(parent: Path, before: set[str]) -> list[Path]:
+    return [
+        parent / n
+        for n in sorted(set(os.listdir(parent)) - before)
+        if (parent / n).is_dir()
+    ]
+
+
+def planned_steps(template: str, ref: str, author: str, email: str) -> list[str]:
+    return [
+        f"uvx cruft create {template_arg(template)} --no-input --checkout {ref} --output-dir <parent> "
+        "--extra-context-file <answers>",
+        f"uvx --from {SPECKIT_SOURCE} specify init --here --integration claude --script sh --non-interactive --force",
+        "git init -b main",
+        "git add -A",
+        f'git -c user.name="{author}" -c user.email="{email}" commit -m "Initial commit from cookiecutter-gi <commit>"',
+    ]
+
+
+def describe(
+    project: Path, cruft: dict[str, Any], derived: list[str]
+) -> dict[str, Any]:
+    context = {
+        k: v
+        for k, v in cruft["context"]["cookiecutter"].items()
+        if not k.startswith("_")
+    }
+    return {
+        "commit": cruft["commit"],
+        "answers": context,
+        "derived": {k: context[k] for k in derived if k in context},
+        "files": sorted(os.listdir(project)),
+    }
+
+
+def cmd_check(args: argparse.Namespace) -> None:
+    missing = []
+    tools: dict[str, str] = {}
+    for tool, hint in (
+        (
+            "git",
+            "Install git with your system package manager (e.g. `brew install git`).",
+        ),
+        ("uvx", "Install uv: https://docs.astral.sh/uv/getting-started/installation/"),
+    ):
+        if shutil.which(tool) is None:
+            missing.append(f"{tool} is not installed. {hint}")
+        else:
+            version_cmd = [tool, "--version"] if tool == "git" else ["uv", "--version"]
+            tools[tool] = run(version_cmd).stdout.strip()
+    if missing:
+        raise Stop(EXIT_ENVIRONMENT, missing)
+    ref, commit, _ = fetch_definition(args.template, args.ref)
+    finish(EXIT_OK, template=args.template, ref=ref, commit=commit, tools=tools)
+
+
+def cmd_options(args: argparse.Namespace) -> None:
+    ref, commit, definition = fetch_definition(args.template, args.ref)
+    questions, derived = parse_questions(definition)
+    finish(
+        EXIT_OK,
+        template=args.template,
+        ref=ref,
+        commit=commit,
+        questions=questions,
+        derived=derived,
+    )
+
+
+def cmd_create(args: argparse.Namespace) -> None:
+    try:
+        answers = json.loads(Path(args.answers).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise Stop(
+            EXIT_INVALID, [f"Could not read the answers file {args.answers}: {exc}"]
+        ) from exc
+
+    ref, _commit, definition = fetch_definition(args.template, args.ref)
+    questions, derived = parse_questions(definition)
+    non_default = validate_answers(answers, questions, derived)
+
+    parent = Path(args.dest).expanduser().resolve()
+    if not parent.is_dir():
+        raise Stop(EXIT_DESTINATION, [f"The parent folder {parent} does not exist."])
+    target = parent / answers["project_name"]
+    if target.exists() and (not target.is_dir() or any(target.iterdir())):
+        raise Stop(
+            EXIT_DESTINATION,
+            [
+                f"{target} already exists and is not empty. Choose another project name or parent folder."
+            ],
+        )
+
+    author, email = git_identity(answers, questions)
+    steps = planned_steps(args.template, ref, author, email)
+
+    with tempfile.TemporaryDirectory(prefix="project-kit-answers-") as tmp:
+        answers_file = Path(tmp) / "answers.json"
+        answers_file.write_text(json.dumps(answers), encoding="utf-8")
+
+        if args.dry_run:
+            render_parent = Path(tmp) / "render"
+            render_parent.mkdir()
+            proc = cruft_create(args.template, ref, render_parent, answers_file)
+            if proc.returncode != 0:
+                raise Stop(EXIT_INVALID, template_errors(output_of(proc)))
+            rendered = new_dirs(render_parent, set())
+            if len(rendered) != 1:
+                raise Stop(
+                    EXIT_FAILED,
+                    ["The template did not produce exactly one project folder."],
+                    step="cruft",
+                )
+            info = describe(rendered[0], read_cruft(rendered[0]), derived)
+            finish(
+                EXIT_OK,
+                dry_run=True,
+                project_dir=str(parent / rendered[0].name),
+                template=args.template,
+                ref=ref,
+                non_default=non_default,
+                steps=steps,
+                **info,
+            )
+
+        before = set(os.listdir(parent))
+        proc = cruft_create(
+            args.template, ref, parent, answers_file, into_empty=target.is_dir()
+        )
+        created = new_dirs(parent, before)
+        if proc.returncode != 0:
+            code = EXIT_FAILED if created else EXIT_INVALID
+            raise Stop(
+                code,
+                template_errors(output_of(proc)),
+                step="cruft",
+                created=bool(created),
+            )
+    project = created[0] if created else target
+
+    cruft = read_cruft(project)
+    if args.expect_commit and cruft["commit"] != args.expect_commit:
+        raise Stop(
+            EXIT_FAILED,
+            [
+                f"The template changed since the preview: previewed {args.expect_commit[:12]}, "
+                f"generated {cruft['commit'][:12]}. The project folder was kept; review it or delete it and retry.",
+            ],
+            step="commit-check",
+            created=True,
+            project_dir=str(project),
+        )
+
+    speckit = run(
+        [
+            "uvx",
+            "--from",
+            SPECKIT_SOURCE,
+            "specify",
+            "init",
+            "--here",
+            "--integration",
+            "claude",
+            "--script",
+            "sh",
+            "--non-interactive",
+            "--force",
+        ],
+        cwd=project,
+    )
+    if speckit.returncode != 0:
+        raise Stop(
+            EXIT_FAILED,
+            [
+                "spec-kit setup failed; the project folder was kept.",
+                output_of(speckit).strip()[-800:],
+            ],
+            step="speckit",
+            created=True,
+            project_dir=str(project),
+        )
+
+    for git_cmd in (
+        ["git", "init", "-b", "main"],
+        ["git", "add", "-A"],
+        [
+            "git",
+            "-c",
+            f"user.name={author}",
+            "-c",
+            f"user.email={email}",
+            "commit",
+            "--quiet",
+            "-m",
+            f"Initial commit from cookiecutter-gi {cruft['commit'][:12]}",
+        ],
+    ):
+        proc = run(git_cmd, cwd=project)
+        if proc.returncode != 0:
+            raise Stop(
+                EXIT_FAILED,
+                [
+                    f"`{' '.join(git_cmd[:2])}` failed; the project folder was kept.",
+                    output_of(proc).strip()[-500:],
+                ],
+                step="git",
+                created=True,
+                project_dir=str(project),
+            )
+
+    git_commit = run(["git", "rev-parse", "HEAD"], cwd=project).stdout.strip()
+    finish(
+        EXIT_OK,
+        dry_run=False,
+        project_dir=str(project),
+        template=args.template,
+        ref=ref,
+        non_default=non_default,
+        git_commit=git_commit,
+        **describe(project, cruft, derived),
+    )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument(
+        "--template", default=DEFAULT_TEMPLATE, help="template git URL or local path"
+    )
+    common.add_argument(
+        "--ref",
+        default=None,
+        help="branch or tag (default: the template's default branch)",
+    )
+
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser(
+        "check", parents=[common], help="verify tools and template access"
+    ).set_defaults(func=cmd_check)
+    sub.add_parser(
+        "options", parents=[common], help="print the template's questions"
+    ).set_defaults(func=cmd_options)
+    create = sub.add_parser("create", parents=[common], help="create the project")
+    create.add_argument(
+        "--answers", required=True, help="JSON file mapping question names to answers"
+    )
+    create.add_argument(
+        "--dest",
+        default=".",
+        help="parent folder for the new project (default: current folder)",
+    )
+    create.add_argument(
+        "--expect-commit",
+        default=None,
+        help="stop if the template commit differs from this",
+    )
+    create.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="preview in a temporary folder; change nothing",
+    )
+    create.set_defaults(func=cmd_create)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = build_parser().parse_args(argv)
+    try:
+        args.func(args)
+    except Stop as stop:
+        finish(stop.code, messages=[m for m in stop.messages if m], **stop.extra)
+
+
+if __name__ == "__main__":
+    main()
