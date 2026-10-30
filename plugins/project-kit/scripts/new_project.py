@@ -18,6 +18,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -26,8 +28,27 @@ from pathlib import Path
 from typing import Any, NoReturn
 
 DEFAULT_TEMPLATE = "https://github.com/samuelduchesne/cookiecutter-gi"
+CRUFT = ["uvx", "--from", "cruft==2.16.0", "--with", "cookiecutter==2.7.1", "cruft"]
 SPECKIT_REF = "v1.2.5"
 SPECKIT_SOURCE = f"git+https://github.com/github/spec-kit.git@{SPECKIT_REF}"
+SPECKIT = [
+    "uvx",
+    "--from",
+    SPECKIT_SOURCE,
+    "specify",
+    "init",
+    "--here",
+    "--integration",
+    "claude",
+    "--script",
+    "sh",
+    "--non-interactive",
+    "--force",
+    # The claude CLI may not be on PATH (Cowork, desktop app, CI); spec-kit only needs it for a check.
+    "--ignore-agent-tools",
+]
+COMMAND_TIMEOUT = 600  # seconds
+MIN_COMMIT_PREFIX = 7
 
 EXIT_OK = 0
 EXIT_INVALID = 2
@@ -42,6 +63,9 @@ STATUS = {
     EXIT_DESTINATION: "destination",
     EXIT_FAILED: "failed",
 }
+
+JINJA_MARKERS = ("{{", "{%", "{#")
+EXCEPTION_LINE = re.compile(r"\b[A-Za-z_]*(?:Error|Exception): .+")
 
 
 class Stop(Exception):
@@ -63,13 +87,32 @@ def finish(code: int, **payload: Any) -> NoReturn:
     sys.exit(code)
 
 
+def child_env() -> dict[str, str]:
+    """Environment for child processes: never prompt, and don't let the caller's
+    GIT_AUTHOR_*/GIT_COMMITTER_* override the author taken from the answers."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_AUTHOR_", "GIT_COMMITTER_"))}
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    return env
+
+
 def run(cmd: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
-    """Run a command, logging it, and capture its output (never raises on failure)."""
-    log("$ " + " ".join(cmd))
+    """Run a command without a terminal, logging it; never raises on failure."""
+    log("$ " + shlex.join(cmd))
     try:
-        return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=False)
+        return subprocess.run(
+            cmd,
+            cwd=cwd,
+            env=child_env(),
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=COMMAND_TIMEOUT,
+        )
     except FileNotFoundError:
         return subprocess.CompletedProcess(cmd, 127, "", f"{cmd[0]}: command not found")
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(cmd, 124, "", f"{cmd[0]}: timed out after {COMMAND_TIMEOUT}s")
 
 
 def output_of(proc: subprocess.CompletedProcess[str]) -> str:
@@ -82,11 +125,42 @@ def template_arg(template: str) -> str:
     return str(path.resolve()) if path.exists() else template
 
 
+def check_option_values(template: str, ref: str | None) -> None:
+    """Values that start with '-' would be read as options by git or cruft."""
+    for label, value in (("template", template), ("ref", ref)):
+        if value is not None and (not value or value.startswith("-")):
+            raise Stop(EXIT_INVALID, [f"The {label} {value!r} is not valid."])
+
+
+def check_tools() -> dict[str, str]:
+    missing = []
+    tools: dict[str, str] = {}
+    for tool, version_cmd, hint in (
+        (
+            "git",
+            ["git", "--version"],
+            "Install git with your system package manager (e.g. `brew install git`).",
+        ),
+        (
+            "uvx",
+            ["uv", "--version"],
+            "Install uv: https://docs.astral.sh/uv/getting-started/installation/",
+        ),
+    ):
+        if shutil.which(tool) is None:
+            missing.append(f"{tool} is not installed. {hint}")
+        else:
+            tools[tool] = run(version_cmd).stdout.strip()
+    if missing:
+        raise Stop(EXIT_ENVIRONMENT, missing)
+    return tools
+
+
 # --- template access ---------------------------------------------------------
 
 
 def default_branch(template: str) -> str:
-    proc = run(["git", "ls-remote", "--symref", template, "HEAD"])
+    proc = run(["git", "ls-remote", "--symref", "--", template, "HEAD"])
     if proc.returncode != 0:
         raise Stop(
             EXIT_ENVIRONMENT,
@@ -106,6 +180,7 @@ def default_branch(template: str) -> str:
 
 def fetch_definition(template: str, ref: str | None) -> tuple[str, str, dict[str, Any]]:
     """Return (ref, commit, cookiecutter.json contents) for the template."""
+    check_option_values(template, ref)
     template = template_arg(template)
     ref = ref or default_branch(template)
     with tempfile.TemporaryDirectory(prefix="project-kit-template-") as tmp:
@@ -119,6 +194,7 @@ def fetch_definition(template: str, ref: str | None) -> tuple[str, str, dict[str
                 "1",
                 "--branch",
                 ref,
+                "--",
                 template,
                 str(dest),
             ]
@@ -133,14 +209,14 @@ def fetch_definition(template: str, ref: str | None) -> tuple[str, str, dict[str
             )
         commit = run(["git", "rev-parse", "HEAD"], cwd=dest).stdout.strip()
         try:
-            definition = json.loads(
-                (dest / "cookiecutter.json").read_text(encoding="utf-8")
-            )
-        except (OSError, json.JSONDecodeError) as exc:
+            definition = json.loads((dest / "cookiecutter.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
             raise Stop(
                 EXIT_ENVIRONMENT,
                 [f"The template has no readable cookiecutter.json: {exc}"],
             ) from exc
+    if not isinstance(definition, dict):
+        raise Stop(EXIT_ENVIRONMENT, ["The template's cookiecutter.json is not a JSON object."])
     return ref, commit, definition
 
 
@@ -158,11 +234,7 @@ def parse_questions(
             derived.append(name)
             continue
         prompt_spec = prompts.get(name)
-        prompt = (
-            prompt_spec.get("__prompt__", name)
-            if isinstance(prompt_spec, dict)
-            else (prompt_spec or name)
-        )
+        prompt = prompt_spec.get("__prompt__", name) if isinstance(prompt_spec, dict) else (prompt_spec or name)
         if isinstance(value, list):
             question: dict[str, Any] = {
                 "name": name,
@@ -172,9 +244,7 @@ def parse_questions(
                 "prompt": prompt,
             }
             if isinstance(prompt_spec, dict):
-                labels = {
-                    str(c): prompt_spec[str(c)] for c in value if str(c) in prompt_spec
-                }
+                labels = {str(c): prompt_spec[str(c)] for c in value if str(c) in prompt_spec}
                 if labels:
                     question["choice_labels"] = labels
         elif isinstance(value, bool):
@@ -198,16 +268,33 @@ def parse_questions(
 # --- answers -----------------------------------------------------------------
 
 
-def validate_answers(
-    answers: Any, questions: list[dict[str, Any]], derived: list[str]
-) -> dict[str, Any]:
+def project_name_problem(name: Any) -> str | None:
+    """The project name becomes a folder name: it must be one plain path component."""
+    if not isinstance(name, str) or not name.strip():
+        return "project_name is required."
+    if (
+        name in {".", ".."}
+        or name.startswith(("-", "."))
+        or "/" in name
+        or "\\" in name
+        or "\x00" in name
+        or Path(name).name != name
+    ):
+        return f"project_name {name!r} must be a single folder name (no '/', '\\', leading '.' or '-')."
+    return None
+
+
+def validate_answers(answers: Any, questions: list[dict[str, Any]], derived: list[str]) -> dict[str, Any]:
     """Check answers against the template definition; return the non-default ones."""
     if not isinstance(answers, dict):
         raise Stop(EXIT_INVALID, ["The answers file must contain a JSON object."])
     by_name = {q["name"]: q for q in questions}
     problems: list[str] = []
-    if not answers.get("project_name"):
-        problems.append("project_name is required.")
+    name_problem = project_name_problem(answers.get("project_name"))
+    if name_problem:
+        problems.append(name_problem)
+    if {"author", "email"} <= by_name.keys() and not ({"author", "email"} <= answers.keys()):
+        problems.append("Answer both 'author' and 'email' (they are used for the project and its first commit).")
     for key, value in answers.items():
         if key in derived:
             problems.append(f"{key} is computed by the template and cannot be set.")
@@ -217,113 +304,116 @@ def validate_answers(
             problems.append(f"{key} is not a question in this template.")
         elif question["type"] == "choice" and value not in question["choices"]:
             allowed = ", ".join(map(str, question["choices"]))
-            problems.append(
-                f"{key}={value!r} is not allowed. Choose one of: {allowed}."
-            )
+            problems.append(f"{key}={value!r} is not allowed. Choose one of: {allowed}.")
         elif question["type"] == "bool" and not isinstance(value, bool):
             problems.append(f"{key} must be true or false, got {value!r}.")
-        elif question["type"] == "text" and (
-            not isinstance(value, str) or not value.strip()
-        ):
-            problems.append(f"{key} must be a non-empty string.")
+        elif question["type"] == "text":
+            if not isinstance(value, str) or not value.strip():
+                problems.append(f"{key} must be a non-empty string.")
+            elif any(marker in value for marker in JINJA_MARKERS):
+                problems.append(f"{key} must not contain template syntax ({', '.join(JINJA_MARKERS)}).")
     if problems:
         raise Stop(EXIT_INVALID, problems)
     return {k: v for k, v in answers.items() if by_name[k]["default"] != v}
 
 
-def git_identity(
-    answers: dict[str, Any], questions: list[dict[str, Any]]
-) -> tuple[str, str]:
-    """Commit author: template answers ``author``/``email`` if present, else git config."""
-    defaults = {q["name"]: q["default"] for q in questions}
-    merged = {**defaults, **answers}
-    name = merged.get("author") if "author" in answers else None
-    email = merged.get("email") if "email" in answers else None
-    name = name or run(["git", "config", "user.name"]).stdout.strip()
-    email = email or run(["git", "config", "user.email"]).stdout.strip()
+def git_identity(answers: dict[str, Any], questions: list[dict[str, Any]]) -> tuple[str, str]:
+    """Commit author: the template's ``author``/``email`` answers, else git config."""
+    names = {q["name"] for q in questions}
+    if {"author", "email"} <= names:
+        return answers["author"], answers["email"]
+    name = run(["git", "config", "user.name"]).stdout.strip()
+    email = run(["git", "config", "user.email"]).stdout.strip()
     if not name or not email:
         raise Stop(
             EXIT_ENVIRONMENT,
-            [
-                "No author for the initial commit: answer 'author' and 'email', or set git config user.name/user.email."
-            ],
+            ["No author for the initial commit: set git config user.name and user.email."],
         )
     return name, email
 
 
-def template_errors(text: str) -> list[str]:
-    """The template's own error lines from a failed cruft run."""
+def commit_matches(expected: str, actual: str) -> bool:
+    return len(expected) >= MIN_COMMIT_PREFIX and actual.lower().startswith(expected.lower())
+
+
+def cruft_failure(proc: subprocess.CompletedProcess[str]) -> Stop:
+    """Classify a failed cruft run: the template rejected the answers, or the tools failed."""
+    text = output_of(proc)
     lines = [ln.strip() for ln in text.splitlines()]
-    errors = [ln for ln in lines if ln.startswith("ERROR:")]
-    if errors:
-        return errors
-    tail = [ln for ln in lines if ln and not set(ln) <= set("│╭╮╰╯─ ")]
-    return tail[-3:] or ["The template could not be generated."]
+    hook_errors = [ln for ln in lines if ln.startswith("ERROR:")]
+    if hook_errors:
+        return Stop(EXIT_INVALID, hook_errors)
+    if proc.returncode in (124, 127) or any(ln.startswith("error:") for ln in lines):  # uv's own errors
+        return Stop(EXIT_ENVIRONMENT, ["Could not run cruft with uvx.", text.strip()[-500:]])
+    exceptions = EXCEPTION_LINE.findall(text)
+    message = exceptions[-1] if exceptions else "The template could not be generated."
+    return Stop(EXIT_FAILED, [message], step="cruft", created=False)
 
 
 # --- generation --------------------------------------------------------------
 
 
-def cruft_create(
-    template: str,
-    ref: str,
-    parent: Path,
-    answers_file: Path,
-    *,
-    into_empty: bool = False,
-) -> subprocess.CompletedProcess[str]:
-    # --overwrite-if-exists is passed only when the target folder exists and is empty.
-    extra = ["--overwrite-if-exists"] if into_empty else []
-    return run(
+def cruft_create(template: str, ref: str, output_dir: Path, answers_file: Path, config: Path) -> Stop | None:
+    proc = run(
         [
-            "uvx",
-            "cruft",
+            *CRUFT,
             "create",
             template_arg(template),
             "--no-input",
             "--checkout",
             ref,
             "--output-dir",
-            str(parent),
+            str(output_dir),
             "--extra-context-file",
             str(answers_file),
-            *extra,
+            "--config-file",
+            str(config),
         ]
     )
+    return None if proc.returncode == 0 else cruft_failure(proc)
+
+
+def rendered_project(output_dir: Path, project_name: str) -> Path:
+    entries = sorted(os.listdir(output_dir))
+    if entries != [project_name]:
+        raise Stop(
+            EXIT_FAILED,
+            [f"The template produced {entries!r} instead of a single folder named {project_name!r}."],
+            step="cruft",
+            created=False,
+        )
+    return output_dir / project_name
 
 
 def read_cruft(project: Path) -> dict[str, Any]:
-    return json.loads((project / ".cruft.json").read_text(encoding="utf-8"))
-
-
-def new_dirs(parent: Path, before: set[str]) -> list[Path]:
-    return [
-        parent / n
-        for n in sorted(set(os.listdir(parent)) - before)
-        if (parent / n).is_dir()
-    ]
+    try:
+        cruft = json.loads((project / ".cruft.json").read_text(encoding="utf-8"))
+        cruft["commit"]
+        cruft["context"]["cookiecutter"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise Stop(
+            EXIT_FAILED,
+            [f"The generated project has no usable .cruft.json: {exc}"],
+            step="cruft",
+            created=False,
+        ) from exc
+    return cruft
 
 
 def planned_steps(template: str, ref: str, author: str, email: str) -> list[str]:
+    cruft = [*CRUFT, "create", template_arg(template), "--no-input", "--checkout", ref]
+    commit = ["git", "-c", f"user.name={author}", "-c", f"user.email={email}", "-c", "commit.gpgsign=false"]
     return [
-        f"uvx cruft create {template_arg(template)} --no-input --checkout {ref} --output-dir <parent> "
-        "--extra-context-file <answers>",
-        f"uvx --from {SPECKIT_SOURCE} specify init --here --integration claude --script sh --non-interactive --force "
-        "--ignore-agent-tools",
+        shlex.join([*cruft, "--output-dir", "<parent>", "--extra-context-file", "<answers>"]),
+        shlex.join(SPECKIT),
         "git init -b main",
         "git add -A",
-        f'git -c user.name="{author}" -c user.email="{email}" commit -m "Initial commit from cookiecutter-gi <commit>"',
+        shlex.join([*commit, "commit", "--no-verify", "-m", "Initial commit from cookiecutter-gi <commit>"]),
     ]
 
 
-def describe(
-    project: Path, cruft: dict[str, Any], derived: list[str]
-) -> dict[str, Any]:
-    context = {
-        k: v
-        for k, v in cruft["context"]["cookiecutter"].items()
-        if not k.startswith("_")
-    }
+def describe(project: Path, cruft: dict[str, Any], derived: list[str]) -> dict[str, Any]:
+    context = {k: v for k, v in cruft["context"]["cookiecutter"].items() if not k.startswith("_")}
     return {
         "commit": cruft["commit"],
         "answers": context,
@@ -333,22 +423,7 @@ def describe(
 
 
 def cmd_check(args: argparse.Namespace) -> None:
-    missing = []
-    tools: dict[str, str] = {}
-    for tool, hint in (
-        (
-            "git",
-            "Install git with your system package manager (e.g. `brew install git`).",
-        ),
-        ("uvx", "Install uv: https://docs.astral.sh/uv/getting-started/installation/"),
-    ):
-        if shutil.which(tool) is None:
-            missing.append(f"{tool} is not installed. {hint}")
-        else:
-            version_cmd = [tool, "--version"] if tool == "git" else ["uv", "--version"]
-            tools[tool] = run(version_cmd).stdout.strip()
-    if missing:
-        raise Stop(EXIT_ENVIRONMENT, missing)
+    tools = check_tools()
     ref, commit, _ = fetch_definition(args.template, args.ref)
     finish(EXIT_OK, template=args.template, ref=ref, commit=commit, tools=tools)
 
@@ -369,52 +444,65 @@ def cmd_options(args: argparse.Namespace) -> None:
 def cmd_create(args: argparse.Namespace) -> None:
     try:
         answers = json.loads(Path(args.answers).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise Stop(
-            EXIT_INVALID, [f"Could not read the answers file {args.answers}: {exc}"]
-        ) from exc
+    except (
+        OSError,
+        ValueError,
+    ) as exc:  # ValueError covers JSON and UTF-8 decoding errors
+        raise Stop(EXIT_INVALID, [f"Could not read the answers file {args.answers}: {exc}"]) from exc
 
-    ref, _commit, definition = fetch_definition(args.template, args.ref)
+    check_tools()
+    ref, commit, definition = fetch_definition(args.template, args.ref)
     questions, derived = parse_questions(definition)
     non_default = validate_answers(answers, questions, derived)
+    if args.expect_commit and not commit_matches(args.expect_commit, commit):
+        raise Stop(
+            EXIT_FAILED,
+            [
+                f"The template changed since the preview: previewed {args.expect_commit}, now {commit}. "
+                "Nothing was created; preview again."
+            ],
+            step="commit-check",
+            created=False,
+        )
 
     parent = Path(args.dest).expanduser().resolve()
     if not parent.is_dir():
         raise Stop(EXIT_DESTINATION, [f"The parent folder {parent} does not exist."])
-    target = parent / answers["project_name"]
-    if target.exists() and (not target.is_dir() or any(target.iterdir())):
+    name = answers["project_name"]
+    target = parent / name
+    if target.is_symlink() or (target.exists() and (not target.is_dir() or any(target.iterdir()))):
         raise Stop(
             EXIT_DESTINATION,
-            [
-                f"{target} already exists and is not empty. Choose another project name or parent folder."
-            ],
+            [f"{target} already exists and is not an empty folder. Choose another project name or parent folder."],
         )
 
     author, email = git_identity(answers, questions)
     steps = planned_steps(args.template, ref, author, email)
 
-    with tempfile.TemporaryDirectory(prefix="project-kit-answers-") as tmp:
-        answers_file = Path(tmp) / "answers.json"
+    with tempfile.TemporaryDirectory(prefix="project-kit-") as tmp:
+        work = Path(tmp)
+        answers_file = work / "answers.json"
         answers_file.write_text(json.dumps(answers), encoding="utf-8")
+        # Keep cookiecutter's clone cache and replay files out of the user's home folder.
+        config = work / "cookiecutter.yaml"
+        config.write_text(
+            f"cookiecutters_dir: {json.dumps(str(work / 'cookiecutters'))}\n"
+            f"replay_dir: {json.dumps(str(work / 'replay'))}\n",
+            encoding="utf-8",
+        )
 
         if args.dry_run:
-            render_parent = Path(tmp) / "render"
-            render_parent.mkdir()
-            proc = cruft_create(args.template, ref, render_parent, answers_file)
-            if proc.returncode != 0:
-                raise Stop(EXIT_INVALID, template_errors(output_of(proc)))
-            rendered = new_dirs(render_parent, set())
-            if len(rendered) != 1:
-                raise Stop(
-                    EXIT_FAILED,
-                    ["The template did not produce exactly one project folder."],
-                    step="cruft",
-                )
-            info = describe(rendered[0], read_cruft(rendered[0]), derived)
+            render = work / "render"
+            render.mkdir()
+            failure = cruft_create(args.template, ref, render, answers_file, config)
+            if failure:
+                raise failure
+            project = rendered_project(render, name)
+            info = describe(project, read_cruft(project), derived)
             finish(
                 EXIT_OK,
                 dry_run=True,
-                project_dir=str(parent / rendered[0].name),
+                project_dir=str(target),
                 template=args.template,
                 ref=ref,
                 non_default=non_default,
@@ -422,53 +510,31 @@ def cmd_create(args: argparse.Namespace) -> None:
                 **info,
             )
 
-        before = set(os.listdir(parent))
-        proc = cruft_create(
-            args.template, ref, parent, answers_file, into_empty=target.is_dir()
-        )
-        created = new_dirs(parent, before)
-        if proc.returncode != 0:
-            code = EXIT_FAILED if created else EXIT_INVALID
-            raise Stop(
-                code,
-                template_errors(output_of(proc)),
-                step="cruft",
-                created=bool(created),
-            )
-    project = created[0] if created else target
+        # Render into a staging folder inside the parent, then move the finished folder into
+        # place in one rename: nothing appears at the target unless generation succeeded.
+        stage = Path(tempfile.mkdtemp(prefix=".project-kit-", dir=parent))
+        try:
+            failure = cruft_create(args.template, ref, stage, answers_file, config)
+            if failure:
+                raise failure
+            staged = rendered_project(stage, name)
+            cruft = read_cruft(staged)
+            if not commit_matches(commit, cruft["commit"]):
+                raise Stop(
+                    EXIT_FAILED,
+                    [f"The template changed while creating: expected {commit}, got {cruft['commit']}. Nothing created"],
+                    step="commit-check",
+                    created=False,
+                )
+            try:
+                os.rename(staged, target)  # fails if the target appeared or is not empty
+            except OSError as exc:
+                raise Stop(EXIT_DESTINATION, [f"Could not create {target}: {exc}"]) from exc
+        finally:
+            shutil.rmtree(stage, ignore_errors=True)  # our own staging folder only
 
-    cruft = read_cruft(project)
-    if args.expect_commit and cruft["commit"] != args.expect_commit:
-        raise Stop(
-            EXIT_FAILED,
-            [
-                f"The template changed since the preview: previewed {args.expect_commit[:12]}, "
-                f"generated {cruft['commit'][:12]}. The project folder was kept; review it or delete it and retry.",
-            ],
-            step="commit-check",
-            created=True,
-            project_dir=str(project),
-        )
-
-    speckit = run(
-        [
-            "uvx",
-            "--from",
-            SPECKIT_SOURCE,
-            "specify",
-            "init",
-            "--here",
-            "--integration",
-            "claude",
-            "--script",
-            "sh",
-            "--non-interactive",
-            "--force",
-            # The claude CLI may not be on PATH (Cowork, desktop app, CI); spec-kit only needs it for its check.
-            "--ignore-agent-tools",
-        ],
-        cwd=project,
-    )
+    project = target
+    speckit = run(SPECKIT, cwd=project)
     if speckit.returncode != 0:
         raise Stop(
             EXIT_FAILED,
@@ -484,14 +550,18 @@ def cmd_create(args: argparse.Namespace) -> None:
     for git_cmd in (
         ["git", "init", "-b", "main"],
         ["git", "add", "-A"],
+        # The scaffold commit: author from the answers, no user hooks, no signing.
         [
             "git",
             "-c",
             f"user.name={author}",
             "-c",
             f"user.email={email}",
+            "-c",
+            "commit.gpgsign=false",
             "commit",
             "--quiet",
+            "--no-verify",
             "-m",
             f"Initial commit from cookiecutter-gi {cruft['commit'][:12]}",
         ],
@@ -524,29 +594,19 @@ def cmd_create(args: argparse.Namespace) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument(
-        "--template", default=DEFAULT_TEMPLATE, help="template git URL or local path"
-    )
+    common.add_argument("--template", default=DEFAULT_TEMPLATE, help="template git URL or local path")
     common.add_argument(
         "--ref",
         default=None,
         help="branch or tag (default: the template's default branch)",
     )
 
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser(
-        "check", parents=[common], help="verify tools and template access"
-    ).set_defaults(func=cmd_check)
-    sub.add_parser(
-        "options", parents=[common], help="print the template's questions"
-    ).set_defaults(func=cmd_options)
+    sub.add_parser("check", parents=[common], help="verify tools and template access").set_defaults(func=cmd_check)
+    sub.add_parser("options", parents=[common], help="print the template's questions").set_defaults(func=cmd_options)
     create = sub.add_parser("create", parents=[common], help="create the project")
-    create.add_argument(
-        "--answers", required=True, help="JSON file mapping question names to answers"
-    )
+    create.add_argument("--answers", required=True, help="JSON file mapping question names to answers")
     create.add_argument(
         "--dest",
         default=".",
@@ -555,7 +615,7 @@ def build_parser() -> argparse.ArgumentParser:
     create.add_argument(
         "--expect-commit",
         default=None,
-        help="stop if the template commit differs from this",
+        help="full template commit from the preview; stop if it changed",
     )
     create.add_argument(
         "--dry-run",
@@ -572,6 +632,12 @@ def main(argv: list[str] | None = None) -> None:
         args.func(args)
     except Stop as stop:
         finish(stop.code, messages=[m for m in stop.messages if m], **stop.extra)
+    except Exception as exc:  # the contract promises JSON on stdout, even for bugs
+        finish(
+            EXIT_FAILED,
+            messages=[f"Unexpected error: {type(exc).__name__}: {exc}"],
+            step="internal",
+        )
 
 
 if __name__ == "__main__":

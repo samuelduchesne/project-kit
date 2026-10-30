@@ -52,7 +52,7 @@ Checks `git`, `uv`/`uvx` on PATH and that the template is reachable.
 |--------|----------|---------|
 | `--answers FILE` | yes | answers JSON (see data-model.md) |
 | `--dest PARENT` | no (default `.`) | parent folder; the project goes in `PARENT/<project_name>` |
-| `--expect-commit SHA` | no | stop if the generated project's template commit differs |
+| `--expect-commit SHA` | no | the full commit from the preview (a prefix of at least 7 characters is accepted); stop before writing anything if the template's commit differs |
 | `--dry-run` | no | render into a temporary folder, report, delete it |
 
 Success (`--dry-run`):
@@ -65,11 +65,16 @@ Success (`--dry-run`):
 
 Success (real run): same fields with `"dry_run": false`, plus `"git_commit": "<sha>"`.
 
-`failed` results add `"step"` (`cruft` | `commit-check` | `speckit` | `git`) and `"created": true|false`.
+`failed` results add `"step"` (`cruft` | `commit-check` | `speckit` | `git` | `internal`) and `"created": true|false`. `cruft` and `commit-check` failures always have `created: false`: the project is rendered in a staging folder and moved into place only when complete.
 
 ## Guarantees
 
 - `check`, `options` and `create --dry-run` write only inside a temporary folder they remove.
-- `create` writes only inside `PARENT/<project_name>`, and refuses (exit 4) if it exists and is not empty.
+- `create` writes only inside `PARENT/<project_name>`, plus a hidden staging folder `PARENT/.project-kit-*` that it removes before finishing; it refuses (exit 4) if the target exists and is not an empty folder, or is a symlink.
+- `project_name` must be a single folder name (no `/`, `\`, leading `.` or `-`); text answers must not contain `{{`, `{%` or `{#`; `--template` and `--ref` must not start with `-` (exit 2).
+- Cookiecutter's clone cache and replay files go to a temporary folder, not the user's home.
+- Child processes run without a terminal (`GIT_TERMINAL_PROMPT=0`, no stdin) and with a 10-minute timeout.
+- The initial commit uses the `author`/`email` answers for both author and committer, ignores `GIT_AUTHOR_*`/`GIT_COMMITTER_*`, skips the user's git hooks (`--no-verify`) and is not signed (`commit.gpgsign=false`).
 - No command deletes anything outside its own temporary folders.
 - No command changes the user's git configuration.
+- Every outcome, including unexpected errors, prints one JSON object (`step: internal` for bugs).

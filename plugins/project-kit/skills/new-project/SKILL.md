@@ -41,7 +41,7 @@ Run `NP options`. It returns the template's `questions` (name, type `text`/`bool
 
 Ask the user, in one message:
 
-- project name (letters, digits and `-`; this is also the folder name)
+- project name (letters, digits and `-`; this is also the folder name, so no `/`, and no leading `.` or `-`)
 - a one-line description
 - author name, email and GitHub handle (suggest `git config user.name` / `user.email` if set)
 
@@ -51,7 +51,7 @@ Ask where to create the project; default is the current folder (the project goes
 
 ### 4. Preview
 
-Write the answers (only the questions the user set or changed, using exact names and JSON types) to a new temporary file outside any project, for example with `mktemp`. Run:
+Write the answers (only the questions the user set or changed, using exact names and JSON types; always include `author` and `email`) to a new temporary file outside any project, for example with `mktemp`. Text answers can't contain `{{`, `{%` or `{#`; if the user's description does, ask them to rephrase it. Run:
 
 ```bash
 NP create --answers <file> --dest <parent> --dry-run
@@ -59,17 +59,19 @@ NP create --answers <file> --dest <parent> --dry-run
 
 - `invalid`: relay the messages, ask for corrected answers, update the file and preview again.
 - `destination`: the folder exists and isn't empty; ask for another name or parent.
+- `environment`: relay the messages (a tool or the network failed) and stop; don't ask for new answers.
+- `failed` with `step: cruft`: the template couldn't generate the project; relay the message. Nothing was created.
 - `ok`: show the user the destination (`project_dir`), the template version (`commit`, first 12 characters), the package name (`derived`), the answers that differ from the defaults (`non_default`), and the top-level `files`. Ask for confirmation.
 
 ### 5. Create
 
-After the user confirms, run with the commit from the preview:
+After the user confirms, run with the full `commit` value from the preview (all 40 characters, not the short form you showed):
 
 ```bash
 NP create --answers <file> --dest <parent> --expect-commit <commit>
 ```
 
-- `failed`: say which `step` failed (`cruft`, `commit-check`, `speckit` or `git`), relay the messages, and say the folder at `project_dir` was kept and nothing was deleted. For `commit-check`, explain the template changed since the preview and offer to preview again in a new location.
+- `failed`: say which `step` failed and relay the messages. When `created` is `false` (steps `cruft` and `commit-check`), nothing was created; for `commit-check`, the template changed since the preview, so preview again. When `created` is `true` (steps `speckit` and `git`), the project folder at `project_dir` was kept and nothing was deleted.
 - `ok`: report:
   - the project folder and the template version it is linked to
   - the main choices (from `non_default`)

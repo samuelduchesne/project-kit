@@ -6,7 +6,8 @@ All findings below were verified by running the tools in this environment (cruft
 
 ## R1. Generator: cruft create
 
-- **Decision**: generate with `uvx cruft create <template> --no-input --checkout <default-branch> --output-dir <parent> --extra-context-file <answers.json>`.
+- **Decision**: generate with `uvx --from cruft==2.16.0 --with cookiecutter==2.7.1 cruft create <template> --no-input --checkout <default-branch> --output-dir <staging> --extra-context-file <answers.json> --config-file <temp config>`, where `<staging>` is a temporary folder inside the parent; the finished project folder is then moved into place with one `rename`. The temporary cookiecutter config points its clone cache and replay files at a temporary folder.
+- **Why staging (found in review)**: rendering straight into the parent let a template whose root folder isn't `{{cookiecutter.project_name}}` write into, and overwrite, a different existing folder, and a failed post-generation hook left partial output in an existing empty target. With staging, nothing appears at the target unless generation succeeded, the rendered folder name is checked against `project_name`, and `rename` refuses a non-empty target. `--overwrite-if-exists` is never used.
 - **Rationale**: cruft writes `.cruft.json` with `template`, `commit`, `checkout` and the full answer context, which is what `cruft check`/`cruft update` (and the future `upgrade-project`) need (FR-007, SC-005). Passing `--checkout main` records the branch, so later updates follow `main`; passing a commit SHA would pin the project and make updates find nothing. Answers in a JSON file keep booleans as real booleans (`false` → Python `False`), which avoids the template's known failure with a lowercase `false` passed on the command line.
 - **Alternatives considered**: plain `cookiecutter` (no link record); `--checkout <sha>` (pins forever); `key=value` CLI arguments (string booleans break the template's hooks).
 
@@ -30,7 +31,7 @@ All findings below were verified by running the tools in this environment (cruft
 
 ## R5. Same version in preview and creation
 
-- **Decision**: the preview reports the commit; the real run takes `--expect-commit <sha>` and, after `cruft create`, compares it with `.cruft.json`'s `commit`. On mismatch it stops before spec-kit and git, reports both commits, and leaves the folder (FR-013).
+- **Decision**: the preview reports the commit; the real run takes `--expect-commit <sha>` (a prefix of at least 7 characters is accepted) and compares it with the commit it just fetched, before writing anything; it also checks the staged project's `.cruft.json` commit before moving it into place. On mismatch it stops with nothing created.
 - **Rationale**: keeps `checkout: main` for upgrades (R1) while still guaranteeing the user created what they previewed (edge case "template changes between preview and creation"). A mismatch needs a push to the template within seconds, so this is a safety net, not a common path.
 
 ## R6. spec-kit setup
@@ -41,7 +42,8 @@ All findings below were verified by running the tools in this environment (cruft
 
 ## R7. Git
 
-- **Decision**: `git init -b main`, `git add -A`, then `git -c user.name=<author> -c user.email=<email> commit -m "Initial commit from cookiecutter-gi <sha12>"`. The author comes from the template answers `author` and `email` when present, otherwise from the user's git config; if neither exists, the pre-check reports it.
+- **Decision**: `git init -b main`, `git add -A`, then `git -c user.name=<author> -c user.email=<email> -c commit.gpgsign=false commit --no-verify -m "Initial commit from cookiecutter-gi <sha12>"`, with `GIT_AUTHOR_*`/`GIT_COMMITTER_*` removed from the environment. When the template asks for `author` and `email`, both answers are required and used; otherwise the user's git config is used; if neither exists, the pre-check reports it.
+- **Why (found in review)**: a user's `commit.gpgsign=true`, a global hooks template, or `GIT_AUTHOR_*` variables made the scaffold commit fail or carry the wrong author. The scaffold commit is therefore unsigned and runs no user hooks.
 - **Rationale**: FR-009 and the edge case where git has no identity configured; `-c` changes nothing in the user's git configuration. A new repository in its own folder never touches an enclosing repository.
 
 ## R8. Running the script
