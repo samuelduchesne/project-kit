@@ -62,7 +62,7 @@ Before creating anything, the user can ask what would happen; and when something
 ### Edge Cases
 
 - The user asks for a Node project: Claude says Node support is planned and not available yet, and offers a Python project instead only if the user wants one.
-- The project name has characters the template turns into a different package name (e.g. `My Tool` → slug rules): the summary shows the folder name and package name the template will derive before confirmation.
+- The project name is one the template rejects (e.g. it contains `_` or spaces): the preview reports the template's own error message and asks for another name. For a valid name, the summary shows the folder name and the package name the template derives (e.g. `demo-proj` → `demo_proj`) before confirmation.
 - The user is inside an existing git repository: the new project is created in its own folder with its own git repository; the enclosing repository is not modified.
 - The template's question list changes between preview and creation: creation uses the same template version shown in the preview.
 - The user's git has no name/email configured: the initial commit uses the author name and email from the answers, without changing the user's git configuration.
@@ -75,9 +75,9 @@ Before creating anything, the user can ask what would happen; and when something
 - **FR-001**: The workflow MUST create new Python projects from the `samuelduchesne/cookiecutter-gi` template only; for any other language it MUST say that support is planned and create nothing.
 - **FR-002**: The questions, choices, defaults and prompt texts presented to the user MUST be read from the template's current definition at run time; the plugin MUST NOT keep its own copy of them.
 - **FR-003**: The workflow MUST ask the user for the project name, description, and author details (name, email, GitHub handle), and MUST offer the template's defaults for all other questions, letting the user accept them as a whole or change any of them.
-- **FR-004**: Every answer MUST be validated before creation: choice questions against the template's allowed values, yes/no questions as booleans, and the development Python version not lower than the minimum Python version.
+- **FR-004**: Every answer MUST be validated before anything is created in the destination: choice questions against the template's allowed values and yes/no questions as booleans by the workflow, and every rule the template enforces itself (e.g. valid project name, development Python version not lower than the minimum) by running the template's own checks during the preview. The plugin MUST NOT re-implement the template's rules.
 - **FR-005**: Before creating anything, the workflow MUST show a summary with the destination folder, the template version (commit), the derived folder and package names, and every answer that differs from the template default, and MUST wait for the user's confirmation.
-- **FR-006**: A preview mode MUST show everything in FR-005 plus each step that would run, and MUST create, change or delete nothing.
+- **FR-006**: A preview mode MUST show everything in FR-005 plus the files the template would generate and each step that would run, and MUST create, change or delete nothing outside a temporary folder that it removes before finishing.
 - **FR-007**: The project MUST be generated so that it records its template, template version and answers, allowing it to be upgraded to newer template versions later.
 - **FR-008**: The workflow MUST set up spec-kit in the new project, for Claude, using a pinned spec-kit version.
 - **FR-009**: The workflow MUST initialize a git repository in the new project on a `main` branch and make one initial commit containing every generated file, authored with the name and email from the answers.
@@ -104,7 +104,7 @@ Before creating anything, the user can ask what would happen; and when something
 - **SC-001**: A user who accepts the recommended setup goes from request to a ready project in under 3 minutes, answering at most 5 questions.
 - **SC-002**: 100% of the template's questions are offered with the template's own choices and defaults; adding a question to the template makes it appear in the interview with 0 plugin changes.
 - **SC-003**: For every invalid answer tried during acceptance (out-of-range choice, non-boolean yes/no, development Python below the minimum), 0 files are created and the message names the allowed values.
-- **SC-004**: Preview mode and every refused or failed pre-check create, modify or delete 0 files.
+- **SC-004**: Preview mode and every refused or failed pre-check leave 0 files created, modified or deleted outside the system's temporary folder, and remove what they put there.
 - **SC-005**: Every created project can be checked for template updates immediately after creation without any further setup.
 - **SC-006**: A newly created project contains 0 files that the template or spec-kit did not generate.
 
