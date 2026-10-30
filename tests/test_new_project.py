@@ -36,6 +36,15 @@ if "{{ cookiecutter.project_name }}" == "post-fail":
 """
 
 
+NODE_PRE_GEN_HOOK = """\
+import sys
+name = "{{ cookiecutter.project_name }}"
+if name != name.lower():
+    print(f"ERROR: The project name {name} is not a valid npm package name")
+    sys.exit(1)
+"""
+
+
 def git(*args: str, cwd: Path) -> str:
     return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout
 
@@ -45,6 +54,7 @@ def make_template(
     *,
     root_folder: str = "{{cookiecutter.project_name}}",
     with_author: bool = True,
+    with_node: bool = True,
 ) -> Path:
     definition: dict = {"project_name": "example-project"}
     definition["project_slug"] = "{{ cookiecutter.project_name|lower|replace('-', '_') }}"
@@ -77,6 +87,8 @@ def make_template(
         encoding="utf-8",
     )
     (project / "{{cookiecutter.project_slug}}.py").write_text("VALUE = 1\n", encoding="utf-8")
+    if with_node:
+        make_node_template(path / "node")
     git("init", "-q", "-b", "main", cwd=path)
     git("add", "-A", cwd=path)
     git(
@@ -91,6 +103,27 @@ def make_template(
         cwd=path,
     )
     return path
+
+
+def make_node_template(path: Path) -> None:
+    """A second template in a sub-folder, as cookiecutter-gi keeps its Node template in node/."""
+    definition = {
+        "author": "Your Name",
+        "email": "you@example.com",
+        "project_name": "example-lib",
+        "node_version": ["24", "22"],
+        "__prompts__": {"node_version": {"__prompt__": "Node.js version", "24": "24 (LTS)", "22": "22"}},
+    }
+    project = path / "{{cookiecutter.project_name}}"
+    (path / "hooks").mkdir(parents=True)
+    project.mkdir()
+    (path / "cookiecutter.json").write_text(json.dumps(definition, indent=2), encoding="utf-8")
+    (path / "hooks" / "pre_gen_project.py").write_text(NODE_PRE_GEN_HOOK, encoding="utf-8")
+    (project / "package.json").write_text(
+        '{"name": "{{ cookiecutter.project_name }}", "engines": {"node": ">={{ cookiecutter.node_version }}"}}\n',
+        encoding="utf-8",
+    )
+    (project / "README.md").write_text("# {{ cookiecutter.project_name }} (Node)\n", encoding="utf-8")
 
 
 class NewProjectTests(unittest.TestCase):
@@ -461,6 +494,45 @@ class NewProjectTests(unittest.TestCase):
                     self.assertEqual(code, 4, out)
         self.assertEqual(os.listdir(existing), ["keep.txt"])
         self.assertEqual(os.listdir(elsewhere), [])
+
+    # --- Node (spec 004) --------------------------------------------------------
+
+    def test_node_options_read_the_node_template(self) -> None:
+        code, out = self.script("options", "--template", str(self.template), "--language", "node")
+        self.assertEqual(code, 0, out)
+        self.assertEqual((out["language"], out["directory"]), ("node", "node"))
+        self.assertEqual({q["name"] for q in out["questions"]}, {"author", "email", "project_name", "node_version"})
+        self.assertEqual(out["derived"], [])
+
+    def test_node_dry_run_and_create(self) -> None:
+        answers = self.person(project_name="demo-lib", node_version="22")
+        code, out = self.create(answers, "--language", "node", "--dry-run")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(sorted(out["files"]), [".cruft.json", "README.md", "package.json"])
+        self.assertTrue(any("--directory node" in s for s in out["steps"]), out["steps"])
+        self.assertEqual(os.listdir(self.parent), [])
+
+        code, out = self.create(answers, "--language", "node", "--expect-commit", self.commit)
+        self.assertEqual(code, 0, out)
+        project = Path(out["project_dir"])
+        cruft = json.loads((project / ".cruft.json").read_text(encoding="utf-8"))
+        self.assertEqual((cruft["directory"], cruft["checkout"], cruft["commit"]), ("node", "main", self.commit))
+        self.assertEqual(cruft["context"]["cookiecutter"]["node_version"], "22")
+        self.assertIn('">=22"', (project / "package.json").read_text(encoding="utf-8"))
+        self.assertFalse((project / "demo_lib.py").exists(), "the Python template was not used")
+        self.assertTrue((project / ".specify").is_dir())
+        self.assertEqual(len(git("log", "--format=%H", cwd=project).split()), 1)
+
+    def test_node_template_hook_error_is_relayed(self) -> None:
+        code, out = self.create(self.person(project_name="Demo-Lib"), "--language", "node", "--dry-run")
+        self.assertEqual(code, 2, out)
+        self.assertEqual(out["messages"], ["ERROR: The project name Demo-Lib is not a valid npm package name"])
+
+    def test_template_without_node_folder_is_environment_error(self) -> None:
+        python_only = make_template(self.root / f"python-only-{self.parent.name}", with_node=False)
+        code, out = self.script("options", "--template", str(python_only), "--language", "node")
+        self.assertEqual(code, 3, out)
+        self.assertIn("no node/ template", out["messages"][0])
 
     def test_missing_parent_is_refused(self) -> None:
         code, out = self.script(
