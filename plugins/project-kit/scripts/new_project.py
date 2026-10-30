@@ -59,6 +59,7 @@ EXIT_INVALID = 2
 EXIT_ENVIRONMENT = 3
 EXIT_DESTINATION = 4
 EXIT_FAILED = 5
+EXIT_PROJECT = 6  # upgrade_project.py: the project is not in a state the command accepts
 
 STATUS = {
     EXIT_OK: "ok",
@@ -66,6 +67,7 @@ STATUS = {
     EXIT_ENVIRONMENT: "environment",
     EXIT_DESTINATION: "destination",
     EXIT_FAILED: "failed",
+    EXIT_PROJECT: "project",
 }
 
 JINJA_MARKERS = ("{{", "{%", "{#")

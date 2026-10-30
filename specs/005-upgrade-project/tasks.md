@@ -10,7 +10,7 @@ description: "Task list for upgrade-project"
 ## Phase 1: Foundational
 
 - [X] T001 `new_project.py`: `validate_answers(..., partial=True)` skips the required-answer checks; `fetch_definition` can return a full clone and read a given commit (shared helper)
-- [X] T002 `plugins/project-kit/scripts/upgrade_project.py` skeleton: imports helpers from `new_project`, `--project/--template/--ref`, exit code 4 = project state, git helpers (`is_repo`, `clean`, `first_commit_date`), language detection, `.cruft.json` reading, template-URL comparison
+- [X] T002 `plugins/project-kit/scripts/upgrade_project.py` skeleton: imports helpers from `new_project`, `--project/--template/--ref`, exit code 6 = project state, git helpers (`is_repo`, `clean`, `first_commit_date`), language detection, `.cruft.json` reading, template-URL comparison
 - [X] T003 Fixture helpers in `tests/test_upgrade_project.py`: template with two commits (the second changes a file and adds a question), project created with `new_project.py create`, unlinked project from plain cookiecutter at the first commit
 
 ## Phase 2: User Story 1 - Update a linked project (P1) 🎯

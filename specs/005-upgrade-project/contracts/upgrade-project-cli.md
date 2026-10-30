@@ -2,7 +2,7 @@
 
 Invocation: `uv run --no-project "${CLAUDE_PLUGIN_ROOT}/scripts/upgrade_project.py" <command> --project DIR [options]`
 
-Exit codes and `status` values as in new-project (0 `ok`, 2 `invalid`, 3 `environment`, 4 `project`, 5 `failed`); code 4 means the project is not in a state the command accepts (not a git repository, dirty tree, already linked, not linked), with `messages`.
+Exit codes and `status` values: 0 `ok`, 2 `invalid`, 3 `environment`, 5 `failed` (as in new-project), and 6 `project`. Code 6 has its own value so it never collides with new-project's 4 (`destination`); it means the project is not in a state the command accepts (not a git repository, dirty tree, already linked, not linked), with `messages`.
 
 ## Common options
 

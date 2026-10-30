@@ -159,6 +159,14 @@ class UpgradeProjectTests(unittest.TestCase):
     def snapshot(self, project: Path) -> tuple[str, str]:
         return git("rev-parse", "HEAD", cwd=project), git("status", "--porcelain", "--untracked-files=all", cwd=project)
 
+    def test_project_state_code_does_not_rename_new_projects_destination_code(self) -> None:
+        import new_project
+        import upgrade_project
+
+        self.assertEqual(upgrade_project.EXIT_PROJECT, 6)
+        self.assertEqual(new_project.STATUS[new_project.EXIT_DESTINATION], "destination")
+        self.assertEqual(new_project.STATUS[upgrade_project.EXIT_PROJECT], "project")
+
     # --- status -------------------------------------------------------------------
 
     def test_status_of_linked_project(self) -> None:
@@ -279,15 +287,15 @@ class UpgradeProjectTests(unittest.TestCase):
             with self.subTest(command=command):
                 extra = ("--dry-run",) if command == "update" else ("--dry-run", "--commit", self.old, "--answers", "x")
                 code, out = self.upgrade(command, project, *extra)
-                self.assertIn(code, (2, 4), out)
+                self.assertIn(code, (2, 6), out)
         code, out = self.upgrade("update", project, "--dry-run")
-        self.assertEqual(code, 4, out)
+        self.assertEqual(code, 6, out)
         self.assertIn("uncommitted changes", out["messages"][0])
 
         plain = self.parent / "no-git"
         plain.mkdir()
         code, out = self.upgrade("update", plain, "--dry-run")
-        self.assertEqual(code, 4, out)
+        self.assertEqual(code, 6, out)
 
     # --- link ---------------------------------------------------------------------
 
@@ -314,10 +322,10 @@ class UpgradeProjectTests(unittest.TestCase):
         self.assertEqual(cruft["context"]["cookiecutter"]["flavor"], "chocolate")
 
         code, out = self.upgrade("link", project, "--commit", self.old, "--answers", right)
-        self.assertEqual(code, 4, out)  # dirty (and already linked)
+        self.assertEqual(code, 6, out)  # dirty (and already linked)
         commit_all(project, "link to template")
         code, out = self.upgrade("link", project, "--commit", self.old, "--answers", right)
-        self.assertEqual(code, 4, out)
+        self.assertEqual(code, 6, out)
         self.assertIn("already linked", out["messages"][0])
 
         code, out = self.upgrade("update", project, "--dry-run")

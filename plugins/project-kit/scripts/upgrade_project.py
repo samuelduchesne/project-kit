@@ -8,7 +8,7 @@ Used by the project-kit ``upgrade-project`` skill. Commands:
     update   apply the template changes since the linked commit (``--dry-run`` to preview the exact diff)
 
 Every command prints one JSON object on stdout; progress goes to stderr.
-Exit codes: 0 ok, 2 invalid answers, 3 environment, 4 project state, 5 step failed.
+Exit codes: 0 ok, 2 invalid answers, 3 environment, 5 step failed, 6 project state.
 ``status`` and every ``--dry-run`` leave the project unchanged; nothing is ever committed.
 """
 
@@ -27,7 +27,6 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import new_project as np
 from new_project import (
     CRUFT,
     DEFAULT_TEMPLATE,
@@ -35,6 +34,7 @@ from new_project import (
     EXIT_FAILED,
     EXIT_INVALID,
     EXIT_OK,
+    EXIT_PROJECT,
     LANGUAGES,
     Stop,
     check_option_values,
@@ -52,9 +52,6 @@ from new_project import (
     template_arg,
     validate_answers,
 )
-
-EXIT_PROJECT = 4
-np.STATUS[EXIT_PROJECT] = "project"
 
 CRUFT_FILE = ".cruft.json"
 SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -227,17 +224,22 @@ def definition_at(clone: Path, commit: str, directory: str) -> dict[str, Any]:
     return definition
 
 
-def template_pathspec(directory: str) -> list[str]:
-    """Paths that make up one template: its folder, or the repository minus the other templates' folders."""
+def template_pathspec(clone: Path, directory: str) -> list[str]:
+    """Paths that make up one template, so commits elsewhere (docs, CI, tests, other templates) don't count.
+
+    A sub-folder template is its whole folder. The root template is its question file, hooks, extensions and
+    the folder cookiecutter renders (the top-level entry whose name holds ``{{``).
+    """
     if directory:
         return [directory]
-    return ["."] + [f":(exclude){d}" for d in LANGUAGES.values() if d]
+    rendered = [name for name in git_out("ls-tree", "--name-only", "HEAD", cwd=clone).splitlines() if "{{" in name]
+    return [":(literal)" + path for path in ("cookiecutter.json", "hooks", "local_extensions.py", *rendered)]
 
 
 def commits_behind(clone: Path, commit: str, directory: str) -> int | None:
     if not git_out("rev-parse", "--verify", "--quiet", f"{commit}^{{commit}}", cwd=clone):
         return None
-    count = git_out("rev-list", "--count", f"{commit}..HEAD", "--", *template_pathspec(directory), cwd=clone)
+    count = git_out("rev-list", "--count", f"{commit}..HEAD", "--", *template_pathspec(clone, directory), cwd=clone)
     return int(count) if count.isdigit() else None
 
 

@@ -148,6 +148,15 @@ class AuditProjectTests(unittest.TestCase):
         self.assertIn("CHANGELOG.md", by_id["template-drift"]["files"])
         self.assertEqual([f["severity"] for f in out["findings"]][-1], "info", "sorted by severity")
 
+    def test_template_commits_outside_the_template_are_not_behind(self) -> None:
+        (self.template / "docs").mkdir()
+        (self.template / "docs" / "index.md").write_text("template docs\n", encoding="utf-8")
+        (self.template / "node" / "README.md").write_text("node only\n", encoding="utf-8")
+        commit_all(self.template, "docs and Node-only changes")
+        out = self.audit()
+        self.assertEqual(out["template"]["behind"], 0)
+        self.assertIn("template-current", out["passed"])
+
     def test_lint_setup_and_changelog_errors(self) -> None:
         def no_ruff(p: Path) -> None:
             (p / ".pre-commit-config.yaml").write_text("repos: []\n", encoding="utf-8")
