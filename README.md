@@ -8,7 +8,7 @@ The plugin installs in claude.ai chat, the Claude desktop app, Cowork and Claude
 
 | Skill | What it will do | Status |
 |-------|-----------------|--------|
-| `/project-kit:new-project` | Create a new Python or Node project from the cookiecutter-gi templates, with spec-kit, linting and a changelog set up | Planned |
+| `/project-kit:new-project` | Create a new Python project from the cookiecutter-gi template, linked to it with cruft, with spec-kit and an initial git commit | Available (Python; Node planned) |
 | `/project-kit:upgrade-project` | Bring an existing project up to the latest template, linking it to the template first if needed | Planned |
 | `/project-kit:audit-project` | Check a project against the standards and report drift without changing anything | Planned |
 | `/project-kit:changelog-keeper` | Create a `CHANGELOG.md` from git history, or audit and fix an existing one, following Keep a Changelog 1.1.0 | Available |
@@ -21,6 +21,16 @@ The plugin installs in claude.ai chat, the Claude desktop app, Cowork and Claude
 Skills marked Planned are placeholders: each explains what the workflow will do and that it isn't available yet, and it changes nothing.
 
 The plugin also includes the `editor` agent, which writes and revises prose to the `editorial` standard. `diataxis` and `review-docs` delegate prose work to it. Agents are not available on every surface; where it is unavailable, apply the `editorial` skill directly.
+
+### new-project
+
+Ask Claude to create a new Python project, for example "start a new Python project called flow-tools". Claude asks for the name, description and author, shows the template's other options with their defaults, previews what will be created, and creates nothing until you confirm. The result is a folder with the template's files, a `.cruft.json` link for later upgrades, spec-kit set up for Claude, and one git commit. It does not install dependencies, create a remote repository or push.
+
+It needs a shell on your own computer (Claude Code, or Cowork running locally) with:
+
+- git and [uv](https://docs.astral.sh/uv/)
+- read access to the private [`samuelduchesne/cookiecutter-gi`](https://github.com/samuelduchesne/cookiecutter-gi) repository through your git credentials
+- network access to GitHub and PyPI (cruft and spec-kit are run with `uvx`)
 
 ## Install
 
@@ -60,9 +70,11 @@ To update, run `claude plugin update project-kit@project-kit`, or open `/plugin`
 .claude-plugin/marketplace.json   marketplace definition
 plugins/project-kit/              the plugin (the only folder that gets installed)
   .claude-plugin/plugin.json
+  scripts/new_project.py          the new-project helper script
   skills/<name>/SKILL.md
   agents/<name>.md
   workflows/<name>.js
+tests/                            tests for the helper script
 .github/                          CI workflow and the manifest consistency check
 specs/                            spec-kit feature specs, plans and tasks
 .specify/, .claude/skills/        spec-kit development files (not packaged)
@@ -76,7 +88,10 @@ Validate before opening a pull request (CI runs the same checks):
 claude plugin validate . --strict
 claude plugin validate ./plugins/project-kit --strict
 python3 .github/scripts/check_manifests.py
+uv run --no-project python -m unittest discover -s tests -v
 ```
+
+The tests run the `new-project` script against a small fixture template, so they don't need access to the private template.
 
 To try the plugin from your working copy, add the folder as a local marketplace: `claude plugin marketplace add ./`, then `claude plugin install project-kit@project-kit`. Edits load at the next session start or after `/reload-plugins`.
 
