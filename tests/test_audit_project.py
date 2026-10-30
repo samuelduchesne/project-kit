@@ -157,6 +157,24 @@ class AuditProjectTests(unittest.TestCase):
         self.assertEqual(out["template"]["behind"], 0)
         self.assertIn("template-current", out["passed"])
 
+    def test_jinja_includes_and_extension_modules_count_as_behind(self) -> None:
+        """Everything cookiecutter reads is template: ``templates/`` and the modules named in ``_extensions``."""
+        definition = json.loads((self.template / "cookiecutter.json").read_text(encoding="utf-8"))
+        definition["_extensions"] = ["my_ext.NoopExtension"]
+        (self.template / "cookiecutter.json").write_text(json.dumps(definition, indent=2), encoding="utf-8")
+        (self.template / "my_ext.py").write_text(
+            "from jinja2.ext import Extension\n\n\nclass NoopExtension(Extension):\n    pass\n", encoding="utf-8"
+        )
+        commit_all(self.template, "add an extension")
+        project = self.create("ext-proj")
+        (self.template / "templates").mkdir()
+        (self.template / "templates" / "base.j2").write_text("shared\n", encoding="utf-8")
+        commit_all(self.template, "a Jinja include")
+        with (self.template / "my_ext.py").open("a", encoding="utf-8") as module:
+            module.write("# changed\n")
+        commit_all(self.template, "change the extension")
+        self.assertEqual(self.audit(project=project)["template"]["behind"], 2)
+
     def test_lint_setup_and_changelog_errors(self) -> None:
         def no_ruff(p: Path) -> None:
             (p / ".pre-commit-config.yaml").write_text("repos: []\n", encoding="utf-8")

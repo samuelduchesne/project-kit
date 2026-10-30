@@ -12,7 +12,7 @@ Versions were checked against the npm registry, PyPI and GitHub tags on 2026-10-
 
 ## R2. Package manager and versions
 
-- **Decision**: pnpm only, pinned with `"packageManager": "pnpm@10.28.0"` and enabled through corepack locally and `pnpm/action-setup@v4` in CI. Exact pins: `@biomejs/biome` 2.6.4, `typescript` 7.0.2, `vitest` and `@vitest/coverage-v8` 5.0.5, `@types/node` latest of the chosen major.
+- **Decision**: pnpm only, pinned with `"packageManager": "pnpm@12.16.1"`, installed with `npm install -g pnpm` locally (it switches to the pinned version; Node.js 25 and later no longer include corepack) and `pnpm/action-setup@v4` in CI. Exact pins: `@biomejs/biome` 2.6.4, `typescript` 7.0.2, `vitest` and `@vitest/coverage-v8` 5.0.5, `@types/node` latest of the chosen major.
 - **Rationale**: user choice (pnpm only); exact versions keep fresh projects reproducible until the lockfile exists. Vitest 5 supports Node `^22.12 || ^24 || >=26`, so the offered versions are 24 (default, LTS), 22 and 26.
 
 ## R3. Lint and format through pre-commit

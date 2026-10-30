@@ -95,7 +95,7 @@ A project name that cannot be an npm package name, or a yes/no answer that is no
 ## Assumptions
 
 - Node 24 is the default (active LTS); 22 and 26 are offered. The tools pinned support all three.
-- pnpm is enabled through corepack using the `packageManager` field; CI installs it with the pnpm GitHub action.
+- pnpm is pinned in the `packageManager` field. Contributors install it with `npm install -g pnpm`, which switches to the pinned version (Node.js 25 and later no longer include corepack); CI installs it with the pnpm GitHub action.
 - The pre-commit framework is run through `uvx`, so a Node project's contributor needs uv, as the plugin already requires.
 - npm publishing uses npm trusted publishing (OIDC) from GitHub Actions, with provenance.
 - Docker, documentation sites and data pipelines are Python-template features with no Node equivalent in this version.

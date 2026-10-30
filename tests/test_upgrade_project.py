@@ -263,6 +263,31 @@ class UpgradeProjectTests(unittest.TestCase):
         code, out = self.upgrade("status", project)
         self.assertTrue(out["up_to_date"])
 
+    def test_update_agrees_with_status_when_only_non_template_files_changed(self) -> None:
+        template = make_template(self.parent / "template-docs")
+        code, out = self.run_script(
+            NEW_PROJECT,
+            "create",
+            "--template",
+            str(template),
+            "--answers",
+            self.answers(project_name="up-docs", **PERSON),
+            "--dest",
+            str(self.parent),
+        )
+        self.assertEqual(code, 0, out)
+        project = Path(out["project_dir"])
+        (template / "docs").mkdir()
+        (template / "docs" / "index.md").write_text("template docs\n", encoding="utf-8")
+        commit_all(template, "docs only")
+
+        common = ("--project", str(project), "--template", str(template))
+        code, status = self.run_script(SCRIPT, "status", *common)
+        self.assertEqual((code, status["behind"], status["up_to_date"]), (0, 0, True), status)
+        code, preview = self.run_script(SCRIPT, "update", *common, "--dry-run")
+        self.assertEqual(code, 0, preview)
+        self.assertEqual((preview["behind"], preview["up_to_date"], preview["files"]), (0, True, []), preview)
+
     def test_answers_for_new_questions_are_used(self) -> None:
         project = self.linked_project("up-answers")
         code, out = self.upgrade("update", project, "--dry-run", "--answers", self.answers(use_ci=False))

@@ -227,13 +227,22 @@ def definition_at(clone: Path, commit: str, directory: str) -> dict[str, Any]:
 def template_pathspec(clone: Path, directory: str) -> list[str]:
     """Paths that make up one template, so commits elsewhere (docs, CI, tests, other templates) don't count.
 
-    A sub-folder template is its whole folder. The root template is its question file, hooks, extensions and
-    the folder cookiecutter renders (the top-level entry whose name holds ``{{``).
+    A sub-folder template is its whole folder. The root template is everything cookiecutter reads: its question
+    file, hooks, the ``templates`` folder for Jinja includes, the extension modules named in ``_extensions`` (a
+    module file or a package folder) and the folder it renders (the top-level entry whose name holds ``{{``).
     """
     if directory:
         return [directory]
     rendered = [name for name in git_out("ls-tree", "--name-only", "HEAD", cwd=clone).splitlines() if "{{" in name]
-    return [":(literal)" + path for path in ("cookiecutter.json", "hooks", "local_extensions.py", *rendered)]
+    try:
+        definition = json.loads(git_out("show", "HEAD:cookiecutter.json", cwd=clone) or "{}")
+    except ValueError:
+        definition = {}
+    extensions = definition.get("_extensions") if isinstance(definition, dict) else None
+    modules = [str(ext).split(".")[0] for ext in extensions] if isinstance(extensions, list) else []
+    paths = ["cookiecutter.json", "hooks", "templates", "local_extensions.py", *rendered]
+    paths += [path for module in modules for path in (f"{module}.py", module) if path not in paths]
+    return [":(literal)" + path for path in paths]
 
 
 def commits_behind(clone: Path, commit: str, directory: str) -> int | None:
@@ -314,13 +323,19 @@ def run_update(target: Path, sha: str, answers: dict[str, Any] | None, work: Pat
 
 def update_report(target: Path) -> dict[str, Any]:
     """Files changed by the update, files with conflict markers, and rejected hunks (``*.rej``)."""
-    conflicts = git_out("diff", "--name-only", "--diff-filter=U", cwd=target).splitlines()
-    # Untracked *.rej files, ignored ones included, without walking node_modules or .venv in Python.
-    rejects = sorted(git_out("ls-files", "--others", "--", "*.rej", cwd=target).splitlines())
+    # -z everywhere: plain paths (no C-quoting of spaces or non-ASCII names) and renames as separate fields.
+    conflicts = [p for p in git_out("diff", "--name-only", "-z", "--diff-filter=U", cwd=target).split("\0") if p]
+    # Untracked *.rej files, ignored ones included (a project's .gitignore often lists *.rej).
+    rejects = sorted(p for p in git_out("ls-files", "-z", "--others", "--", "*.rej", cwd=target).split("\0") if p)
     changes = {"M": "modified", "A": "added", "D": "deleted", "R": "renamed", "U": "conflict", "?": "added"}
     files = []
-    for line in run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=target).stdout.splitlines():
-        code, path = line[:2], line[3:]
+    entries = iter(run(["git", "status", "--porcelain", "-z", "--untracked-files=all"], cwd=target).stdout.split("\0"))
+    for entry in entries:
+        if not entry:
+            continue
+        code, path = entry[:2], entry[3:]
+        if "R" in code or "C" in code:
+            next(entries, None)  # the original path of a rename or copy follows as its own field
         if path.endswith(".rej"):
             continue
         kind = "conflict" if "U" in code or code in {"AA", "DD"} else changes.get(code.strip()[:1], "modified")
@@ -475,7 +490,8 @@ def cmd_update(args: argparse.Namespace) -> None:
         "to_commit": latest,
         "behind": behind,
     }
-    if cruft["commit"] == latest and not answers:
+    # Same rule as ``status``: no template commit since the recorded one touched this template.
+    if (cruft["commit"] == latest or behind == 0) and not answers:
         finish(EXIT_OK, dry_run=args.dry_run, up_to_date=True, files=[], conflicts=[], rejects=[], **result)
 
     with tempfile.TemporaryDirectory(prefix="project-kit-") as tmp:

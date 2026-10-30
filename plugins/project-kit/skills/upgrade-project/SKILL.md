@@ -28,7 +28,7 @@ Each command prints one JSON object (`status` is `ok`, `invalid`, `environment`,
 
 If you cannot run shell commands, say this workflow needs Claude Code or Cowork on the user's computer, with git and uv, and stop.
 
-Run `UP status`. On `environment`, relay the messages (missing tool, template unreachable, or linked to a template other than cookiecutter-gi) and stop. Otherwise tell the user: the language, whether the project is linked, and the git state. If `git.repository` is false, say upgrades need a git repository and stop. If `git.clean` is false, ask them to commit or stash first.
+Run `UP status`. On `environment`, relay the messages (missing tool, template unreachable, or linked to a template other than cookiecutter-gi) and stop. On `project`, relay the messages (the folder doesn't exist, or its `.cruft.json` is not a usable link record) and stop. Otherwise tell the user: the language, whether the project is linked, and the git state. If `git.repository` is false, say upgrades need a git repository and stop. If `git.clean` is false, ask them to commit or stash first.
 
 - `linked: true` → go to step 3.
 - `linked: false` → step 2.

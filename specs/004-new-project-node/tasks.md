@@ -20,7 +20,7 @@ description: "Task list for new-project (Node)"
 
 ## Phase 3: User Story 2 - Language is explicit (P2)
 
-- [X] T006 [US2] Rewrite step 1 of `plugins/project-kit/skills/new-project/SKILL.md`: infer Python or Node from the request or ask; refuse other languages; pass `--language` to every command; Node next steps (`corepack enable`, `make install`, commit `pnpm-lock.yaml`); update the frontmatter description
+- [X] T006 [US2] Rewrite step 1 of `plugins/project-kit/skills/new-project/SKILL.md`: infer Python or Node from the request or ask; refuse other languages; pass `--language` to every command; Node next steps (`npm install -g pnpm`, `make install`, commit `pnpm-lock.yaml`); update the frontmatter description
 
 ## Phase 4: Polish
 

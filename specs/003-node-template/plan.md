@@ -12,7 +12,7 @@ Add a second cookiecutter template to `samuelduchesne/cookiecutter-gi` under `no
 
 **Language/Version**: Jinja2 templates; Python ≥ 3.9 hooks; generated projects: TypeScript 7.0, Node 22/24/26 (default 24)
 
-**Primary Dependencies**: cookiecutter 2.7 (template), pnpm 10.28 via corepack, Biome 2.6.4, TypeScript 7.0.2, Vitest 5.0.5 with `@vitest/coverage-v8`, `@types/node` matching the Node major, pre-commit 4.7.0 via `uvx`, pre-commit-hooks v6.0.0
+**Primary Dependencies**: cookiecutter 2.7 (template), pnpm 12.16.1 (`packageManager`, installed with `npm install -g pnpm`), Biome 2.6.4, TypeScript 7.0.2, Vitest 5.0.5 with `@vitest/coverage-v8`, `@types/node` matching the Node major, pre-commit 4.7.0 via `uvx`, pre-commit-hooks v6.0.0
 
 **Testing**: pytest + pytest-cookies in cookiecutter-gi (`tests/test_node_template.py`); a CI job that bakes the Node template and runs `pnpm install`, `make check`, `pnpm test`, `pnpm build`
 
