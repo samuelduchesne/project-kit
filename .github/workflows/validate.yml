@@ -1,0 +1,50 @@
+name: validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  CLAUDE_CODE_VERSION: "2.1.314"
+
+jobs:
+  validate:
+    name: Validate marketplace and plugin
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Claude Code ${{ env.CLAUDE_CODE_VERSION }}
+        run: npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+
+      - name: Validate marketplace
+        run: claude plugin validate . --strict
+
+      - name: Validate plugin
+        run: claude plugin validate ./plugins/project-kit --strict
+
+      - name: Check manifest consistency
+        run: python3 .github/scripts/check_manifests.py
+
+      - name: Install smoke test
+        run: |
+          set -euo pipefail
+          export HOME="$(mktemp -d)"
+          claude plugin marketplace add ./
+          claude plugin install project-kit@project-kit
+          details="$(claude plugin details project-kit)"
+          echo "$details"
+          echo "$details" | grep -E '^\s*Skills \(3\)\s'
+          for skill in new-project upgrade-project audit-project; do
+            echo "$details" | grep -E "^\s*Skills \(3\).*\b${skill}\b" > /dev/null \
+              || { echo "::error::skill ${skill} is missing from the installed plugin"; exit 1; }
+          done

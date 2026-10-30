@@ -1,0 +1,15 @@
+{
+  "name": "project-kit",
+  "description": "Samuel Letellier-Duchesne's plugins for setting up and maintaining software projects.",
+  "owner": {
+    "name": "Samuel Letellier-Duchesne",
+    "url": "https://github.com/samuelduchesne"
+  },
+  "plugins": [
+    {
+      "name": "project-kit",
+      "source": "./plugins/project-kit",
+      "description": "Create, audit and upgrade projects from the cookiecutter-gi templates."
+    }
+  ]
+}

@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-30
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: "Marketplace and plugin skeleton for project-kit. The repository samuelduchesne/project-kit must be installable as a Claude plugin marketplace (via claude.ai / Claude Desktop "Customize > Plugins > Add > Add marketplace" with the owner/repo shorthand, and via `claude plugin marketplace add samuelduchesne/project-kit` in Claude Code). It contains one plugin, project-kit, under plugins/project-kit/, listed in a root .claude-plugin/marketplace.json; the plugin has its own .claude-plugin/plugin.json whose name matches the marketplace entry. The skeleton ships placeholder (stub) skills for the planned workflows — new-project, upgrade-project, audit-project — each stating its purpose and that it is not yet implemented, so the install and discovery path can be verified end to end before real behavior lands in later specs. The repo also gets a README explaining what project-kit is and how to install it, a CHANGELOG.md in Keep a Changelog 1.1.0 format, and a CI check that runs `claude plugin validate` on the marketplace and plugin. Spec-kit's own files (.specify/, .claude/skills/speckit-*) stay at the repo root and must not be packaged into the plugin. Out of scope: actual skill behavior (scaffolding, upgrades, audits), the Node template, hooks, agents, and evals."
 

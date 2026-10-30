@@ -25,7 +25,8 @@ Run each, confirm the matching validator run exits non-zero, then `git checkout 
 | Change the entry `name` in marketplace.json to `project-kit-x` | `python3 .github/scripts/check_manifests.py` |
 | Change `source` to `./plugins/missing` | `python3 .github/scripts/check_manifests.py`, and the install smoke test (step 3) |
 | Add a trailing comma to plugin.json | `claude plugin validate ./plugins/project-kit --strict` |
-| Add `"version": "0.1.0"` to the marketplace entry | `claude plugin validate . --strict` (warning → failure) |
+| Add `"version": "0.1.0"` to the marketplace entry | `python3 .github/scripts/check_manifests.py` (the validator in 2.1.314 does not flag this) |
+| Create `plugins/project-kit/bin/` | `python3 .github/scripts/check_manifests.py` |
 | Remove `description` from marketplace.json | `claude plugin validate . --strict` |
 
 Note: `claude plugin validate` passes a missing source directory and doesn't compare the entry name with the manifest name, so CI adds a small consistency script and a local install smoke test (step 3) to cover them.

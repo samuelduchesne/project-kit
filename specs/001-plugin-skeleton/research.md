@@ -19,7 +19,7 @@ Sources: Claude Code docs — [Create a marketplace](https://code.claude.com/doc
 ## R3. Plugin manifest and versioning
 
 - **Decision**: `plugins/project-kit/.claude-plugin/plugin.json` with `name: "project-kit"`, `version: "0.1.0"`, `description`, `author { name, url }`, `homepage`, `repository`, `license: "MIT"`, `keywords`. Set `version` only in `plugin.json`, never in the marketplace entry.
-- **Rationale**: the manifest `name` namespaces skills (`project-kit:new-project`) and must equal the entry name (FR-003). A pinned `version` keeps users on that version until it changes, which matches the constitution's release rule (tag = `plugin.json` version). Setting `version` in both places triggers a validator warning.
+- **Rationale**: the manifest `name` namespaces skills (`project-kit:new-project`) and must equal the entry name (FR-003). A pinned `version` keeps users on that version until it changes, which matches the constitution's release rule (tag = `plugin.json` version). The docs say setting `version` in both places triggers a validator warning; validator 2.1.314 does not flag it, so the consistency script enforces it.
 - **Alternatives considered**: no `version` (users track every commit SHA) — rejected because the constitution ties releases to tags; `homepage` omitted — but it must parse as a URL, so the GitHub URL is safe.
 
 ## R4. Stub skill format
