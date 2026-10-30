@@ -3,8 +3,9 @@
 
 Checks the marketplace at the repository root against its single plugin:
 the entry and manifest names match, the source path is a contained ./ path
-that holds a plugin manifest, the entry sets no version, and the plugin
-folder contains nothing it must not ship.
+that holds a plugin manifest, the entry sets no version, the plugin folder
+contains nothing it must not ship, and no skill or agent frontmatter has a
+plain value that a strict YAML parser rejects.
 
 Read-only. Exit 0 when every check passes, 1 otherwise.
 """
@@ -17,7 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MARKETPLACE = ROOT / ".claude-plugin" / "marketplace.json"
-FORBIDDEN = ("bin", "CLAUDE.md", "hooks", "agents", ".mcp.json")
+FORBIDDEN = ("bin", "CLAUDE.md", "hooks", ".mcp.json")
 
 
 def load_json(path: Path, errors: list[str]) -> dict | None:
@@ -28,6 +29,22 @@ def load_json(path: Path, errors: list[str]) -> dict | None:
     except json.JSONDecodeError as exc:
         errors.append(f"{path.relative_to(ROOT)}: invalid JSON ({exc})")
     return None
+
+
+def check_frontmatter(plugin_dir: Path, errors: list[str]) -> None:
+    paths = [*plugin_dir.glob("skills/*/SKILL.md"), *plugin_dir.glob("agents/*.md")]
+    for path in paths:
+        name = path.relative_to(ROOT)
+        text = path.read_text(encoding="utf-8")
+        if not text.startswith("---\n"):
+            errors.append(f"{name}: no frontmatter")
+            continue
+        for line in text.split("---", 2)[1].splitlines():
+            _, separator, value = line.partition(": ")
+            if line[:1].isspace() or not separator or value[:1] in ("'", '"', ">", "|"):
+                continue
+            if ": " in value:
+                errors.append(f"{name}: quote or fold this value, strict YAML rejects its ': ' ({line[:40]!r})")
 
 
 def check() -> list[str]:
@@ -72,6 +89,8 @@ def check() -> list[str]:
     for name in FORBIDDEN:
         if (plugin_dir / name).exists():
             errors.append(f"{source}/{name}: not allowed in the plugin folder")
+
+    check_frontmatter(plugin_dir, errors)
 
     return errors
 

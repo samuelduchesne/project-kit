@@ -43,11 +43,15 @@ jobs:
           claude plugin install project-kit@project-kit
           details="$(claude plugin details project-kit)"
           echo "$details"
-          echo "$details" | grep -E '^\s*Skills \(3\)\s'
-          for skill in new-project upgrade-project audit-project; do
-            echo "$details" | grep -E "^\s*Skills \(3\).*\b${skill}\b" > /dev/null \
+          echo "$details" | grep -E '^\s*Skills \(9\)\s'
+          for skill in new-project upgrade-project audit-project changelog-keeper create-release stacked-prs diataxis editorial review-docs; do
+            echo "$details" | grep -E "^\s*Skills \(9\).*\b${skill}\b" > /dev/null \
               || { echo "::error::skill ${skill} is missing from the installed plugin"; exit 1; }
           done
+          echo "$details" | grep -E '^\s*Agents \(1\)\s.*\beditor\b' > /dev/null \
+            || { echo "::error::agent editor is missing from the installed plugin"; exit 1; }
+          ls "$HOME"/.claude/plugins/cache/project-kit/project-kit/*/workflows/review-docs.js > /dev/null \
+            || { echo "::error::workflow review-docs is missing from the installed plugin"; exit 1; }
 
   script-tests:
     name: new-project script tests
