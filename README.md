@@ -2,7 +2,7 @@
 
 project-kit is a Claude plugin for setting up and maintaining software projects to a consistent standard. It drives the [cookiecutter-gi](https://github.com/samuelduchesne/cookiecutter-gi) templates (Python today, with a Node template planned) rather than writing project files itself: the templates hold the files, and project-kit handles creating projects from them, keeping projects up to date with cruft, and checking projects for drift. New projects come with [spec-kit](https://github.com/github/spec-kit), the standard linting and formatting rules (ruff for Python, Biome for Node, pre-commit for both) and a [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) `CHANGELOG.md`.
 
-The plugin works in claude.ai chat, the Claude desktop app, Cowork and Claude Code.
+The plugin installs in claude.ai chat, the Claude desktop app, Cowork and Claude Code, and each skill needs the tools its workflow calls. `create-release` and `stacked-prs` need a shell with `git` and `gh`. `review-docs` needs the Workflow tool, which is documented for the Claude Code CLI, desktop app and IDE extensions.
 
 ## Workflows
 
@@ -16,7 +16,7 @@ The plugin works in claude.ai chat, the Claude desktop app, Cowork and Claude Co
 | `/project-kit:stacked-prs` | Split uncommitted changes into stacked pull requests and merge them in dependency order | Available |
 | `/project-kit:diataxis` | Write, place and reorganize documentation using the Diátaxis framework | Available |
 | `/project-kit:editorial` | Apply the house writing style, after Jean-Luc Doumont's *Trees, maps and theorems* | Available |
-| `/project-kit:review-docs` | Review documentation against a scoped code diff and report misalignments (requires a saved `review-docs` workflow in `~/.claude/workflows/`, which the plugin does not ship) | Available |
+| `/project-kit:review-docs` | Review documentation against a scoped code diff and report misalignments | Available |
 
 Skills marked Planned are placeholders: each explains what the workflow will do and that it isn't available yet, and it changes nothing.
 
@@ -62,6 +62,7 @@ plugins/project-kit/              the plugin (the only folder that gets installe
   .claude-plugin/plugin.json
   skills/<name>/SKILL.md
   agents/<name>.md
+  workflows/<name>.js
 .github/                          CI workflow and the manifest consistency check
 specs/                            spec-kit feature specs, plans and tasks
 .specify/, .claude/skills/        spec-kit development files (not packaged)

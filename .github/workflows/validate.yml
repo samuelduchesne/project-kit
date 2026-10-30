@@ -50,3 +50,5 @@ jobs:
           done
           echo "$details" | grep -E '^\s*Agents \(1\)\s.*\beditor\b' > /dev/null \
             || { echo "::error::agent editor is missing from the installed plugin"; exit 1; }
+          ls "$HOME"/.claude/plugins/cache/project-kit/project-kit/*/workflows/review-docs.js > /dev/null \
+            || { echo "::error::workflow review-docs is missing from the installed plugin"; exit 1; }

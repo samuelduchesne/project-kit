@@ -11,7 +11,9 @@ This skill works for both Python and Node.js packages. The version-bump tooling 
 
 ## Prerequisites
 
-Before Step 1, check that `git` and `gh` are available and that `gh auth status` succeeds. After Step 2 identifies the ecosystem, check for its version-bump tool as well. If anything is missing, state what is missing and stop; do not begin a release that cannot be completed in this environment.
+Before Step 1, check that `git` and `gh` are available and that `gh auth status` succeeds. As soon as Step 2 identifies the ecosystem, and before bumping, check for its version-bump tool as well. If anything is missing, state what is missing and stop; do not begin a release that cannot be completed in this environment.
+
+Also check that `git status --porcelain` is empty. If the working tree has uncommitted changes, show them and proceed only if the user explicitly accepts the risk.
 
 ## Workflow
 
@@ -22,8 +24,8 @@ Walk these steps in order. Don't skip ahead, each step's output feeds the next.
 Before touching anything, decide on the version bump (major / minor / patch). Look at the commits since the last tag:
 
 ```bash
-gh release list --limit 1                    # most recent tag
-git log $(gh release list --limit 1 --json tagName -q '.[0].tagName')..HEAD --oneline
+LAST_TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName')   # most recent release
+if [ -n "$LAST_TAG" ]; then git log "$LAST_TAG..HEAD" --oneline; else git log --oneline; fi   # full history for a first release
 ```
 
 Classify the changes:
@@ -65,9 +67,11 @@ If the project doesn't use `uv` (no `uv.lock`, no `[tool.uv]` section, `pyprojec
 #### Node.js (npm)
 
 ```bash
-npm version <major|minor|patch> --dry-run --no-git-tag-version   # preview (recent npm only)
-npm version <major|minor|patch> --no-git-tag-version              # apply
+npm pkg get version                                    # current version
+npm version <major|minor|patch> --no-git-tag-version   # apply
 ```
+
+`npm version` has no preview mode: passing `--dry-run` still applies the bump, so a preview followed by the real command bumps twice. Work out the target version from the current one and the bump type, show it to the user for confirmation, and run the command once.
 
 Pass `--no-git-tag-version` so `npm` only edits the manifest and lockfile; this skill handles the commit and tag itself in Step 5, matching how the Python path works. Without that flag, `npm version` commits and tags on its own, which would create a duplicate, out-of-order commit.
 
@@ -77,8 +81,6 @@ Pass `--no-git-tag-version` so `npm` only edits the manifest and lockfile; this 
 npm pkg get version         # prints the new version
 git diff package.json       # confirm the bump landed
 ```
-
-If `npm --dry-run` isn't supported by the installed npm version, just work out the target version yourself from the current one and the bump type before running the real command, and show it to the user for confirmation.
 
 If the project uses Yarn or pnpm instead of npm (look for `yarn.lock` or `pnpm-lock.yaml` next to `package.json`), use that tool's equivalent instead: `yarn version --new-version <x.y.z> --no-git-tag-version`, or `pnpm version <major|minor|patch> --no-git-tag-version`. The manifest field being bumped is the same `package.json` `"version"` key either way; only the command and lockfile differ.
 
@@ -178,15 +180,15 @@ Commit and push the version bump and changelog updates first. Stage the files th
 - **Node.js:** `package.json package-lock.json CHANGELOG.md` (or `yarn.lock` / `pnpm-lock.yaml`, whichever this project uses)
 
 ```bash
-git add <manifest and lockfile from Step 2> CHANGELOG.md
+git add <manifest and lockfile from Step 2> CHANGELOG.md   # omit CHANGELOG.md if the project has none
 git commit -m "Release vX.Y.Z"
 git push
 ```
 
-Then create the release. `gh release create` tags, pushes the tag, and publishes the release in one go:
+Then create the release. `gh release create` tags, pushes the tag, and publishes the release in one go. Pass `--target` so a new tag points at the release commit; without it, `gh` tags the tip of the default branch:
 
 ```bash
-gh release create vX.Y.Z --title "vX.Y.Z" --notes-file /tmp/release-notes-vX.Y.Z.md
+gh release create vX.Y.Z --target "$(git rev-parse HEAD)" --title "vX.Y.Z" --notes-file /tmp/release-notes-vX.Y.Z.md
 ```
 
 If the project uses GitHub Actions to publish the package on tag push or on release, look for a workflow with a `release: types: [published]` trigger, and a `twine upload`, `uv publish`, or `npm publish` step, mention this to the user so they know the package will appear on the registry (PyPI or npm) shortly. Don't try to publish manually unless asked; trusted/OIDC publishing via GitHub Actions is the modern default for both PyPI and npm, and bypassing it is a footgun.

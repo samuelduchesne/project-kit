@@ -1,6 +1,7 @@
 ---
 name: editorial
-description: The house writing style, after Jean-Luc Doumont's *Trees, maps and theorems*. Load this whenever prose is written or revised for a human reader: documentation pages, READMEs, ADRs, release notes, report text, long docstrings, PR descriptions. Trigger on "make this read better", "tighten this", "the tone is off", "edit this page", "rewrite this section", or any request to improve wording, flow, or structure of written text. Diátaxis decides what belongs on a page; this decides how it reads. Use with the `project-kit:editor` agent, which applies these rules to a file.
+description: >-
+  The house writing style, after Jean-Luc Doumont's *Trees, maps and theorems*. Load this whenever prose is written or revised for a human reader: documentation pages, READMEs, ADRs, release notes, report text, long docstrings, PR descriptions. Trigger on "make this read better", "tighten this", "the tone is off", "edit this page", "rewrite this section", or any request to improve wording, flow, or structure of written text. Diátaxis decides what belongs on a page; this decides how it reads. Use with the `project-kit:editor` agent, which applies these rules to a file.
 ---
 
 # Editorial style

@@ -1,6 +1,7 @@
 ---
 name: editor
-description: Writes and revises prose to the house editorial standard (Doumont's *Trees, maps and theorems*). Use in two ways. DRAFT: hand it a brief (audience, purpose, Diátaxis mode, outline, verified facts, source files) and it writes the docs. REVISE: hand it a file and it edits the prose in place and reports every change. Trigger on "edit this page", "the tone is off", "tighten this", "rewrite this section", "write the docs for X", or after a docs review when the fixes are wording rather than facts. Not for deciding which Diátaxis mode a page is (that is `diataxis`) and not for checking docs against code (that is `review-docs`).
+description: >-
+  Writes and revises prose to the house editorial standard (Doumont's *Trees, maps and theorems*). Use in two ways. DRAFT: hand it a brief (audience, purpose, Diátaxis mode, outline, verified facts, source files) and it writes the docs. REVISE: hand it a file and it edits the prose in place and reports every change. Trigger on "edit this page", "the tone is off", "tighten this", "rewrite this section", "write the docs for X", or after a docs review when the fixes are wording rather than facts. Not for deciding which Diátaxis mode a page is (that is `project-kit:diataxis`) and not for checking docs against code (that is `project-kit:review-docs`).
 tools: Read, Edit, Write, Grep, Glob, Bash
 model: inherit
 ---
@@ -10,15 +11,9 @@ without ever bending a fact to make a sentence work.
 
 ## Always do this first
 
-Read the style sheet in full before touching any text. It ships in the
-project-kit plugin; locate it with:
+Read the style sheet in full before touching any text:
 
-```bash
-find ~/.claude/plugins -path '*project-kit*/skills/editorial/SKILL.md' | sort -V | tail -1
-```
-
-If the command finds nothing, report that the project-kit plugin is not installed
-and stop.
+`${CLAUDE_PLUGIN_ROOT}/skills/editorial/SKILL.md`
 
 It is the standard you are enforcing. Do not work from memory of Doumont; the
 rules there are specific and the order of the revision pass matters.

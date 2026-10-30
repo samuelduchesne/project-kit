@@ -1,6 +1,6 @@
-# Keep a Changelog 1.1.0 — Full Reference
+# Keep a Changelog 1.1.0: Full Reference
 
-Source: https://keepachangelog.com/en/1.1.0/
+Source: https://keepachangelog.com/en/1.1.0/ (copyright 2014 Olivier Lacan, MIT license; see `keep-a-changelog-LICENSE.txt`)
 
 This is a condensed but faithful reference of the full Keep a Changelog 1.1.0 specification. Read this when SKILL.md doesn't cover a situation you've run into.
 
@@ -28,12 +28,12 @@ People do. Whether consumers or developers, the end users of software are human 
 
 ## Types of changes (the six categories)
 
-- **Added** — for new features.
-- **Changed** — for changes in existing functionality.
-- **Deprecated** — for soon-to-be removed features.
-- **Removed** — for now removed features.
-- **Fixed** — for any bug fixes.
-- **Security** — in case of vulnerabilities.
+- **Added**: for new features.
+- **Changed**: for changes in existing functionality.
+- **Deprecated**: for soon-to-be removed features.
+- **Removed**: for now removed features.
+- **Fixed**: for any bug fixes.
+- **Security**: in case of vulnerabilities.
 
 ## Reducing maintenance effort: the Unreleased section
 
@@ -46,7 +46,7 @@ Keep an `Unreleased` section at the top to track upcoming changes. This serves t
 
 ### Commit log diffs
 
-Using commit log diffs as changelogs is a bad idea — they're full of noise (merge commits, obscure titles, doc-only commits, etc.). The purpose of a commit is to document a step in the evolution of the source code; the purpose of a changelog entry is to document the noteworthy difference, often spanning multiple commits, communicated clearly to end users.
+Using commit log diffs as changelogs is a bad idea: they're full of noise (merge commits, obscure titles, doc-only commits, etc.). The purpose of a commit is to document a step in the evolution of the source code; the purpose of a changelog entry is to document the noteworthy difference, often spanning multiple commits, communicated clearly to end users.
 
 ### Ignoring deprecations
 
@@ -58,7 +58,7 @@ Always use `YYYY-MM-DD` (ISO 8601). It's unambiguous, ordered largest-to-smalles
 
 ### Inconsistent changes
 
-A changelog that only mentions *some* changes is dangerous — users may treat it as the single source of truth and miss what's missing. Either it's complete (within reason — whitespace tweaks don't count) or it's worse than nothing.
+A changelog that only mentions *some* changes is dangerous: users may treat it as the single source of truth and miss what's missing. Either it's complete (within reason; whitespace tweaks don't count) or it's worse than nothing.
 
 ## Frequently asked questions
 
@@ -72,7 +72,7 @@ Not really. GNU's changelog style guide and the GNU NEWS file guideline both exi
 
 ### What about GitHub Releases?
 
-Useful, but non-portable — they only render inside GitHub. They can be made to look like Keep a Changelog format but it takes effort. Also less discoverable than an uppercase `CHANGELOG.md` file alongside `README.md`.
+Useful, but non-portable: they only render inside GitHub. They can be made to look like Keep a Changelog format but it takes effort. Also less discoverable than an uppercase `CHANGELOG.md` file alongside `README.md`.
 
 ### Can changelogs be automatically parsed?
 
@@ -80,7 +80,7 @@ Difficult, because real-world formats vary wildly. Vandamme (a Ruby gem) parses 
 
 ### What about yanked releases?
 
-Yanked releases — versions pulled because of a serious bug or security issue — should still appear in the changelog. Format:
+Yanked releases (versions pulled because of a serious bug or security issue) should still appear in the changelog. Format:
 
 ```
 ## [0.0.5] - 2014-12-13 [YANKED]

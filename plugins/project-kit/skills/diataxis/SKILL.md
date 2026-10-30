@@ -1,6 +1,7 @@
 ---
 name: diataxis
-description: Write, place, and reorganize technical documentation using the Diátaxis framework (tutorials, how-to guides, reference, explanation), with MkDocs and Zensical site plumbing. Use this whenever documentation is being written, reviewed, restructured, or planned for a package or project: drafting a new docs page, turning a README into a docs site, deciding where a page belongs, auditing docs that feel messy or redundant, or fixing a page that teaches and explains and describes all at once. Trigger even when the user never says "Diátaxis": requests like "write docs for this module", "add a getting started page", "should this be a tutorial or a how-to", "my docs are a mess", "review this page", or "what's missing from my docs" all belong here. Not for changelogs (use project-kit:changelog-keeper) or inline code comments.
+description: >-
+  Write, place, and reorganize technical documentation using the Diátaxis framework (tutorials, how-to guides, reference, explanation), with MkDocs and Zensical site plumbing. Use this whenever documentation is being written, reviewed, restructured, or planned for a package or project: drafting a new docs page, turning a README into a docs site, deciding where a page belongs, auditing docs that feel messy or redundant, or fixing a page that teaches and explains and describes all at once. Trigger even when the user never says "Diátaxis": requests like "write docs for this module", "add a getting started page", "should this be a tutorial or a how-to", "my docs are a mess", "review this page", or "what's missing from my docs" all belong here. Not for changelogs (use project-kit:changelog-keeper) or inline code comments.
 ---
 
 # Diátaxis
@@ -65,8 +66,8 @@ improve the draft.
 3. Gather and verify the facts the page needs: signatures, flags, defaults,
    paths, measured numbers. Diátaxis cannot make a page accurate, and neither
    can whoever writes the prose.
-4. Delegate the drafting to the `project-kit:editor` agent, which owns the house voice. Give
-   it a brief, not an instruction to "write the docs":
+4. Delegate the drafting to the `project-kit:editor` agent, which owns the house
+   voice. Give it a brief, not an instruction to "write the docs":
 
    - the mode from step 1, and the reader need it serves
    - the outline, as the heading skeleton you want
@@ -79,8 +80,8 @@ improve the draft.
 
    Draft inline instead when the page is a few sentences, or when the facts are
    so entangled with the current context that briefing costs more than writing,
-   or when agents are not available in this environment.
-   In that case load the `project-kit:editorial` skill and write to the same standard.
+   or when agents are not available in this environment. In that case load the
+   `project-kit:editorial` skill and write to the same standard.
 5. Run the mode's failure checklist against the draft, honestly. Cut or move
    anything that belongs elsewhere. This is yours, not the editor's: it judges
    prose, you judge whether the page is still one mode.
@@ -119,9 +120,9 @@ first-run experience matters more than an inconsistent heading level.
 Where the next action is prose rather than placement (the page is the right mode
 but reads badly, buries its message, or opens with the task instead of the
 need), hand the file to the `project-kit:editor` agent in revise mode, or apply
-the `project-kit:editorial` skill yourself if agents are not available. Where the action is
-placement, do it yourself: the editor proposes structural moves but does not
-make them.
+the `project-kit:editorial` skill yourself if agents are not available. Where the
+action is placement, do it yourself: the editor proposes structural moves but
+does not make them.
 
 ## Common misplacements
 

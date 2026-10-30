@@ -1,22 +1,22 @@
 ---
 name: changelog-keeper
-description: Create new CHANGELOG.md files from git history, or audit and fix existing changelogs, following the Keep a Changelog 1.1.0 specification (https://keepachangelog.com). Use this skill whenever the user mentions a changelog, CHANGELOG.md, release notes derived from commits, "what changed since the last release," cutting a release, or wants to turn a git log / commit history into a human-readable changelog. Also trigger when the user asks to clean up, audit, validate, or reformat an existing changelog file, or mentions Keep a Changelog by name. Don't require the user to explicitly say "Keep a Changelog" — any request that involves producing release notes from commits, or improving an existing CHANGELOG, should pull this skill in.
+description: Create new CHANGELOG.md files from git history, or audit and fix existing changelogs, following the Keep a Changelog 1.1.0 specification (https://keepachangelog.com). Use this skill whenever the user mentions a changelog, CHANGELOG.md, release notes derived from commits, "what changed since the last release," cutting a release, or wants to turn a git log / commit history into a human-readable changelog. Also trigger when the user asks to clean up, audit, validate, or reformat an existing changelog file, or mentions Keep a Changelog by name. Don't require the user to explicitly say "Keep a Changelog"; any request that involves producing release notes from commits, or improving an existing CHANGELOG, should pull this skill in.
 ---
 
 # Changelog Keeper
 
 Produce changelogs that humans actually want to read, following the [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) convention.
 
-The format is mechanical. The hard part is judgment: filtering noise out of commits, grouping related changes, and rewriting commit-speak into entries that tell a user *what changed and why they should care*. Lean into that judgment — don't just transcribe.
+The format is mechanical. The hard part is judgment: filtering noise out of commits, grouping related changes, and rewriting commit-speak into entries that tell a user *what changed and why they should care*. Lean into that judgment; don't just transcribe.
 
 ## When to use this skill
 
 Two workflows are supported:
 
-1. **Create from scratch** — given a git log (or commit list) and optionally a version number, produce a new `CHANGELOG.md`.
-2. **Audit / fix existing** — given an existing `CHANGELOG.md`, identify violations of the Keep a Changelog spec and produce a corrected version.
+1. **Create from scratch**: given a git log (or commit list) and optionally a version number, produce a new `CHANGELOG.md`.
+2. **Audit / fix existing**: given an existing `CHANGELOG.md`, identify violations of the Keep a Changelog spec and produce a corrected version.
 
-If the user gives input that fits neither workflow cleanly (e.g., free-form notes), still apply the format and principles below — they generalize.
+If the user gives input that fits neither workflow cleanly (e.g., free-form notes), still apply the format and principles below; they generalize.
 
 ## Guiding principles (non-negotiable)
 
@@ -25,7 +25,7 @@ These come straight from the spec. Internalize them:
 - **Changelogs are for humans, not machines.** A reader should learn what changed and roughly why. If an entry doesn't help a human, drop it.
 - **Group changes by type.** Use only the six categories below.
 - **Latest version first.** Reverse chronological order, always.
-- **Every released version gets an entry.** Empty entries are worse than no entry — omit categories that have nothing in them.
+- **Every released version gets an entry.** Empty entries are worse than no entry; omit categories that have nothing in them.
 - **Dates are ISO 8601** (`YYYY-MM-DD`). Never regional formats.
 - **Keep an `Unreleased` section at the top** to stage upcoming changes.
 - **Mention SemVer adherence** in the preamble if the project follows it.
@@ -35,14 +35,14 @@ These come straight from the spec. Internalize them:
 
 Use only these. If a change doesn't fit one, you're probably describing something that doesn't belong in a changelog (e.g., internal refactors with no user-visible effect).
 
-- **Added** — new features.
-- **Changed** — changes in existing functionality.
-- **Deprecated** — soon-to-be-removed features. Always list these; never silently deprecate.
-- **Removed** — features removed in this release.
-- **Fixed** — bug fixes.
-- **Security** — vulnerabilities. Be specific about severity and whether users need to act.
+- **Added**: new features.
+- **Changed**: changes in existing functionality.
+- **Deprecated**: soon-to-be-removed features. Always list these; never silently deprecate.
+- **Removed**: features removed in this release.
+- **Fixed**: bug fixes.
+- **Security**: vulnerabilities. Be specific about severity and whether users need to act.
 
-If a change is a breaking change, call it out explicitly in the entry text (e.g., "**Breaking:** ..."). The spec doesn't define a separate "Breaking" category — breaking changes are surfaced *within* Changed/Removed entries by being explicit.
+If a change is a breaking change, call it out explicitly in the entry text (e.g., "**Breaking:** ..."). The spec doesn't define a separate "Breaking" category; breaking changes are surfaced *within* Changed/Removed entries by being explicit.
 
 ## Standard format
 
@@ -91,9 +91,9 @@ Given commits, the goal is to produce *a curated narrative*, not a transcription
 
 For each commit, decide:
 
-- **Drop it?** Merge commits, version bumps, CI/lint/formatting tweaks, dependency-only updates with no user-visible effect, internal refactors, doc-only changes (unless the docs are user-facing like a README), test-only changes — all noise. Drop them.
+- **Drop it?** Merge commits, version bumps, CI/lint/formatting tweaks, dependency-only updates with no user-visible effect, internal refactors, doc-only changes (unless the docs are user-facing like a README), test-only changes: all noise. Drop them.
 - **Keep it?** If it changes behavior, API, performance, security posture, or anything a user/consumer would notice on upgrade, keep it.
-- **Which type?** Map to one of the six categories. Be honest — if a commit says "fix" but actually adds a feature, it's Added.
+- **Which type?** Map to one of the six categories. Be honest: if a commit says "fix" but actually adds a feature, it's Added.
 
 When in doubt about whether something is user-visible, err toward dropping it. A short, sharp changelog is better than a long noisy one.
 
@@ -101,7 +101,7 @@ When in doubt about whether something is user-visible, err toward dropping it. A
 
 Multiple commits often describe one logical change. Merge them. Three commits ("start work on X", "more X", "finish X") become one entry: "Added X."
 
-Conversely, a single commit can describe multiple changes — split it if needed.
+Conversely, a single commit can describe multiple changes; split it if needed.
 
 ### Step 3: Rewrite each entry for a human reader
 
@@ -110,7 +110,7 @@ Commit messages are written for the author's future self. Changelog entries are 
 - Past tense or imperative? **Past tense** for entries describing what shipped (e.g., "Added dark mode"). The leading `### Added` already implies the verb, so entries can also start with the noun ("Dark mode for the dashboard").
 - **Drop implementation jargon.** "Refactored `UserService` to use repository pattern" → drop entirely (not user-visible) or, if the refactor *did* change behavior, describe the behavioral change.
 - **Lead with the user-facing thing**, not the file or class. "Login form now accepts emails with `+` aliases" beats "Updated `validateEmail()` regex."
-- **Mention the why if it isn't obvious.** Especially for Changed and Removed entries — a user reading the changelog wants to know if they need to act.
+- **Mention the why if it isn't obvious.** Especially for Changed and Removed entries: a user reading the changelog wants to know if they need to act.
 - **Be specific.** "Fixed a bug" is useless. "Fixed crash when importing CSVs with empty trailing rows" is useful.
 - **End entries with a period.** Consistency matters; the spec's own changelog enforces this.
 
@@ -147,11 +147,11 @@ Read the existing `CHANGELOG.md` and check it against the spec. Common violation
 | Missing `[Unreleased]` section | Add at top. |
 | Missing or stale link definitions at bottom | Regenerate compare links. |
 | Inconsistent voice / tense / punctuation | Normalize across the file. |
-| Vague entries ("various fixes", "minor changes") | Flag these — ask the user for detail; don't fabricate it. |
+| Vague entries ("various fixes", "minor changes") | Flag these; ask the user for detail; don't fabricate it. |
 
-When auditing, **never invent content**. If an entry is too vague to fix without more information, leave it and note it in your reply for the user to clarify. Fabricating changelog content is worse than leaving it imperfect — users rely on the changelog being accurate.
+When auditing, **never invent content**. If an entry is too vague to fix without more information, leave it and note it in your reply for the user to clarify. Fabricating changelog content is worse than leaving it imperfect; users rely on the changelog being accurate.
 
-Produce the corrected file plus a short summary of what you changed and why.
+Produce the corrected content plus a short summary of what would change and why, and write it to the file only after the user confirms.
 
 ## Anti-patterns to avoid
 
@@ -204,10 +204,10 @@ The Keep a Changelog spec calls these out explicitly. Avoid them:
 
 ## Output expectations
 
-- For **create** workflows: write the changelog to `CHANGELOG.md` (or whatever path the user specifies). After creating it, briefly summarize the choices you made — particularly any commits you dropped, version numbers you inferred, or repo-URL assumptions for the compare links — so the user can sanity-check.
-- For **audit** workflows: produce the corrected file and a short diff-style summary of what changed. Flag anything you couldn't fix without more information rather than guessing.
+- For **create** workflows: write the changelog to `CHANGELOG.md` (or whatever path the user specifies). If the file already exists, show the proposed changes and get confirmation before overwriting it. After creating it, briefly summarize the choices you made (particularly any commits you dropped, version numbers you inferred, or repo-URL assumptions for the compare links) so the user can sanity-check.
+- For **audit** workflows: audits are read-only by default. Present the corrected content and a short diff-style summary of what would change, and write the file only after the user confirms. Flag anything you couldn't fix without more information rather than guessing.
 - Keep your reply focused on the changelog itself; the file is the deliverable, not a long prose explanation.
 
 ## Reference
 
-For the full Keep a Changelog 1.1.0 spec — including FAQs, edge cases like yanked releases, and the rationale behind specific choices — see `references/keep-a-changelog-1.1.0.md`. Read it when you encounter a situation this SKILL.md doesn't cover.
+For the full Keep a Changelog 1.1.0 spec, including FAQs, edge cases like yanked releases, and the rationale behind specific choices, see `references/keep-a-changelog-1.1.0.md`. Read it when you encounter a situation this SKILL.md doesn't cover.

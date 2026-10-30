@@ -1,6 +1,6 @@
 {
   "name": "project-kit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Create, audit and upgrade software projects from the cookiecutter-gi templates, with spec-kit, linting and a changelog set up, and maintain their changelogs, releases, pull requests and documentation.",
   "author": {
     "name": "Samuel Letellier-Duchesne",
