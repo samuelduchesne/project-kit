@@ -1,6 +1,6 @@
 # project-kit Constitution
 
-project-kit is a Claude plugin (distributed as a marketplace from `samuelduchesne/project-kit`) that creates, audits and upgrades software projects against Samuel's standards. Its project templates live in `samuelduchesne/cookiecutter-gi`: the Python template at the repository root, the Node template under `node/`.
+project-kit is a Claude plugin (distributed as a marketplace from `samuelduchesne/project-kit`) that creates, audits, upgrades and maintains software projects against Samuel's standards. Its project templates live in `samuelduchesne/cookiecutter-gi`: the Python template at the repository root, the Node template under `node/`.
 
 ## Core Principles
 
@@ -38,8 +38,9 @@ Rationale: the plugin is installed per account and syncs to every surface, and c
 
 ## Scope and Constraints
 
-- In scope: creating projects (Python and Node), setting up spec-kit in them, enforcing lint/format standards (ruff for Python, Biome for Node, the pre-commit framework for both), keeping a Keep a Changelog 1.1.0 `CHANGELOG.md`, auditing projects for drift, and upgrading projects via cruft.
-- Out of scope: hosting or publishing projects, managing secrets, and changing GitHub settings without an explicit request.
+- In scope: creating projects (Python and Node), setting up spec-kit in them, enforcing lint/format standards (ruff for Python, Biome for Node, the pre-commit framework for both), keeping a Keep a Changelog 1.1.0 `CHANGELOG.md`, auditing projects for drift, upgrading projects via cruft, and maintenance workflows: cutting releases, splitting work into stacked pull requests, and writing and reviewing documentation.
+- Out of scope: hosting projects, managing secrets, and changing GitHub settings without an explicit request.
+- Publishing is limited to a release the user has explicitly confirmed. Package registry uploads MUST be left to the project's own CI unless the user asks otherwise.
 - Deferred to v2: automated evals for each skill.
 - The repository keeps spec-kit's development files (`.specify/`, root `.claude/skills/speckit-*`) separate from the plugin itself, which lives under `plugins/project-kit/`.
 - License: MIT.
@@ -56,4 +57,4 @@ Rationale: the plugin is installed per account and syncs to every surface, and c
 - This constitution overrides other practices in this repository. Specs and plans MUST include a check against each principle and justify any exception in writing.
 - Amendments are made by pull request, state their reason, and bump the version: MAJOR for removing or redefining a principle, MINOR for adding one, PATCH for clarifications.
 
-**Version**: 1.0.1 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-10-30
+**Version**: 1.1.0 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-10-30

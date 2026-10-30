@@ -9,7 +9,7 @@
     {
       "name": "project-kit",
       "source": "./plugins/project-kit",
-      "description": "Create, audit and upgrade projects from the cookiecutter-gi templates."
+      "description": "Create, audit and upgrade projects from the cookiecutter-gi templates, and maintain their changelogs, releases, pull requests and documentation."
     }
   ]
 }
