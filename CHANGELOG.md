@@ -7,10 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-30
+
 ### Added
 
 - Plugin marketplace definition, so the repository can be added as `samuelduchesne/project-kit` in claude.ai, the Claude desktop app and Claude Code.
-- The `project-kit` plugin (version 0.4.0) in `plugins/project-kit/`.
+- The `project-kit` plugin in `plugins/project-kit/`.
 - `new-project` creates Python and Node (TypeScript) projects from the cookiecutter-gi templates: it interviews you using the template's own questions, previews the result, generates the project with cruft so it stays linked for upgrades, sets up spec-kit v1.2.5 and makes an initial git commit.
 - `scripts/new_project.py`, the helper `new-project` runs (`check`, `options`, `create --dry-run`, with `--language python|node`).
 - `upgrade-project` brings a project up to the latest template with cruft: it previews the exact diff on a copy of the project, applies it after confirmation, and reports conflicts for Claude to resolve with you. Unlinked projects are linked first, at the template version they were most likely generated from, with answers inferred from the project and checked against the template file by file.
@@ -26,4 +28,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README with install and update steps for each surface.
 - A validation workflow that runs `claude plugin validate --strict` on the marketplace and the plugin, checks manifest consistency, installs the plugin in a clean environment, and tests the helper scripts against fixture templates.
 
-[Unreleased]: https://github.com/samuelduchesne/project-kit/commits/main
+[Unreleased]: https://github.com/samuelduchesne/project-kit/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/samuelduchesne/project-kit/releases/tag/v0.4.0
