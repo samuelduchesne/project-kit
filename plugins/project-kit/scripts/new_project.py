@@ -7,6 +7,8 @@ Used by the project-kit ``new-project`` skill. Commands:
     options  print the template's questions, read from its cookiecutter.json
     create   validate answers and create the project (``--dry-run`` to preview)
 
+``--language`` picks the template folder: the repository root for Python, ``node/`` for Node.
+
 Every command prints one JSON object on stdout; progress goes to stderr.
 Exit codes: 0 ok, 2 invalid answers, 3 environment, 4 destination, 5 step failed.
 The template's own files and checks are the source of truth: this script keeps
@@ -28,6 +30,8 @@ from pathlib import Path
 from typing import Any, NoReturn
 
 DEFAULT_TEMPLATE = "https://github.com/samuelduchesne/cookiecutter-gi"
+# Template folder inside the repository for each language ("" is the repository root).
+LANGUAGES = {"python": "", "node": "node"}
 CRUFT = ["uvx", "--from", "cruft==2.16.0", "--with", "cookiecutter==2.7.1", "cruft"]
 SPECKIT_REF = "v1.2.5"
 SPECKIT_SOURCE = f"git+https://github.com/github/spec-kit.git@{SPECKIT_REF}"
@@ -55,6 +59,7 @@ EXIT_INVALID = 2
 EXIT_ENVIRONMENT = 3
 EXIT_DESTINATION = 4
 EXIT_FAILED = 5
+EXIT_PROJECT = 6  # upgrade_project.py: the project is not in a state the command accepts
 
 STATUS = {
     EXIT_OK: "ok",
@@ -62,6 +67,7 @@ STATUS = {
     EXIT_ENVIRONMENT: "environment",
     EXIT_DESTINATION: "destination",
     EXIT_FAILED: "failed",
+    EXIT_PROJECT: "project",
 }
 
 JINJA_MARKERS = ("{{", "{%", "{#")
@@ -79,7 +85,7 @@ class Stop(Exception):
 
 
 def log(message: str) -> None:
-    print(f"[new-project] {message}", file=sys.stderr)
+    print(f"[{Path(sys.argv[0]).stem.replace('_', '-')}] {message}", file=sys.stderr)
 
 
 def finish(code: int, **payload: Any) -> NoReturn:
@@ -178,8 +184,25 @@ def default_branch(template: str) -> str:
     return "main"
 
 
-def fetch_definition(template: str, ref: str | None) -> tuple[str, str, dict[str, Any]]:
-    """Return (ref, commit, cookiecutter.json contents) for the template."""
+def read_definition(template_dir: Path, directory: str, ref: str) -> dict[str, Any]:
+    """Read ``<directory>/cookiecutter.json`` from a template checkout."""
+    path = template_dir / directory / "cookiecutter.json"
+    if directory and not path.is_file():
+        raise Stop(EXIT_ENVIRONMENT, [f"The template has no {directory}/ template at {ref!r}."])
+    try:
+        definition = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise Stop(
+            EXIT_ENVIRONMENT,
+            [f"The template has no readable {path.relative_to(template_dir)}: {exc}"],
+        ) from exc
+    if not isinstance(definition, dict):
+        raise Stop(EXIT_ENVIRONMENT, ["The template's cookiecutter.json is not a JSON object."])
+    return definition
+
+
+def fetch_definition(template: str, ref: str | None, directory: str = "") -> tuple[str, str, dict[str, Any]]:
+    """Return (ref, commit, cookiecutter.json contents) for the template folder ``directory``."""
     check_option_values(template, ref)
     template = template_arg(template)
     ref = ref or default_branch(template)
@@ -208,15 +231,7 @@ def fetch_definition(template: str, ref: str | None) -> tuple[str, str, dict[str
                 ],
             )
         commit = run(["git", "rev-parse", "HEAD"], cwd=dest).stdout.strip()
-        try:
-            definition = json.loads((dest / "cookiecutter.json").read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
-            raise Stop(
-                EXIT_ENVIRONMENT,
-                [f"The template has no readable cookiecutter.json: {exc}"],
-            ) from exc
-    if not isinstance(definition, dict):
-        raise Stop(EXIT_ENVIRONMENT, ["The template's cookiecutter.json is not a JSON object."])
+        definition = read_definition(dest, directory, ref)
     return ref, commit, definition
 
 
@@ -284,16 +299,21 @@ def project_name_problem(name: Any) -> str | None:
     return None
 
 
-def validate_answers(answers: Any, questions: list[dict[str, Any]], derived: list[str]) -> dict[str, Any]:
-    """Check answers against the template definition; return the non-default ones."""
+def validate_answers(
+    answers: Any, questions: list[dict[str, Any]], derived: list[str], *, partial: bool = False
+) -> dict[str, Any]:
+    """Check answers against the template definition; return the non-default ones.
+
+    ``partial`` answers (changes to an existing project) skip the checks for required answers.
+    """
     if not isinstance(answers, dict):
         raise Stop(EXIT_INVALID, ["The answers file must contain a JSON object."])
     by_name = {q["name"]: q for q in questions}
     problems: list[str] = []
     name_problem = project_name_problem(answers.get("project_name"))
-    if name_problem:
+    if name_problem and not (partial and "project_name" not in answers):
         problems.append(name_problem)
-    if {"author", "email"} <= by_name.keys() and not ({"author", "email"} <= answers.keys()):
+    if not partial and {"author", "email"} <= by_name.keys() and not ({"author", "email"} <= answers.keys()):
         problems.append("Answer both 'author' and 'email' (they are used for the project and its first commit).")
     for key, value in answers.items():
         if key in derived:
@@ -353,12 +373,30 @@ def cruft_failure(proc: subprocess.CompletedProcess[str]) -> Stop:
 # --- generation --------------------------------------------------------------
 
 
-def cruft_create(template: str, ref: str, output_dir: Path, answers_file: Path, config: Path) -> Stop | None:
+def directory_args(directory: str) -> list[str]:
+    return ["--directory", directory] if directory else []
+
+
+def cookiecutter_config(work: Path) -> Path:
+    """Keep cookiecutter's clone cache and replay files out of the user's home folder."""
+    config = work / "cookiecutter.yaml"
+    config.write_text(
+        f"cookiecutters_dir: {json.dumps(str(work / 'cookiecutters'))}\n"
+        f"replay_dir: {json.dumps(str(work / 'replay'))}\n",
+        encoding="utf-8",
+    )
+    return config
+
+
+def cruft_create(
+    template: str, ref: str, output_dir: Path, answers_file: Path, config: Path, directory: str = ""
+) -> Stop | None:
     proc = run(
         [
             *CRUFT,
             "create",
             template_arg(template),
+            *directory_args(directory),
             "--no-input",
             "--checkout",
             ref,
@@ -400,8 +438,8 @@ def read_cruft(project: Path) -> dict[str, Any]:
     return cruft
 
 
-def planned_steps(template: str, ref: str, author: str, email: str) -> list[str]:
-    cruft = [*CRUFT, "create", template_arg(template), "--no-input", "--checkout", ref]
+def planned_steps(template: str, ref: str, author: str, email: str, directory: str = "") -> list[str]:
+    cruft = [*CRUFT, "create", template_arg(template), *directory_args(directory), "--no-input", "--checkout", ref]
     commit = ["git", "-c", f"user.name={author}", "-c", f"user.email={email}", "-c", "commit.gpgsign=false"]
     return [
         shlex.join([*cruft, "--output-dir", "<parent>", "--extra-context-file", "<answers>"]),
@@ -422,14 +460,18 @@ def describe(project: Path, cruft: dict[str, Any], derived: list[str]) -> dict[s
     }
 
 
+def language_info(args: argparse.Namespace) -> dict[str, str]:
+    return {"language": args.language, "directory": LANGUAGES[args.language]}
+
+
 def cmd_check(args: argparse.Namespace) -> None:
     tools = check_tools()
-    ref, commit, _ = fetch_definition(args.template, args.ref)
-    finish(EXIT_OK, template=args.template, ref=ref, commit=commit, tools=tools)
+    ref, commit, _ = fetch_definition(args.template, args.ref, LANGUAGES[args.language])
+    finish(EXIT_OK, template=args.template, ref=ref, commit=commit, tools=tools, **language_info(args))
 
 
 def cmd_options(args: argparse.Namespace) -> None:
-    ref, commit, definition = fetch_definition(args.template, args.ref)
+    ref, commit, definition = fetch_definition(args.template, args.ref, LANGUAGES[args.language])
     questions, derived = parse_questions(definition)
     finish(
         EXIT_OK,
@@ -438,6 +480,7 @@ def cmd_options(args: argparse.Namespace) -> None:
         commit=commit,
         questions=questions,
         derived=derived,
+        **language_info(args),
     )
 
 
@@ -451,7 +494,8 @@ def cmd_create(args: argparse.Namespace) -> None:
         raise Stop(EXIT_INVALID, [f"Could not read the answers file {args.answers}: {exc}"]) from exc
 
     check_tools()
-    ref, commit, definition = fetch_definition(args.template, args.ref)
+    directory = LANGUAGES[args.language]
+    ref, commit, definition = fetch_definition(args.template, args.ref, directory)
     questions, derived = parse_questions(definition)
     non_default = validate_answers(answers, questions, derived)
     if args.expect_commit and not commit_matches(args.expect_commit, commit):
@@ -477,24 +521,18 @@ def cmd_create(args: argparse.Namespace) -> None:
         )
 
     author, email = git_identity(answers, questions)
-    steps = planned_steps(args.template, ref, author, email)
+    steps = planned_steps(args.template, ref, author, email, directory)
 
     with tempfile.TemporaryDirectory(prefix="project-kit-") as tmp:
         work = Path(tmp)
         answers_file = work / "answers.json"
         answers_file.write_text(json.dumps(answers), encoding="utf-8")
-        # Keep cookiecutter's clone cache and replay files out of the user's home folder.
-        config = work / "cookiecutter.yaml"
-        config.write_text(
-            f"cookiecutters_dir: {json.dumps(str(work / 'cookiecutters'))}\n"
-            f"replay_dir: {json.dumps(str(work / 'replay'))}\n",
-            encoding="utf-8",
-        )
+        config = cookiecutter_config(work)
 
         if args.dry_run:
             render = work / "render"
             render.mkdir()
-            failure = cruft_create(args.template, ref, render, answers_file, config)
+            failure = cruft_create(args.template, ref, render, answers_file, config, directory)
             if failure:
                 raise failure
             project = rendered_project(render, name)
@@ -507,6 +545,7 @@ def cmd_create(args: argparse.Namespace) -> None:
                 ref=ref,
                 non_default=non_default,
                 steps=steps,
+                **language_info(args),
                 **info,
             )
 
@@ -514,7 +553,7 @@ def cmd_create(args: argparse.Namespace) -> None:
         # place in one rename: nothing appears at the target unless generation succeeded.
         stage = Path(tempfile.mkdtemp(prefix=".project-kit-", dir=parent))
         try:
-            failure = cruft_create(args.template, ref, stage, answers_file, config)
+            failure = cruft_create(args.template, ref, stage, answers_file, config, directory)
             if failure:
                 raise failure
             staged = rendered_project(stage, name)
@@ -588,6 +627,7 @@ def cmd_create(args: argparse.Namespace) -> None:
         ref=ref,
         non_default=non_default,
         git_commit=git_commit,
+        **language_info(args),
         **describe(project, cruft, derived),
     )
 
@@ -599,6 +639,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--ref",
         default=None,
         help="branch or tag (default: the template's default branch)",
+    )
+    common.add_argument(
+        "--language",
+        choices=sorted(LANGUAGES),
+        default="python",
+        help="template to use: python (repository root) or node (node/ folder)",
     )
 
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
