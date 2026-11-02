@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-02
+
 ### Fixed
 
 - `new-project` now tells you to commit `uv.lock` before pushing a Python project, because CI fails without it.
@@ -39,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README with install and update steps for each surface.
 - A validation workflow that runs `claude plugin validate --strict` on the marketplace and the plugin, checks manifest consistency, installs the plugin in a clean environment, and tests the helper scripts against fixture templates.
 
-[Unreleased]: https://github.com/samuelduchesne/project-kit/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/samuelduchesne/project-kit/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/samuelduchesne/project-kit/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/samuelduchesne/project-kit/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/samuelduchesne/project-kit/releases/tag/v0.4.0
