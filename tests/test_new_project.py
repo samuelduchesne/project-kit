@@ -3,8 +3,8 @@
 Run with: uv run --no-project python -m unittest discover -s tests -v
 
 Needs git and uv on PATH, and network access to public GitHub and PyPI (cruft
-from PyPI, spec-kit from github.com/github/spec-kit). No access to the private
-cookiecutter-gi template is needed.
+from PyPI, spec-kit from github.com/github/spec-kit). The real
+project-kit-cookiecutter template is not needed.
 """
 
 from __future__ import annotations
@@ -106,7 +106,7 @@ def make_template(
 
 
 def make_node_template(path: Path) -> None:
-    """A second template in a sub-folder, as cookiecutter-gi keeps its Node template in node/."""
+    """A second template in a sub-folder, as project-kit-cookiecutter keeps its Node template in node/."""
     definition = {
         "author": "Your Name",
         "email": "you@example.com",
@@ -305,7 +305,7 @@ class NewProjectTests(unittest.TestCase):
         author, committer, subject = log[0].split("|")
         self.assertEqual(author, "Ada Lovelace <ada@example.com>")
         self.assertEqual(committer, "Ada Lovelace <ada@example.com>")
-        self.assertTrue(subject.startswith("Initial commit from cookiecutter-gi"))
+        self.assertTrue(subject.startswith("Initial commit from project-kit-cookiecutter"))
         self.assertEqual(git("status", "--porcelain", cwd=project).strip(), "")
         self.assertEqual(git("branch", "--show-current", cwd=project).strip(), "main")
         self.assertEqual(out["git_commit"], git("rev-parse", "HEAD", cwd=project).strip())

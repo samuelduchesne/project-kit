@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-02
+
+### Changed
+
+- `new-project`, `upgrade-project` and `audit-project` now use the public [project-kit-cookiecutter](https://github.com/samuelduchesne/project-kit-cookiecutter) template by default, so they no longer need access to a private repository.
+- Projects linked to the retired `cookiecutter-gi` template are told to remove `.cruft.json` and link again, because its commits are not in the public template. Pass `--template` to keep using another template.
+
 ## [0.4.0] - 2026-10-30
 
 ### Added
@@ -28,5 +35,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README with install and update steps for each surface.
 - A validation workflow that runs `claude plugin validate --strict` on the marketplace and the plugin, checks manifest consistency, installs the plugin in a clean environment, and tests the helper scripts against fixture templates.
 
-[Unreleased]: https://github.com/samuelduchesne/project-kit/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/samuelduchesne/project-kit/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/samuelduchesne/project-kit/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/samuelduchesne/project-kit/releases/tag/v0.4.0

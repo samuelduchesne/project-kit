@@ -12,7 +12,7 @@
 
 ### User Story 1 - Install project-kit from the repository (Priority: P1)
 
-Samuel (and later an Introba colleague) adds the project-kit repository as a plugin marketplace, in claude.ai / the Claude desktop app or in Claude Code, and installs the project-kit plugin from it without editing any files or knowing the repository layout.
+Samuel (and later a colleague) adds the project-kit repository as a plugin marketplace, in claude.ai / the Claude desktop app or in Claude Code, and installs the project-kit plugin from it without editing any files or knowing the repository layout.
 
 **Why this priority**: Every later feature depends on this install path. If people cannot add the marketplace and install the plugin, no skill can reach them.
 

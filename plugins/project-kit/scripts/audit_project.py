@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check a project against the cookiecutter-gi standards and report drift. Read-only.
+"""Check a project against the project-kit-cookiecutter standards and report drift. Read-only.
 
 Used by the project-kit ``audit-project`` skill. Checks git state, the template link and how far behind it is,
 files that differ from the template, the lint and format setup (ruff or Biome through pre-commit), the changelog
@@ -196,7 +196,7 @@ def check_template(audit: Audit, args: argparse.Namespace, state: dict[str, Any]
         audit.find(
             "not-linked",
             "warning",
-            "The project is not linked to the cookiecutter-gi template (no .cruft.json), so it can't be upgraded.",
+            "The project is not linked to the template (no .cruft.json), so it can't be upgraded.",
             "upgrade-project links it at the template version it was generated from.",
         )
         audit.skip("template", "not linked")
@@ -297,7 +297,9 @@ def audit_project(args: argparse.Namespace) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--project", default=".", help="project folder (default: current folder)")
-    parser.add_argument("--template", default=None, help="template git URL or local path (default: cookiecutter-gi)")
+    parser.add_argument(
+        "--template", default=None, help="template git URL or local path (default: project-kit-cookiecutter)"
+    )
     parser.add_argument("--ref", default=None, help="template branch (default: the recorded or default one)")
     parser.add_argument("--offline", action="store_true", help="skip the checks that need the template")
     return parser
