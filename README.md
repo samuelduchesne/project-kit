@@ -1,6 +1,6 @@
 # project-kit
 
-project-kit is a Claude plugin for setting up and maintaining software projects to a consistent standard. It drives the [cookiecutter-gi](https://github.com/samuelduchesne/cookiecutter-gi) templates (Python, and Node for TypeScript libraries) rather than writing project files itself: the templates hold the files, and project-kit handles creating projects from them, keeping projects up to date with cruft, and checking projects for drift. New projects come with [spec-kit](https://github.com/github/spec-kit), the standard linting and formatting rules (ruff for Python, Biome for Node, pre-commit for both) and a [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) `CHANGELOG.md`.
+project-kit is a Claude plugin for setting up and maintaining software projects to a consistent standard. It drives the [project-kit-cookiecutter](https://github.com/samuelduchesne/project-kit-cookiecutter) templates (Python, and Node for TypeScript libraries) rather than writing project files itself: the templates hold the files, and project-kit handles creating projects from them, keeping projects up to date with cruft, and checking projects for drift. New projects come with [spec-kit](https://github.com/github/spec-kit), the standard linting and formatting rules (ruff for Python, Biome for Node, pre-commit for both) and a [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) `CHANGELOG.md`.
 
 The plugin installs in claude.ai chat, the Claude desktop app, Cowork and Claude Code, and each skill needs the tools its workflow calls. `create-release` and `stacked-prs` need a shell with `git` and `gh`. `review-docs` needs the Workflow tool, which is documented for the Claude Code CLI, desktop app and IDE extensions.
 
@@ -8,7 +8,7 @@ The plugin installs in claude.ai chat, the Claude desktop app, Cowork and Claude
 
 | Skill | What it will do | Status |
 |-------|-----------------|--------|
-| `/project-kit:new-project` | Create a new Python or Node project from the cookiecutter-gi templates, linked to them with cruft, with spec-kit and an initial git commit | Available |
+| `/project-kit:new-project` | Create a new Python or Node project from the project-kit-cookiecutter templates, linked to them with cruft, with spec-kit and an initial git commit | Available |
 | `/project-kit:upgrade-project` | Bring an existing project up to the latest template, linking it to the template first if needed | Available |
 | `/project-kit:audit-project` | Check a project against the standards and report drift without changing anything | Available |
 | `/project-kit:changelog-keeper` | Create a `CHANGELOG.md` from git history, or audit and fix an existing one, following Keep a Changelog 1.1.0 | Available |
@@ -22,7 +22,7 @@ The plugin also includes the `editor` agent, which writes and revises prose to t
 
 ### new-project
 
-Ask Claude to create a new Python or Node project, for example "start a new Python project called flow-tools" or "create a TypeScript library called flow-kit". Python projects come from the template at the root of cookiecutter-gi, Node projects (pnpm, TypeScript, Vitest, Biome) from its `node/` folder. Claude asks for the name, description and author, shows the template's other options with their defaults, previews what will be created, and creates nothing until you confirm. The result is a folder with the template's files, a `.cruft.json` link for later upgrades, spec-kit set up for Claude, and one git commit. It does not install dependencies, create a remote repository or push. To work on a Node project afterwards you also need Node.js and pnpm (`npm install -g pnpm`).
+Ask Claude to create a new Python or Node project, for example "start a new Python project called flow-tools" or "create a TypeScript library called flow-kit". Python projects come from the template at the root of project-kit-cookiecutter, Node projects (pnpm, TypeScript, Vitest, Biome) from its `node/` folder. Claude asks for the name, description and author, shows the template's other options with their defaults, previews what will be created, and creates nothing until you confirm. The result is a folder with the template's files, a `.cruft.json` link for later upgrades, spec-kit set up for Claude, and one git commit. It does not install dependencies, create a remote repository or push. To work on a Node project afterwards you also need Node.js and pnpm (`npm install -g pnpm`).
 
 ### upgrade-project
 
@@ -39,7 +39,6 @@ Ask Claude to audit a project, for example "audit this repository against our st
 new-project, upgrade-project and audit-project need a shell on your own computer (Claude Code, or Cowork running locally) with:
 
 - git and [uv](https://docs.astral.sh/uv/)
-- read access to the private [`samuelduchesne/cookiecutter-gi`](https://github.com/samuelduchesne/cookiecutter-gi) repository through your git credentials
 - network access to GitHub and PyPI (cruft and spec-kit are run with `uvx`)
 
 ## Install
@@ -103,7 +102,7 @@ python3 .github/scripts/check_manifests.py
 uv run --no-project python -m unittest discover -s tests -v
 ```
 
-The tests run the helper scripts against small fixture templates, so they don't need access to the private template.
+The tests run the helper scripts against small fixture templates, so they don't need the real template.
 
 To try the plugin from your working copy, add the folder as a local marketplace: `claude plugin marketplace add ./`, then `claude plugin install project-kit@project-kit`. Edits load at the next session start or after `/reload-plugins`.
 

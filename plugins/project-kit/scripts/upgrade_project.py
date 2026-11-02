@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bring an existing project up to the latest cookiecutter-gi template with cruft.
+"""Bring an existing project up to the latest project-kit-cookiecutter template with cruft.
 
 Used by the project-kit ``upgrade-project`` skill. Commands:
 
@@ -55,6 +55,7 @@ from new_project import (
 
 CRUFT_FILE = ".cruft.json"
 SHA = re.compile(r"^[0-9a-f]{40}$")
+RETIRED_TEMPLATE = "https://github.com/samuelduchesne/cookiecutter-gi"
 
 
 # --- the project ---------------------------------------------------------------
@@ -153,17 +154,26 @@ def same_template(a: str, b: str) -> bool:
 
 
 def choose_template(args: argparse.Namespace, cruft: dict[str, Any] | None) -> str:
-    """The template to use: the one the project is linked to, which must be cookiecutter-gi or ``--template``."""
+    """The template to use: the linked one, which must be project-kit-cookiecutter or ``--template``."""
     if cruft is None:
         return args.template or DEFAULT_TEMPLATE
     recorded = cruft["template"]
     expected = args.template or DEFAULT_TEMPLATE
     if not same_template(recorded, expected):
+        if same_template(recorded, RETIRED_TEMPLATE):
+            raise Stop(
+                EXIT_ENVIRONMENT,
+                [
+                    f"The project is linked to the retired template {recorded}, whose commits are not in {expected}. "
+                    f"Remove {CRUFT_FILE}, commit, and link the project again."
+                ],
+            )
         raise Stop(
             EXIT_ENVIRONMENT,
             [
                 f"The project is linked to {recorded}, not {expected}. "
-                "This workflow only manages projects linked to cookiecutter-gi."
+                "This workflow only manages projects linked to project-kit-cookiecutter "
+                "or to the template named with --template."
             ],
         )
     return recorded
@@ -518,7 +528,9 @@ def cmd_update(args: argparse.Namespace) -> None:
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--project", default=".", help="project folder (default: current folder)")
-    common.add_argument("--template", default=None, help="template git URL or local path (default: cookiecutter-gi)")
+    common.add_argument(
+        "--template", default=None, help="template git URL or local path (default: project-kit-cookiecutter)"
+    )
     common.add_argument("--ref", default=None, help="template branch to follow (default: the recorded or default one)")
     common.add_argument("--language", choices=sorted(LANGUAGES), default=None, help="override language detection")
 

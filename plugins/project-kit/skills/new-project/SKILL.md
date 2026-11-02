@@ -1,11 +1,11 @@
 ---
 name: new-project
-description: "Create a new Python or Node (TypeScript) project from the cookiecutter-gi templates: interview the user for the template's answers, preview, then generate it with cruft (linked for later upgrades), set up spec-kit and make an initial git commit. Use when the user asks project-kit to start, scaffold, bootstrap or create a new repository, Python project, Node, TypeScript or JavaScript project or library."
+description: "Create a new Python or Node (TypeScript) project from the project-kit-cookiecutter templates: interview the user for the template's answers, preview, then generate it with cruft (linked for later upgrades), set up spec-kit and make an initial git commit. Use when the user asks project-kit to start, scaffold, bootstrap or create a new repository, Python project, Node, TypeScript or JavaScript project or library."
 ---
 
 # new-project
 
-Create a new Python or Node project from [cookiecutter-gi](https://github.com/samuelduchesne/cookiecutter-gi): the Python template is at the repository root, the Node (TypeScript library) template in its `node/` folder. The template provides every project file (linting, formatting, changelog, agent instructions); this workflow adds only spec-kit and an initial git commit.
+Create a new Python or Node project from [project-kit-cookiecutter](https://github.com/samuelduchesne/project-kit-cookiecutter): the Python template is at the repository root, the Node (TypeScript library) template in its `node/` folder. The template provides every project file (linting, formatting, changelog, agent instructions); this workflow adds only spec-kit and an initial git commit.
 
 All predictable steps go through one script. Run it exactly like this (call it `NP` below):
 
@@ -35,7 +35,7 @@ This workflow creates **Python** (`--language python`) and **Node** (`--language
 
 Run `NP check`. If you cannot run shell commands at all (for example in a chat without a local environment), say this workflow needs Claude Code or Cowork on the user's computer, and stop.
 
-If `status` is `environment`, tell the user each message (missing git or uv with the install hint, no access to `samuelduchesne/cookiecutter-gi`, or no Node template at that template version), and stop.
+If `status` is `environment`, tell the user each message (missing git or uv with the install hint, template unreachable, or no Node template at that template version), and stop.
 
 ### 3. Questions
 

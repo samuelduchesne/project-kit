@@ -1,12 +1,12 @@
 # project-kit Constitution
 
-project-kit is a Claude plugin (distributed as a marketplace from `samuelduchesne/project-kit`) that creates, audits, upgrades and maintains software projects against Samuel's standards. Its project templates live in `samuelduchesne/cookiecutter-gi`: the Python template at the repository root, the Node template under `node/`.
+project-kit is a Claude plugin (distributed as a marketplace from `samuelduchesne/project-kit`) that creates, audits, upgrades and maintains software projects against Samuel's standards. Its project templates live in `samuelduchesne/project-kit-cookiecutter`: the Python template at the repository root, the Node template under `node/`.
 
 ## Core Principles
 
 ### I. Templates Are the Source of Truth
 
-- Project files MUST come from the cookiecutter-gi templates, generated with cookiecutter and kept current with cruft.
+- Project files MUST come from the project-kit-cookiecutter templates, generated with cookiecutter and kept current with cruft.
 - The plugin MUST NOT write project scaffolding from its own instructions or keep a second copy of any template file.
 - When a standard changes, the change is made in the template first; the plugin only learns how to apply it.
 
@@ -57,4 +57,4 @@ Rationale: the plugin is installed per account and syncs to every surface, and c
 - This constitution overrides other practices in this repository. Specs and plans MUST include a check against each principle and justify any exception in writing.
 - Amendments are made by pull request, state their reason, and bump the version: MAJOR for removing or redefining a principle, MINOR for adding one, PATCH for clarifications.
 
-**Version**: 1.1.0 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-10-30
+**Version**: 1.1.1 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-11-02

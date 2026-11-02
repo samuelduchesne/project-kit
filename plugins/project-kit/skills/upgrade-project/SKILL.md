@@ -1,11 +1,11 @@
 ---
 name: upgrade-project
-description: "Bring an existing Python or Node project up to the latest cookiecutter-gi template with cruft: show how far behind it is, preview the exact diff, apply it after confirmation and help resolve conflicts. Projects that were never linked to the template are linked first, at the template commit they were most likely generated from, with answers inferred from the project. Use when the user asks project-kit to upgrade, update, re-sync or link a repository with its template."
+description: "Bring an existing Python or Node project up to the latest project-kit-cookiecutter template with cruft: show how far behind it is, preview the exact diff, apply it after confirmation and help resolve conflicts. Projects that were never linked to the template are linked first, at the template commit they were most likely generated from, with answers inferred from the project. Use when the user asks project-kit to upgrade, update, re-sync or link a repository with its template."
 ---
 
 # upgrade-project
 
-Update a project generated from [cookiecutter-gi](https://github.com/samuelduchesne/cookiecutter-gi) (Python template at the repository root, Node template in `node/`) to the template's latest version. cruft computes the template's changes since the project's recorded commit and applies them as a three-way merge, so local edits are kept unless they touch the same lines.
+Update a project generated from [project-kit-cookiecutter](https://github.com/samuelduchesne/project-kit-cookiecutter) (Python template at the repository root, Node template in `node/`) to the template's latest version. cruft computes the template's changes since the project's recorded commit and applies them as a three-way merge, so local edits are kept unless they touch the same lines.
 
 All predictable steps go through one script. Run it exactly like this (call it `UP` below), from any folder:
 
@@ -28,7 +28,7 @@ Each command prints one JSON object (`status` is `ok`, `invalid`, `environment`,
 
 If you cannot run shell commands, say this workflow needs Claude Code or Cowork on the user's computer, with git and uv, and stop.
 
-Run `UP status`. On `environment`, relay the messages (missing tool, template unreachable, or linked to a template other than cookiecutter-gi) and stop. On `project`, relay the messages (the folder doesn't exist, or its `.cruft.json` is not a usable link record) and stop. Otherwise tell the user: the language, whether the project is linked, and the git state. If `git.repository` is false, say upgrades need a git repository and stop. If `git.clean` is false, ask them to commit or stash first.
+Run `UP status`. On `environment`, relay the messages (missing tool, template unreachable, linked to a template other than project-kit-cookiecutter, or linked to the retired template, which needs `.cruft.json` removed and the project linked again) and stop. On `project`, relay the messages (the folder doesn't exist, or its `.cruft.json` is not a usable link record) and stop. Otherwise tell the user: the language, whether the project is linked, and the git state. If `git.repository` is false, say upgrades need a git repository and stop. If `git.clean` is false, ask them to commit or stash first.
 
 - `linked: true` → go to step 3.
 - `linked: false` → step 2.
@@ -40,7 +40,7 @@ The project must be linked before it can be updated. Explain this in a sentence,
 1. **Base commit.** `suggested_commit` is the template's last commit before the project's first commit: the version it was most likely generated from. Show its date. Offer it, or the latest commit (`latest_commit`) if the user knows the project was set up recently or rewritten by hand. With the latest commit there will be nothing to update; the link only records the answers, and the drift stays for the user to adopt by hand. If `suggested_commit` is null, the project is older than the template: use the latest commit.
 2. **Answers.** Infer an answer for every question in `questions` (they are the template's questions at `questions_at`) by reading the project: `project_name` from the folder or package name, `project_description`, author and email from `pyproject.toml` or `package.json` (or `git log`), license from `LICENSE`, layout from `src/`, Python or Node versions from `.python-version`/`.nvmrc` and CI, yes/no options from which files exist (`Dockerfile`, `mkdocs.yml`, `.devcontainer/`, `CHANGELOG.md`, publish workflows, agent files). Use the template default only when nothing in the project says otherwise, and say which answers are guesses.
 3. **Compare.** Write the answers to a new temporary file outside the project (with `mktemp`) and run `UP link --dry-run --commit <sha> --answers <file>` (add `--language` if `language` was null). `match` lists the template's files that are `same`, `differs` or `missing` in the project. Many `differs` usually mean a wrong answer: look at those files, adjust the answers and compare again. Some differences are the project's own edits; that is expected. On `invalid`, relay the messages and fix the answers.
-4. **Confirm and link.** Show the base commit, the answers and the match summary, and ask to link. Then run `UP link --commit <sha> --answers <file>`. It writes only `.cruft.json`. Offer to commit it (`git add .cruft.json && git commit -m "Link to cookiecutter-gi <sha12>"`); the update needs a clean tree, so if the user declines, stop here.
+4. **Confirm and link.** Show the base commit, the answers and the match summary, and ask to link. Then run `UP link --commit <sha> --answers <file>`. It writes only `.cruft.json`. Offer to commit it (`git add .cruft.json && git commit -m "Link to project-kit-cookiecutter <sha12>"`); the update needs a clean tree, so if the user declines, stop here.
 
 ### 3. Preview the update
 
@@ -69,6 +69,6 @@ Run `UP update --expect-commit <to_commit> [--answers <file>]` with the full 40-
 
 ### 5. Finish
 
-When no conflict is left, suggest the user review with `git diff` and run the project's checks (`make check` and `make test`). Offer to commit everything the update changed (`git add -A`, then `git commit -m "Update to cookiecutter-gi <sha12>"`); commit only if they agree. Never push.
+When no conflict is left, suggest the user review with `git diff` and run the project's checks (`make check` and `make test`). Offer to commit everything the update changed (`git add -A`, then `git commit -m "Update to project-kit-cookiecutter <sha12>"`); commit only if they agree. Never push.
 
 Delete the temporary answers files you created.

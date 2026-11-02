@@ -225,7 +225,18 @@ class UpgradeProjectTests(unittest.TestCase):
         commit_all(project, "foreign")
         code, out = self.upgrade("status", project)
         self.assertEqual(code, 3, out)
-        self.assertIn("only manages projects linked to cookiecutter-gi", out["messages"][0])
+        self.assertIn("only manages projects linked to project-kit-cookiecutter", out["messages"][0])
+
+    def test_retired_template_explains_how_to_relink(self) -> None:
+        project = self.linked_project("st-retired")
+        cruft = json.loads((project / ".cruft.json").read_text(encoding="utf-8"))
+        cruft["template"] = "https://github.com/samuelduchesne/cookiecutter-gi.git"
+        (project / ".cruft.json").write_text(json.dumps(cruft), encoding="utf-8")
+        commit_all(project, "retired")
+        code, out = self.upgrade("status", project)
+        self.assertEqual(code, 3, out)
+        self.assertIn("retired template", out["messages"][0])
+        self.assertIn("link the project again", out["messages"][0])
 
     # --- update -------------------------------------------------------------------
 

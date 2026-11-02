@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a new project from the cookiecutter-gi template.
+"""Create a new project from the project-kit-cookiecutter template.
 
 Used by the project-kit ``new-project`` skill. Commands:
 
@@ -29,7 +29,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, NoReturn
 
-DEFAULT_TEMPLATE = "https://github.com/samuelduchesne/cookiecutter-gi"
+DEFAULT_TEMPLATE = "https://github.com/samuelduchesne/project-kit-cookiecutter"
 # Template folder inside the repository for each language ("" is the repository root).
 LANGUAGES = {"python": "", "node": "node"}
 CRUFT = ["uvx", "--from", "cruft==2.16.0", "--with", "cookiecutter==2.7.1", "cruft"]
@@ -172,9 +172,8 @@ def default_branch(template: str) -> str:
             EXIT_ENVIRONMENT,
             [
                 f"Could not reach the template at {template}.",
-                "Check that you have read access to it with your git credentials "
-                "(for samuelduchesne/cookiecutter-gi, a GitHub account with access to the private repository) "
-                "and that you are online.",
+                "Check the address and that you are online. "
+                "For a private template, also check that your git credentials can read it.",
                 output_of(proc).strip()[-500:],
             ],
         )
@@ -446,7 +445,7 @@ def planned_steps(template: str, ref: str, author: str, email: str, directory: s
         shlex.join(SPECKIT),
         "git init -b main",
         "git add -A",
-        shlex.join([*commit, "commit", "--no-verify", "-m", "Initial commit from cookiecutter-gi <commit>"]),
+        shlex.join([*commit, "commit", "--no-verify", "-m", "Initial commit from project-kit-cookiecutter <commit>"]),
     ]
 
 
@@ -602,7 +601,7 @@ def cmd_create(args: argparse.Namespace) -> None:
             "--quiet",
             "--no-verify",
             "-m",
-            f"Initial commit from cookiecutter-gi {cruft['commit'][:12]}",
+            f"Initial commit from project-kit-cookiecutter {cruft['commit'][:12]}",
         ],
     ):
         proc = run(git_cmd, cwd=project)

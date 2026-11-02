@@ -1,11 +1,11 @@
 ---
 name: audit-project
-description: "Check a Python or Node project against the cookiecutter-gi standards and report drift without changing anything: template link and version, files that differ from the template, ruff or Biome through pre-commit, the Keep a Changelog CHANGELOG.md and spec-kit. Each finding names its fix. Use when the user asks project-kit to audit, check or review a repository against the standards, or asks whether a project is up to date with its template."
+description: "Check a Python or Node project against the project-kit-cookiecutter standards and report drift without changing anything: template link and version, files that differ from the template, ruff or Biome through pre-commit, the Keep a Changelog CHANGELOG.md and spec-kit. Each finding names its fix. Use when the user asks project-kit to audit, check or review a repository against the standards, or asks whether a project is up to date with its template."
 ---
 
 # audit-project
 
-Report how a project measures up to the [cookiecutter-gi](https://github.com/samuelduchesne/cookiecutter-gi) standards. The audit is read-only: it never changes the project, and fixing a finding is a separate request.
+Report how a project measures up to the [project-kit-cookiecutter](https://github.com/samuelduchesne/project-kit-cookiecutter) standards. The audit is read-only: it never changes the project, and fixing a finding is a separate request.
 
 Run the audit script exactly like this, from any folder:
 
