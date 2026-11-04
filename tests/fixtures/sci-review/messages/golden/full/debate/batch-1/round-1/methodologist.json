@@ -1,0 +1,16 @@
+{
+  "member": "methodologist",
+  "round": 1,
+  "positions": [
+    {
+      "finding_id": "F5",
+      "member": "methodologist",
+      "round": 1,
+      "stance": "accept",
+      "reason": "The scaler sees the test rows, so the defender's claim that the split is stratified does not apply.",
+      "answers": [
+        "defender:F5:0"
+      ]
+    }
+  ]
+}

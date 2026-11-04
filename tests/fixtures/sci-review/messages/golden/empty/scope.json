@@ -1,0 +1,13 @@
+{
+  "mode": "branch",
+  "base": "0123456789abcdef0123456789abcdef01234567",
+  "head": "HEAD with uncommitted and untracked changes",
+  "files": [],
+  "excluded": [
+    {
+      "path": "package-lock.json",
+      "reason": "generated (lock file)"
+    }
+  ],
+  "note": "Changes since merge-base with origin/main on branch docs (0123456789ab), including uncommitted and untracked files: 0 files, 0 lines."
+}

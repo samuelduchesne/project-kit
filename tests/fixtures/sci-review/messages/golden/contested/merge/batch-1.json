@@ -1,0 +1,44 @@
+{
+  "batch": 1,
+  "split": [],
+  "findings": [
+    {
+      "id": "F1",
+      "members": [
+        "theorist-1"
+      ],
+      "raised_by": [
+        "theorist"
+      ],
+      "batch": 1,
+      "file": "src/sci/pendulum.py",
+      "line_start": 14,
+      "line_end": 15,
+      "dimension": "physical-modelling-and-units",
+      "severity": "medium",
+      "summary": "The pendulum period uses the small-angle form without a stated amplitude limit.",
+      "trigger": null,
+      "wrong_output": null,
+      "fix": "Fix for the pendulum period uses the small-angle form without a stated amplitude limit."
+    },
+    {
+      "id": "F2",
+      "members": [
+        "experimentalist-1"
+      ],
+      "raised_by": [
+        "experimentalist"
+      ],
+      "batch": 1,
+      "file": "src/sci/pendulum.py",
+      "line_start": 30,
+      "line_end": 30,
+      "dimension": "physical-modelling-and-units",
+      "severity": "high",
+      "summary": "Drag is linear in velocity although the Reynolds number exceeds 1000.",
+      "trigger": "v = 30 m/s, d = 0.1 m",
+      "wrong_output": "drag force 2.1 N instead of 11.0 N",
+      "fix": "Fix for drag is linear in velocity although the reynolds number exceeds 1000."
+    }
+  ]
+}

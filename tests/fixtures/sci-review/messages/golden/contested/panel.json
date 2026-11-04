@@ -1,0 +1,48 @@
+{
+  "panel": {
+    "perspectives": [
+      {
+        "id": "theorist",
+        "name": "Theorist",
+        "brief_path": "roles/theorist.md",
+        "source": "sci-review",
+        "reference_paths": []
+      },
+      {
+        "id": "numerical-analyst",
+        "name": "Numerical analyst",
+        "brief_path": "roles/numerical-analyst.md",
+        "source": "sci-review",
+        "reference_paths": []
+      },
+      {
+        "id": "experimentalist",
+        "name": "Experimentalist",
+        "brief_path": "roles/experimentalist.md",
+        "source": "sci-review",
+        "reference_paths": []
+      },
+      {
+        "id": "methodologist",
+        "name": "Methodologist",
+        "brief_path": "roles/methodologist.md",
+        "source": "sci-review",
+        "reference_paths": []
+      },
+      {
+        "id": "computer-scientist",
+        "name": "Computer scientist",
+        "brief_path": "roles/computer-scientist.md",
+        "source": "sci-review",
+        "reference_paths": []
+      }
+    ],
+    "rebuttal_rounds": 2,
+    "max_batches": 1,
+    "runner": "claude-workflow",
+    "independent": true,
+    "models": []
+  },
+  "extensions": [],
+  "notices": []
+}

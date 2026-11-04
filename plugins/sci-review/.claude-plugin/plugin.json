@@ -1,0 +1,20 @@
+{
+  "name": "sci-review",
+  "version": "0.1.0",
+  "description": "Review code for scientific correctness with a panel of independent reviewers: mathematical derivations, numerical stability, physical modelling and units, statistical integrity, and algorithmic correctness. Not a style, lint or documentation review.",
+  "author": {
+    "name": "Samuel Letellier-Duchesne",
+    "url": "https://github.com/samuelduchesne"
+  },
+  "homepage": "https://github.com/samuelduchesne/project-kit",
+  "repository": "https://github.com/samuelduchesne/project-kit",
+  "license": "MIT",
+  "keywords": [
+    "scientific-computing",
+    "code-review",
+    "numerical-stability",
+    "units",
+    "statistics",
+    "correctness"
+  ]
+}

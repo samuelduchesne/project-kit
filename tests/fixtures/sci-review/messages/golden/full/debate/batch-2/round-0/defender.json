@@ -1,0 +1,22 @@
+{
+  "member": "defender",
+  "round": 0,
+  "positions": [
+    {
+      "finding_id": "F3",
+      "member": "defender",
+      "round": 0,
+      "stance": "challenge",
+      "reason": "defender challenges F3 in round 0.",
+      "answers": []
+    },
+    {
+      "finding_id": "F4",
+      "member": "defender",
+      "round": 0,
+      "stance": "accept",
+      "reason": "defender accepts F4 in round 0.",
+      "answers": []
+    }
+  ]
+}

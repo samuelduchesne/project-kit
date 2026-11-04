@@ -1,0 +1,38 @@
+{
+  "name": "sci-review",
+  "version": "0.1.0",
+  "description": "Review code for scientific correctness with a panel of independent reviewers: mathematical derivations, numerical stability, physical modelling and units, statistical integrity, and algorithmic correctness. Not a style, lint or documentation review.",
+  "author": {
+    "name": "Samuel Letellier-Duchesne",
+    "url": "https://github.com/samuelduchesne"
+  },
+  "homepage": "https://github.com/samuelduchesne/project-kit",
+  "repository": "https://github.com/samuelduchesne/project-kit",
+  "license": "MIT",
+  "keywords": [
+    "scientific-computing",
+    "code-review",
+    "numerical-stability",
+    "units",
+    "statistics",
+    "correctness"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "sci-review",
+    "shortDescription": "Panel review of code for scientific correctness",
+    "longDescription": "Run a panel of independent reviewers (theorist, numerical analyst, experimentalist, methodologist, computer scientist), a defender and a moderator over a branch, a repository or selected paths, and report evidenced findings on mathematics, numerics, physical modelling and units, statistics and algorithms, each labelled by the panel's agreement.",
+    "developerName": "Samuel Letellier-Duchesne",
+    "category": "Coding",
+    "capabilities": [
+      "Interactive"
+    ],
+    "websiteURL": "https://github.com/samuelduchesne/project-kit",
+    "defaultPrompt": [
+      "Review this branch for scientific correctness",
+      "Check the numerical stability of src/solver",
+      "Check this pipeline for data leakage"
+    ],
+    "screenshots": []
+  }
+}

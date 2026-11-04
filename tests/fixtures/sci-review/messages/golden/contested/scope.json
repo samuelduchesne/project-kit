@@ -1,0 +1,14 @@
+{
+  "mode": "paths",
+  "base": null,
+  "head": "abc",
+  "files": [
+    {
+      "path": "src/sci/pendulum.py",
+      "language": "python",
+      "line_ranges": []
+    }
+  ],
+  "excluded": [],
+  "note": "Files under src/sci: 1 files, 48 lines."
+}

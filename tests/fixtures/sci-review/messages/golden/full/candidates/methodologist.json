@@ -1,0 +1,21 @@
+{
+  "perspective": "methodologist",
+  "findings": [
+    {
+      "id": "methodologist-1",
+      "raised_by": "methodologist",
+      "file": "src/sci/train.py",
+      "line_start": 40,
+      "line_end": 41,
+      "dimension": "statistical-integrity",
+      "severity": "high",
+      "summary": "The scaler is fitted on the full data set before the split.",
+      "trigger": "x = [1, 2, 3, 4, 100]",
+      "wrong_output": "the first training row scales to -0.538 instead of -1.342",
+      "fix": "Fix for the scaler is fitted on the full data set before the split.",
+      "evidence": "Read the code and evaluated the expression at the trigger."
+    }
+  ],
+  "checked_items": [],
+  "notes": ""
+}

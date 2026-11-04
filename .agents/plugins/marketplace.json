@@ -1,0 +1,20 @@
+{
+  "name": "project-kit",
+  "interface": {
+    "displayName": "project-kit"
+  },
+  "plugins": [
+    {
+      "name": "sci-review",
+      "source": {
+        "source": "local",
+        "path": "./plugins/sci-review"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

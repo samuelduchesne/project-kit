@@ -1,5 +1,12 @@
 # project-kit
 
+This repository is a plugin marketplace, `project-kit`, that publishes two plugins:
+
+| Plugin | Purpose | Hosts | Documentation |
+|--------|---------|-------|---------------|
+| `project-kit` | Create, upgrade and audit projects from the project-kit-cookiecutter templates, and maintain their changelogs, releases, pull requests and documentation | Claude | This page |
+| `sci-review` | Review code for scientific correctness with a panel of independent reviewers | Claude and Codex | [sci-review](#sci-review) and [plugins/sci-review/README.md](plugins/sci-review/README.md) |
+
 project-kit is a Claude plugin for setting up and maintaining software projects to a consistent standard. It drives the [project-kit-cookiecutter](https://github.com/samuelduchesne/project-kit-cookiecutter) templates (Python, and Node for TypeScript libraries) rather than writing project files itself: the templates hold the files, and project-kit handles creating projects from them, keeping projects up to date with cruft, and checking projects for drift. New projects come with [spec-kit](https://github.com/github/spec-kit), the standard linting and formatting rules (ruff for Python, Biome for Node, pre-commit for both) and a [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) `CHANGELOG.md`.
 
 The plugin installs in claude.ai chat, the Claude desktop app, Cowork and Claude Code, and each skill needs the tools its workflow calls. `create-release` and `stacked-prs` need a shell with `git` and `gh`. `review-docs` needs the Workflow tool, which is documented for the Claude Code CLI, desktop app and IDE extensions.
@@ -41,6 +48,14 @@ new-project, upgrade-project and audit-project need a shell on your own computer
 - git and [uv](https://docs.astral.sh/uv/)
 - network access to GitHub and PyPI (cruft and spec-kit are run with `uvx`)
 
+## sci-review
+
+`sci-review` reviews code for scientific correctness: mathematical derivations, numerical stability, physical modelling and units, statistical integrity, and algorithmic correctness. Five perspective reviewers (theorist, numerical analyst, experimentalist, methodologist, computer scientist) review a branch, a repository or named paths independently; a defender challenges each candidate finding and a moderator merges and annotates them. A script then labels each surviving finding `consensus`, `majority` or `contested` from the recorded positions. The review is read-only and does not report style, lint or documentation issues.
+
+Ask for it in plain language, for example "review this branch for scientific correctness" or "check the numerical stability of src/solver". It runs on Claude and on Codex, with independent agents where the host supports them and in a single conversation otherwise.
+
+Other plugins can add domain perspectives through the extension contract in [plugins/sci-review/skills/scientific-review/extensions.md](plugins/sci-review/skills/scientific-review/extensions.md); the idfkit plugin ships the first one, for building energy simulation. The panel, runners, arguments and report are described in [plugins/sci-review/README.md](plugins/sci-review/README.md).
+
 ## Install
 
 project-kit is published as a plugin marketplace from this repository. Add the marketplace once, then install the `project-kit` plugin from it.
@@ -73,11 +88,41 @@ Or inside a session:
 
 To update, run `claude plugin update project-kit@project-kit`, or open `/plugin`, go to **Marketplaces**, select project-kit and choose **Update marketplace**.
 
+### sci-review in Claude
+
+`sci-review` installs from the same marketplace. In claude.ai and the Claude desktop app, select **sci-review** in the marketplace list. In Claude Code, from a shell:
+
+```bash
+claude plugin marketplace add samuelduchesne/project-kit
+claude plugin install sci-review@project-kit
+```
+
+Or inside a session:
+
+```text
+/plugin install sci-review@project-kit
+```
+
+### sci-review in Codex
+
+The repository also ships a Codex marketplace, `.agents/plugins/marketplace.json`, which lists `sci-review` only. Add it, then install `sci-review` from it:
+
+```bash
+codex plugin marketplace add samuelduchesne/project-kit
+```
+
+```bash
+codex plugin add sci-review@project-kit
+```
+
+Codex reads `.agents/plugins/marketplace.json` in preference to `.claude-plugin/marketplace.json`, so `project-kit` is not offered there.
+
 ## Development
 
 ```text
-.claude-plugin/marketplace.json   marketplace definition
-plugins/project-kit/              the plugin (the only folder that gets installed)
+.claude-plugin/marketplace.json   Claude marketplace definition (project-kit and sci-review)
+.agents/plugins/marketplace.json  Codex marketplace definition (sci-review only)
+plugins/project-kit/              the project-kit plugin
   .claude-plugin/plugin.json
   scripts/new_project.py          new-project helper (check, options, create)
   scripts/upgrade_project.py      upgrade-project helper (status, link, update)
@@ -85,6 +130,14 @@ plugins/project-kit/              the plugin (the only folder that gets installe
   skills/<name>/SKILL.md
   agents/<name>.md
   workflows/<name>.js
+plugins/sci-review/               the sci-review plugin
+  .claude-plugin/plugin.json      Claude manifest
+  .codex-plugin/plugin.json       Codex manifest
+  scripts/panel.py                deterministic panel steps (scope, merge, adjudicate, report)
+  scripts/build_workflow.py       embeds the skill files in the workflow script
+  skills/scientific-review/       skill, protocol, roles, dimensions, runners, schemas, extension contract
+  agents/scientific-auditor.md
+  workflows/scientific-review.js
 tests/                            tests for the helper scripts
 .github/                          CI workflow and the manifest consistency check
 specs/                            spec-kit feature specs, plans and tasks
@@ -98,6 +151,7 @@ Validate before opening a pull request (CI runs the same checks):
 ```bash
 claude plugin validate . --strict
 claude plugin validate ./plugins/project-kit --strict
+claude plugin validate ./plugins/sci-review --strict
 python3 .github/scripts/check_manifests.py
 uv run --no-project python -m unittest discover -s tests -v
 ```
@@ -106,7 +160,7 @@ The tests run the helper scripts against small fixture templates, so they don't 
 
 To try the plugin from your working copy, add the folder as a local marketplace: `claude plugin marketplace add ./`, then `claude plugin install project-kit@project-kit`. Edits load at the next session start or after `/reload-plugins`.
 
-Record user-facing changes under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md).
+Record user-facing changes under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md). Each plugin is released independently; `sci-review` releases are tagged `sci-review-vX.Y.Z`.
 
 ## License
 

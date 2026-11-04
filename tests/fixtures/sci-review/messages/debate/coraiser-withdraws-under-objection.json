@@ -1,0 +1,136 @@
+{
+  "description": "Two raisers; one withdraws, the other still accepts, the others challenge and the defender objection is unanswered: one accepting perspective remains, so rejected as unsupported, not withdrawn.",
+  "rebuttal_rounds": 2,
+  "perspectives": [
+    "theorist",
+    "numerical-analyst",
+    "experimentalist",
+    "methodologist",
+    "computer-scientist"
+  ],
+  "finding": {
+    "id": "F1",
+    "members": [
+      "theorist-1"
+    ],
+    "raised_by": [
+      "theorist",
+      "numerical-analyst"
+    ],
+    "batch": 1,
+    "file": "m.py",
+    "line_start": 3,
+    "line_end": 4,
+    "dimension": "mathematical-derivations",
+    "severity": "high",
+    "summary": "S",
+    "trigger": "x = 0",
+    "wrong_output": "inf",
+    "fix": "Fix for s"
+  },
+  "rounds": [
+    [
+      {
+        "finding_id": "F1",
+        "member": "theorist",
+        "round": 0,
+        "stance": "accept",
+        "reason": "theorist accepts F1 in round 0.",
+        "answers": []
+      },
+      {
+        "finding_id": "F1",
+        "member": "numerical-analyst",
+        "round": 0,
+        "stance": "challenge",
+        "reason": "numerical-analyst challenges F1 in round 0.",
+        "answers": []
+      },
+      {
+        "finding_id": "F1",
+        "member": "experimentalist",
+        "round": 0,
+        "stance": "challenge",
+        "reason": "experimentalist challenges F1 in round 0.",
+        "answers": []
+      },
+      {
+        "finding_id": "F1",
+        "member": "methodologist",
+        "round": 0,
+        "stance": "challenge",
+        "reason": "methodologist challenges F1 in round 0.",
+        "answers": []
+      },
+      {
+        "finding_id": "F1",
+        "member": "computer-scientist",
+        "round": 0,
+        "stance": "challenge",
+        "reason": "computer-scientist challenges F1 in round 0.",
+        "answers": []
+      },
+      {
+        "finding_id": "F1",
+        "member": "defender",
+        "round": 0,
+        "stance": "challenge",
+        "reason": "defender challenges F1 in round 0.",
+        "answers": []
+      }
+    ],
+    [
+      {
+        "finding_id": "F1",
+        "member": "theorist",
+        "round": 1,
+        "stance": "accept",
+        "reason": "theorist accepts F1 in round 0.",
+        "answers": []
+      },
+      {
+        "finding_id": "F1",
+        "member": "numerical-analyst",
+        "round": 1,
+        "stance": "withdraw",
+        "reason": "numerical-analyst withdraws F1 in round 1.",
+        "answers": []
+      },
+      {
+        "finding_id": "F1",
+        "member": "experimentalist",
+        "round": 1,
+        "stance": "challenge",
+        "reason": "experimentalist challenges F1 in round 0.",
+        "answers": []
+      },
+      {
+        "finding_id": "F1",
+        "member": "methodologist",
+        "round": 1,
+        "stance": "challenge",
+        "reason": "methodologist challenges F1 in round 0.",
+        "answers": []
+      },
+      {
+        "finding_id": "F1",
+        "member": "computer-scientist",
+        "round": 1,
+        "stance": "challenge",
+        "reason": "computer-scientist challenges F1 in round 0.",
+        "answers": []
+      },
+      {
+        "finding_id": "F1",
+        "member": "defender",
+        "round": 1,
+        "stance": "challenge",
+        "reason": "defender challenges F1 in round 0.",
+        "answers": []
+      }
+    ]
+  ],
+  "expected_label": null,
+  "expected_rejection": "unsupported",
+  "expected_stop_round": 1
+}

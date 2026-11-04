@@ -1,6 +1,16 @@
+<!--
+Sync Impact Report
+- Version change: 1.1.1 -> 1.2.0 (MINOR)
+- Modified sections: preamble (repository scope widened to a marketplace of plugins); Scope and Constraints (plugin location, sci-review scope, applicability of Principle I); Development Workflow (per-plugin release tags)
+- Added sections: none
+- Removed sections: none
+- Templates requiring updates: none (plan, spec and tasks templates reference principles by name only)
+- Follow-up TODOs: none
+-->
+
 # project-kit Constitution
 
-project-kit is a Claude plugin (distributed as a marketplace from `samuelduchesne/project-kit`) that creates, audits, upgrades and maintains software projects against Samuel's standards. Its project templates live in `samuelduchesne/project-kit-cookiecutter`: the Python template at the repository root, the Node template under `node/`.
+project-kit is a marketplace of plugins, distributed from `samuelduchesne/project-kit`. Its first plugin, `project-kit`, creates, audits, upgrades and maintains software projects against Samuel's standards. Its second plugin, `sci-review`, reviews code for scientific correctness. The `project-kit` plugin's project templates live in `samuelduchesne/project-kit-cookiecutter`: the Python template at the repository root, the Node template under `node/`.
 
 ## Core Principles
 
@@ -42,7 +52,9 @@ Rationale: the plugin is installed per account and syncs to every surface, and c
 - Out of scope: hosting projects, managing secrets, and changing GitHub settings without an explicit request.
 - Publishing is limited to a release the user has explicitly confirmed. Package registry uploads MUST be left to the project's own CI unless the user asks otherwise.
 - Deferred to v2: automated evals for each skill.
-- The repository keeps spec-kit's development files (`.specify/`, root `.claude/skills/speckit-*`) separate from the plugin itself, which lives under `plugins/project-kit/`.
+- The repository keeps spec-kit's development files (`.specify/`, root `.claude/skills/speckit-*`) separate from the plugins. Each plugin lives under `plugins/<name>/`.
+- `sci-review` scope: scientific-correctness review of code (mathematical derivations, numerical stability, physical modelling and units, statistical integrity, algorithmic correctness), read-only on the reviewed project, on Claude and on Codex. Style, lint and documentation reviews are out of its scope.
+- Principle I does not apply to `sci-review`, which generates no project files. Principles II to IV apply to it in full.
 - License: MIT.
 
 ## Development Workflow
@@ -50,11 +62,12 @@ Rationale: the plugin is installed per account and syncs to every surface, and c
 - Each feature goes through spec-kit: specify, plan, tasks, implement. One spec per feature.
 - Every user-facing change gets an entry under `## [Unreleased]` in this repository's `CHANGELOG.md`.
 - `claude plugin validate` MUST pass on the marketplace and the plugin before merging.
-- Releases are tagged with semantic versions, and the plugin's `version` in `plugin.json` matches the tag.
+- Releases are tagged with semantic versions, and the plugin's `version` in `plugin.json` matches the tag. `project-kit` releases use tags `vX.Y.Z`; every other plugin uses a per-plugin tag `<name>-vX.Y.Z` (for example `sci-review-vX.Y.Z`).
+- `claude plugin validate` MUST pass on every plugin listed in the marketplace.
 
 ## Governance
 
 - This constitution overrides other practices in this repository. Specs and plans MUST include a check against each principle and justify any exception in writing.
 - Amendments are made by pull request, state their reason, and bump the version: MAJOR for removing or redefining a principle, MINOR for adding one, PATCH for clarifications.
 
-**Version**: 1.1.1 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-11-02
+**Version**: 1.2.0 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-11-04

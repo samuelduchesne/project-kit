@@ -1,0 +1,82 @@
+{
+  "batch": 1,
+  "split": [],
+  "findings": [
+    {
+      "id": "F1",
+      "members": [
+        "experimentalist-1"
+      ],
+      "raised_by": [
+        "experimentalist"
+      ],
+      "batch": 1,
+      "file": "src/sci/heat.ts",
+      "line_start": 5,
+      "line_end": 5,
+      "dimension": "physical-modelling-and-units",
+      "severity": "medium",
+      "summary": "Temperature in Celsius is used where kelvin is required.",
+      "trigger": "T = 25 (Celsius) passed to radiate()",
+      "wrong_output": "418.7 W/m2 expected, 9.07e-3 W/m2 returned",
+      "fix": "Fix for temperature in celsius is used where kelvin is required."
+    },
+    {
+      "id": "F2",
+      "members": [
+        "theorist-2"
+      ],
+      "raised_by": [
+        "theorist"
+      ],
+      "batch": 1,
+      "file": "src/sci/heat.ts",
+      "line_start": 30,
+      "line_end": 31,
+      "dimension": "mathematical-derivations",
+      "severity": "medium",
+      "summary": "The small-angle approximation is used without a stated range.",
+      "trigger": null,
+      "wrong_output": null,
+      "fix": "Fix for the small-angle approximation is used without a stated range."
+    },
+    {
+      "id": "F5",
+      "members": [
+        "methodologist-1"
+      ],
+      "raised_by": [
+        "methodologist"
+      ],
+      "batch": 1,
+      "file": "src/sci/train.py",
+      "line_start": 40,
+      "line_end": 41,
+      "dimension": "statistical-integrity",
+      "severity": "high",
+      "summary": "The scaler is fitted on the full data set before the split.",
+      "trigger": "x = [1, 2, 3, 4, 100]",
+      "wrong_output": "the first training row scales to -0.538 instead of -1.342",
+      "fix": "Fix for the scaler is fitted on the full data set before the split."
+    },
+    {
+      "id": "F6",
+      "members": [
+        "numerical-analyst-2"
+      ],
+      "raised_by": [
+        "numerical-analyst"
+      ],
+      "batch": 1,
+      "file": "src/sci/train.py",
+      "line_start": 70,
+      "line_end": 70,
+      "dimension": "numerical-stability",
+      "severity": "low",
+      "summary": "Float equality is used against the sentinel -9999.0.",
+      "trigger": "a reading of -9999.0",
+      "wrong_output": "the reading is treated as missing",
+      "fix": "Fix for float equality is used against the sentinel -9999.0."
+    }
+  ]
+}

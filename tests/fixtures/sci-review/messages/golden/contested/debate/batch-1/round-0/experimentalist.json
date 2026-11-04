@@ -1,0 +1,22 @@
+{
+  "member": "experimentalist",
+  "round": 0,
+  "positions": [
+    {
+      "finding_id": "F1",
+      "member": "experimentalist",
+      "round": 0,
+      "stance": "accept",
+      "reason": "experimentalist accepts F1 in round 0.",
+      "answers": []
+    },
+    {
+      "finding_id": "F2",
+      "member": "experimentalist",
+      "round": 0,
+      "stance": "accept",
+      "reason": "experimentalist accepts F2 in round 0.",
+      "answers": []
+    }
+  ]
+}

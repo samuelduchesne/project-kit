@@ -1,0 +1,46 @@
+{
+  "schema": "candidate-findings",
+  "message": {
+    "perspective": "theorist",
+    "findings": [
+      {
+        "id": "theorist-2",
+        "raised_by": "theorist",
+        "file": "src/sci/heat.ts",
+        "line_start": 12,
+        "line_end": 10,
+        "dimension": "mathematical-derivations",
+        "severity": "medium",
+        "summary": "The small-angle approximation is used without a stated range.",
+        "trigger": null,
+        "wrong_output": null,
+        "fix": "Fix for the small-angle approximation is used without a stated range.",
+        "evidence": "Read the code and evaluated the expression at the trigger."
+      },
+      {
+        "id": "theorist-1",
+        "raised_by": "theorist",
+        "file": "src/sci/model.py",
+        "line_start": 10,
+        "line_end": 12,
+        "dimension": "mathematical-derivations",
+        "severity": "high",
+        "summary": "The trapezoidal sum counts the last interior point twice.",
+        "trigger": "y = [1, 1, 1], h = 1",
+        "wrong_output": "3 instead of 2",
+        "fix": "Fix for the trapezoidal sum counts the last interior point twice.",
+        "evidence": "Read the code and evaluated the expression at the trigger."
+      }
+    ],
+    "checked_items": [
+      {
+        "file": "src/sci/model.py",
+        "line_start": 20,
+        "line_end": 28,
+        "dimension": "mathematical-derivations",
+        "note": "The Simpson weights match the standard form."
+      }
+    ],
+    "notes": ""
+  }
+}

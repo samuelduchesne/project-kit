@@ -1,0 +1,21 @@
+{
+  "batch": 2,
+  "notes": [
+    {
+      "finding_id": "F3",
+      "argument_for": "The failure scenario of F3 holds at the stated trigger.",
+      "argument_against": "The experimentalist argued that callers never pass fewer than four points.",
+      "deciding_assumption": null,
+      "rejection_reason": "Not rejected.",
+      "no_trigger_reason": null
+    },
+    {
+      "finding_id": "F4",
+      "argument_for": "The failure scenario of F4 holds at the stated trigger.",
+      "argument_against": "The reference year is fixed for the lifetime of the process in production.",
+      "deciding_assumption": "Whether the reference year can change while the process runs.",
+      "rejection_reason": "Not rejected.",
+      "no_trigger_reason": null
+    }
+  ]
+}

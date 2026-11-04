@@ -1,0 +1,21 @@
+{
+  "batch": 1,
+  "notes": [
+    {
+      "finding_id": "F1",
+      "argument_for": "The failure scenario of F1 holds at the stated trigger.",
+      "argument_against": "Amplitudes in the examples stay below 10 degrees, where the error is under 0.2%.",
+      "deciding_assumption": "The maximum amplitude callers pass.",
+      "rejection_reason": "Not rejected.",
+      "no_trigger_reason": "No member could establish an amplitude that callers actually use."
+    },
+    {
+      "finding_id": "F2",
+      "argument_for": "The failure scenario of F2 holds at the stated trigger.",
+      "argument_against": "The model is documented as a laminar approximation.",
+      "deciding_assumption": "Whether speeds above 1 m/s are in the intended regime.",
+      "rejection_reason": "Not rejected.",
+      "no_trigger_reason": null
+    }
+  ]
+}

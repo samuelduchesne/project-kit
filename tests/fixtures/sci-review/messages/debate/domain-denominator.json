@@ -1,0 +1,94 @@
+{
+  "description": "With six perspectives, three accepts are not more than half: contested.",
+  "rebuttal_rounds": 2,
+  "perspectives": [
+    "theorist",
+    "numerical-analyst",
+    "experimentalist",
+    "methodologist",
+    "computer-scientist",
+    "building-physicist"
+  ],
+  "finding": {
+    "id": "F1",
+    "members": [
+      "theorist-1"
+    ],
+    "raised_by": [
+      "theorist"
+    ],
+    "batch": 1,
+    "file": "m.py",
+    "line_start": 3,
+    "line_end": 4,
+    "dimension": "mathematical-derivations",
+    "severity": "high",
+    "summary": "S",
+    "trigger": "x = 0",
+    "wrong_output": "inf",
+    "fix": "Fix for s"
+  },
+  "rounds": [
+    [
+      {
+        "finding_id": "F1",
+        "member": "theorist",
+        "round": 0,
+        "stance": "accept",
+        "reason": "theorist accepts F1 in round 0.",
+        "answers": []
+      },
+      {
+        "finding_id": "F1",
+        "member": "numerical-analyst",
+        "round": 0,
+        "stance": "accept",
+        "reason": "numerical-analyst accepts F1 in round 0.",
+        "answers": []
+      },
+      {
+        "finding_id": "F1",
+        "member": "experimentalist",
+        "round": 0,
+        "stance": "accept",
+        "reason": "experimentalist accepts F1 in round 0.",
+        "answers": []
+      },
+      {
+        "finding_id": "F1",
+        "member": "methodologist",
+        "round": 0,
+        "stance": "challenge",
+        "reason": "methodologist challenges F1 in round 0.",
+        "answers": []
+      },
+      {
+        "finding_id": "F1",
+        "member": "computer-scientist",
+        "round": 0,
+        "stance": "challenge",
+        "reason": "computer-scientist challenges F1 in round 0.",
+        "answers": []
+      },
+      {
+        "finding_id": "F1",
+        "member": "building-physicist",
+        "round": 0,
+        "stance": "challenge",
+        "reason": "building-physicist challenges F1 in round 0.",
+        "answers": []
+      },
+      {
+        "finding_id": "F1",
+        "member": "defender",
+        "round": 0,
+        "stance": "accept",
+        "reason": "defender accepts F1 in round 0.",
+        "answers": []
+      }
+    ]
+  ],
+  "expected_label": "contested",
+  "expected_rejection": null,
+  "expected_stop_round": 0
+}

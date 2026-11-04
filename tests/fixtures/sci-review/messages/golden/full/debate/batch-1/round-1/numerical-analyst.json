@@ -1,0 +1,16 @@
+{
+  "member": "numerical-analyst",
+  "round": 1,
+  "positions": [
+    {
+      "finding_id": "F6",
+      "member": "numerical-analyst",
+      "round": 1,
+      "stance": "withdraw",
+      "reason": "-9999.0 is a documented sentinel; exact equality is correct here.",
+      "answers": [
+        "defender:F6:0"
+      ]
+    }
+  ]
+}

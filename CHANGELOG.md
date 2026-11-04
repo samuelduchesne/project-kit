@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The `sci-review` plugin 0.1.0 in `plugins/sci-review/`, which reviews code for scientific correctness with a panel of independent reviewers. It covers five dimensions (mathematical derivations, numerical stability, physical modelling and units, statistical integrity, algorithmic correctness) and reports only findings with a concrete failure scenario. The review never modifies the reviewed project.
+- The `scientific-review` skill, `scientific-auditor` agent and `scientific-review` workflow of `sci-review`. Five default perspectives (theorist, numerical analyst, experimentalist, methodologist, computer scientist), a defender and a moderator review independently, debate each finding, and receive an agreement label of consensus, majority or contested that `scripts/panel.py` computes from the recorded positions. `scripts/build_workflow.py` regenerates the workflow script, which embeds the protocol, role briefs, dimension documents and message schemas.
+- Four `sci-review` runners, selected by host: the Claude Workflow, Codex subagents, Claude agents, and a sequential runner for claude.ai chat, Cowork and Codex without agents.
+- The `sci-review` domain-extension contract, version 1 (`plugins/sci-review/skills/scientific-review/extensions.md`), through which any plugin can add a domain perspective. The first extension, `building-energy-sci-review-extension`, ships in the idfkit plugin and is released separately.
+- A Codex manifest for `sci-review` and a Codex marketplace at `.agents/plugins/marketplace.json`, so that `sci-review` installs in Codex from `samuelduchesne/project-kit`.
+
+### Changed
+
+- The project constitution is amended to version 1.2.0: the repository is a marketplace of plugins, each under `plugins/<name>/`; it defines the scope of `sci-review`, states that Principle I does not apply to it, and introduces per-plugin release tags of the form `sci-review-vX.Y.Z`.
+- The validation workflow now also validates `sci-review`, checks that its workflow script is up to date with its skill files, and installs it in a clean environment.
+
 ## [0.5.1] - 2026-11-02
 
 ### Fixed

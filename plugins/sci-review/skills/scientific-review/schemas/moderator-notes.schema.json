@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sci-review/schemas/moderator-notes.schema.json",
+  "title": "Moderator notes",
+  "description": "Moderator notes for every merged finding of one batch, written after its debate and without knowledge of labels. Semantic check in panel.py: no_trigger_reason is non-null when the merged finding's trigger or wrong_output is null.",
+  "type": "object",
+  "required": [
+    "batch",
+    "notes"
+  ],
+  "properties": {
+    "batch": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ModeratorNote"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "ModeratorNote": {
+      "type": "object",
+      "required": [
+        "finding_id",
+        "argument_for",
+        "argument_against",
+        "deciding_assumption",
+        "rejection_reason",
+        "no_trigger_reason"
+      ],
+      "properties": {
+        "finding_id": {
+          "type": "string",
+          "pattern": "^F[0-9]+$"
+        },
+        "argument_for": {
+          "type": "string",
+          "minLength": 1
+        },
+        "argument_against": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deciding_assumption": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rejection_reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "no_trigger_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

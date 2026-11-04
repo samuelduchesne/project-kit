@@ -1,0 +1,583 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sci-review/schemas/report.schema.json",
+  "title": "Review report",
+  "description": "ReviewReport produced by panel.py report. Semantic checks in panel.py: no_trigger_reason is present and non-null when trigger or wrong_output is null; line_end >= line_start; findings are ordered by label then severity.",
+  "type": "object",
+  "required": [
+    "scope",
+    "panel",
+    "extensions",
+    "findings",
+    "rejected",
+    "checked_items",
+    "unreviewed",
+    "notices"
+  ],
+  "properties": {
+    "scope": {
+      "$ref": "#/$defs/ReviewScope"
+    },
+    "panel": {
+      "$ref": "#/$defs/Panel"
+    },
+    "extensions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Extension"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Finding"
+      }
+    },
+    "rejected": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RejectedFinding"
+      }
+    },
+    "checked_items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CheckedItem"
+      }
+    },
+    "unreviewed": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Exclusion"
+      }
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "Dimension": {
+      "type": "string",
+      "enum": [
+        "mathematical-derivations",
+        "numerical-stability",
+        "physical-modelling-and-units",
+        "statistical-integrity",
+        "algorithmic-correctness"
+      ]
+    },
+    "Severity": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "Exclusion": {
+      "type": "object",
+      "required": [
+        "path",
+        "reason"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ScopedFile": {
+      "type": "object",
+      "required": [
+        "path",
+        "language",
+        "line_ranges"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "language": {
+          "type": "string",
+          "enum": [
+            "python",
+            "typescript",
+            "other"
+          ]
+        },
+        "line_ranges": {
+          "description": "List of [start, end] pairs. Empty in repository mode, meaning the whole file.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "minItems": 2
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ReviewScope": {
+      "type": "object",
+      "required": [
+        "mode",
+        "base",
+        "head",
+        "files",
+        "excluded",
+        "note"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "branch",
+            "explicit",
+            "repository",
+            "paths"
+          ]
+        },
+        "base": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "head": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ScopedFile"
+          }
+        },
+        "excluded": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Exclusion"
+          }
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Perspective": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "brief_path",
+        "source",
+        "reference_paths"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "brief_path": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "reference_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ModelAssignment": {
+      "type": "object",
+      "required": [
+        "role",
+        "model"
+      ],
+      "properties": {
+        "role": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Panel": {
+      "type": "object",
+      "required": [
+        "perspectives",
+        "rebuttal_rounds",
+        "max_batches",
+        "runner",
+        "independent"
+      ],
+      "properties": {
+        "perspectives": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Perspective"
+          }
+        },
+        "rebuttal_rounds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_batches": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "runner": {
+          "type": "string",
+          "enum": [
+            "claude-workflow",
+            "codex-subagents",
+            "claude-agents",
+            "sequential"
+          ]
+        },
+        "independent": {
+          "type": "boolean"
+        },
+        "models": {
+          "description": "Optional model per role id (Workflow runner only), as a list of role and model pairs.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ModelAssignment"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "Extension": {
+      "type": "object",
+      "required": [
+        "id",
+        "plugin",
+        "contract_version",
+        "perspective_id",
+        "status",
+        "status_reason",
+        "adds"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "contract_version": {
+          "type": "integer"
+        },
+        "perspective_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "selected",
+            "not-applicable",
+            "failed",
+            "recommended"
+          ]
+        },
+        "status_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "adds": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "not-applicable",
+                  "failed",
+                  "recommended"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "status_reason"
+            ],
+            "properties": {
+              "status_reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Finding": {
+      "description": "A reported finding. argument_for, argument_against and deciding_assumption are required for contested findings. trigger and wrong_output are non-null for consensus and majority findings.",
+      "type": "object",
+      "required": [
+        "id",
+        "members",
+        "raised_by",
+        "batch",
+        "file",
+        "line_start",
+        "line_end",
+        "dimension",
+        "severity",
+        "summary",
+        "trigger",
+        "wrong_output",
+        "fix",
+        "label"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^F[0-9]+$"
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+-[0-9]+$"
+          },
+          "minItems": 1
+        },
+        "raised_by": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "batch": {
+          "type": "integer"
+        },
+        "file": {
+          "type": "string"
+        },
+        "line_start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "line_end": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dimension": {
+          "$ref": "#/$defs/Dimension"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "trigger": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "wrong_output": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fix": {
+          "type": "string"
+        },
+        "severity_reason": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string",
+          "enum": [
+            "consensus",
+            "majority",
+            "contested"
+          ]
+        },
+        "argument_for": {
+          "type": "string"
+        },
+        "argument_against": {
+          "type": "string"
+        },
+        "deciding_assumption": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "no_trigger_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "label": {
+                "const": "contested"
+              }
+            },
+            "required": [
+              "label"
+            ]
+          },
+          "then": {
+            "required": [
+              "argument_for",
+              "argument_against",
+              "deciding_assumption"
+            ],
+            "properties": {
+              "argument_for": {
+                "type": "string",
+                "minLength": 1
+              },
+              "argument_against": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "label": {
+                "enum": [
+                  "consensus",
+                  "majority"
+                ]
+              }
+            },
+            "required": [
+              "label"
+            ]
+          },
+          "then": {
+            "required": [
+              "trigger",
+              "wrong_output"
+            ],
+            "properties": {
+              "trigger": {
+                "type": "string"
+              },
+              "wrong_output": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "RejectedFinding": {
+      "type": "object",
+      "required": [
+        "finding_id",
+        "summary",
+        "raised_by",
+        "reason"
+      ],
+      "properties": {
+        "finding_id": {
+          "type": "string",
+          "pattern": "^F[0-9]+$"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "raised_by": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CheckedItem": {
+      "description": "A location examined and found correct for one dimension. line_end >= line_start is checked by panel.py.",
+      "type": "object",
+      "required": [
+        "file",
+        "line_start",
+        "line_end",
+        "dimension",
+        "note"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "line_start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "line_end": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dimension": {
+          "$ref": "#/$defs/Dimension"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

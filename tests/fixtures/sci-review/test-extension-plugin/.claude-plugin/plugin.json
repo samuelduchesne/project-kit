@@ -1,0 +1,17 @@
+{
+  "name": "acoustics-test-extension",
+  "version": "0.0.1",
+  "description": "Test fixture: a sci-review domain extension for acoustics, written only against the domain-extension contract, version 1.",
+  "author": {
+    "name": "Samuel Letellier-Duchesne",
+    "url": "https://github.com/samuelduchesne"
+  },
+  "homepage": "https://github.com/samuelduchesne/project-kit",
+  "repository": "https://github.com/samuelduchesne/project-kit",
+  "license": "MIT",
+  "keywords": [
+    "sci-review-extension",
+    "acoustics",
+    "test-fixture"
+  ]
+}

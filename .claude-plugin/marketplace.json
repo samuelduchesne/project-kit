@@ -1,6 +1,6 @@
 {
   "name": "project-kit",
-  "description": "Samuel Letellier-Duchesne's plugins for setting up and maintaining software projects.",
+  "description": "Samuel Letellier-Duchesne's plugins for setting up and maintaining software projects, and for reviewing scientific code for correctness.",
   "owner": {
     "name": "Samuel Letellier-Duchesne",
     "url": "https://github.com/samuelduchesne"
@@ -10,6 +10,11 @@
       "name": "project-kit",
       "source": "./plugins/project-kit",
       "description": "Create, audit and upgrade projects from the project-kit-cookiecutter templates, and maintain their changelogs, releases, pull requests and documentation."
+    },
+    {
+      "name": "sci-review",
+      "source": "./plugins/sci-review",
+      "description": "Review code for scientific correctness with a panel of independent reviewers: mathematics, numerical stability, physical modelling and units, statistics, and algorithms."
     }
   ]
 }
