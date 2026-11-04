@@ -212,6 +212,20 @@ Run of 2026-11-04, after refreshing the installed plugin with `codex plugin add 
 
 The Workflow script was regenerated with `build_workflow.py`, since it embeds the briefs. The building-energy extension brief in the idfkit plugin copies the default rules and received the same two additions. Tests `TestPanelMemberRules` check all three; 89 tests pass on Python 3.14.
 
+### 4.10 Scope modes (T056, quickstart.md section 5)
+
+Runs of 2026-11-04 on a fresh build of the fixture with the sequential runner, five default perspectives, defender and moderator, 2 rebuttal rounds and at most 2 batches. The reviewed code is byte-identical to that of the branch run of section 4.5, so the perspectives made the same judgements; each review recorded additional checked items for the lines that only its scope contains (for example `trapezoid` in `quadrature.py` and the README in repository mode). Every message passed `panel.py validate` at the first attempt, and both batches of each review stopped after round 1.
+
+| Check | Verdict | Result |
+|-------|---------|--------|
+| Repository mode (`scope --mode repository`) | Pass | Scope "All files of the repository: 20 files, 498 lines". 14 findings (12 consensus, 1 majority, 1 contested): 8 in `src/sci/core` and 6 in `src/sci/analysis`, so defects in both seeded directories are reported. `score.py`: 11 of 11 seeded defects, every dimension and both languages at 100%; 0 look-alikes; 14 of 14 findings complete |
+| Path mode (`scope --mode paths --path src/sci/core`) | Pass | Scope "Files under src/sci/core: 8 files, 237 lines". 8 findings (7 consensus, 1 contested), all under `src/sci/core`; no finding outside the path. The Not reviewed section lists the 12 other files with the reason "outside paths" (US3 scenarios 2 and 3). The methodologist raised no finding and recorded no checked item, since its judgements in the branch run all concern `src/sci/analysis` |
+| No base | Pass | Recorded in section 2: a clone with no branch and no remote exits 3 with the message that asks for a baseline or another mode |
+| Budget of 200 lines (`--budget 200`) | Pass | 6 files and 196 lines reviewed; the Not reviewed section lists the 6 remaining files with the reason "over budget". `report` requires `adjudicate` to have run, as in `SKILL.md` section 7 |
+| Project unchanged (SC-004) | Pass | Tree checksum and `git status --porcelain --ignored` unchanged after both reviews |
+
+The path-mode review reused the merge rulings, positions and notes of the branch run, with finding identifiers renumbered to the path-mode clusters by file. It therefore shows that the scope, merge, adjudication and report steps handle path mode; it adds no independent evidence of detection beyond section 4.5.
+
 ## 5. Not yet run
 
 These need live agent runs and, for the Workflow runner, the user's opt-in to a multi-agent workflow. The Codex CLI works since section 3. They remain open in tasks.md.
@@ -219,5 +233,4 @@ These need live agent runs and, for the Workflow runner, the user's opt-in to a 
 | Task | Run |
 |------|-----|
 | T047 | A Workflow re-run after the corrections of sections 4.3 and 4.4; SC-010 needs a construct redesigned once more (section 4.6, observation 1) |
-| T056 | The review parts of quickstart.md section 5 (defects reported in both directories in repository mode; none outside the path in path mode) |
 | T071 | quickstart.md section 6 with live reviews (SC-012 first half, SC-013 contribution of findings) |

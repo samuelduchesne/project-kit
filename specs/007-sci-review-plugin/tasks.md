@@ -147,7 +147,7 @@ description: "Task list for the sci-review plugin"
 - [X] T053 [US3] Implement `--mode repository` and `--mode paths` in the `scope` subcommand of `plugins/sci-review/scripts/panel.py`, sharing the exclusion and budget logic of T033
 - [X] T054 [US3] Add the repository and path modes, the "name the unreviewed parts" rule (US3 scenario 3), and the non-git edge case (offer repository or path mode) to `SKILL_DIR/SKILL.md`
 - [X] T055 [US3] Add a filter in `plugins/sci-review/scripts/panel.py` `report` that drops and records as a notice any finding whose file lies outside the scope, so that path mode never reports outside the named paths (US3 scenario 2)
-- [ ] T056 [US3] Run quickstart.md section 5 and record the results in `specs/007-sci-review-plugin/validation.md`
+- [X] T056 [US3] Run quickstart.md section 5 and record the results in `specs/007-sci-review-plugin/validation.md`
 
 **Checkpoint**: User Stories 1 to 3 pass independently.
 
