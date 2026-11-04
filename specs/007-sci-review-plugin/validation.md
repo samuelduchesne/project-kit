@@ -251,10 +251,28 @@ Limits of these runs as evidence:
 1. **Single reviewer.** As in sections 4.5 and 4.10, one reviewer performed every role. The runs show that selection, panel membership, domain checks, the debate, adjudication and the report handle extensions end to end; detection by independent agents with a domain perspective remains untested.
 2. **Prior knowledge.** The reviewer did not read the idfkit manifest before scoring, but section 2 of this record names the IDF defect and its look-alike, and the extension's reference document contains worked examples of the hour-ending and leap-year defects, by design. The acoustics project was written by the reviewer, so steps 3 and 4 test the contract mechanics only.
 
-## 5. Not yet run
+### 4.12 Claude Workflow re-run after the corrections (T047)
 
-These need live agent runs and, for the Workflow runner, the user's opt-in to a multi-agent workflow. The Codex CLI works since section 3. They remain open in tasks.md.
+Run of 2026-11-04 on a fresh build of the fixture (branch `feature`, 12 files, 413 lines) with `panel.py panel --runner claude-workflow`: five default perspectives, defender and moderator, 2 rebuttal rounds, at most 2 batches, no extension. The plugin is not installed in the session that ran the review, so the named workflow `sci-review:scientific-review` was not listed; the same script, `plugins/sci-review/workflows/scientific-review.js`, was launched by its path with the arguments of `runners/claude-workflow.md` section 4 and nothing else. The Workflow ran 33 agents in 187 s (2.89 million subagent tokens), none failed. `panel.py ingest` accepted all 33 messages and dropped none. Both batches stopped after round 1; every position of every member accepted every finding. `adjudicate` gave 12 consensus findings.
 
-| Task | Run |
-|------|-----|
-| T047 | A Workflow re-run after the corrections of sections 4.3 and 4.4; SC-010 needs a construct redesigned once more (section 4.6, observation 1) |
+| Criterion | Verdict | Result |
+|-----------|---------|--------|
+| SC-001 recall | Pass | 11 of 11; every dimension and both languages at 100% |
+| SC-002 look-alikes | Pass | 0 of 4 reported |
+| SC-003 FR-014 fields | Pass | 12 of 12 findings complete |
+| SC-004 project unchanged | Pass | Tree checksum of tracked files unchanged; `git status --porcelain --ignored` empty before and after, so the bytecode-cache correction of section 4.3 holds |
+| SC-008 panel against best single perspective | Fail | Each perspective alone detected 11 of 11; the fixture does not discriminate |
+| SC-009 false positives rejected in debate | Pass | No independent-round false positive |
+| SC-010 contested construct | Fail | Not reported; no perspective raised `geometry.py:14-30`, as in sections 4.6 and 4.8 |
+| SC-011 independence | Pass | None of the five independent-round transcripts contains a finding identifier of another perspective; the round-0 transcripts contain them only through the merge ruling's `members`, as protocol.md section 3 allows. Every prompt states the project root (section 4.3, item 1) |
+
+**Effect of the corrections of section 4.9.** The computer scientist reported the `Math.min(...readings)` argument limit of `normalise.ts:16-17` as a finding of its own, separate from the zero-span NaN, so it was merged as F2001 and debated, where in section 4.6 the same defect was kept only in a fix field. The theorist stated the `permutation_pvalue` trigger as other code drawing from the global generator between `random.seed` and the call, the form rule 4 now requires, and no member challenged it.
+
+## 5. Open criteria
+
+Every task of tasks.md is complete. Two success criteria remain unmet on every multi-agent runner, for reasons of the fixture rather than the plugin:
+
+| Criterion | Reason | Remedy |
+|-----------|--------|--------|
+| SC-008 | Each default perspective alone detects all 11 seeded defects (sections 4.1, 4.6, 4.8, 4.12), so the panel cannot exceed the best single perspective | A fixture with defects that only one perspective's expertise exposes |
+| SC-010 | Independent reviewers judge the contested construct correct within its documented regime, or raise it and withdraw it (sections 4.6, 4.8, 4.12) | A construct whose documented regime leaves the inputs in scope genuinely open (section 4.6, observation 1); the user chose to keep the construct as it is |
