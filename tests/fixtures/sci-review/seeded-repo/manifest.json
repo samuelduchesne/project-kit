@@ -144,6 +144,75 @@
       "trigger": "emissionFactor(\"QC\") with reference year 2020, then setReferenceYear(2030) and emissionFactor(\"QC\") again",
       "wrong_output": "the second call returns the 2020 factor 1.7 instead of the 2030 factor 1.2",
       "reproduce": "checks/ts-cache-key-year.mjs"
+    },
+    {
+      "id": "py-richardson-order",
+      "file": "src/sci/core/extrapolate.py",
+      "line": 21,
+      "anchor": "return (4.0 * fine - coarse) / 3.0",
+      "dimension": "mathematical-derivations",
+      "language": "python",
+      "severity": "high",
+      "exposed_by": "theorist",
+      "description": "Richardson extrapolation uses the weights (4 * fine - coarse) / 3, which cancel an O(h**2) error term, but the forward difference has an O(h) leading error, so the weights must be 2 * fine - coarse; the refinement leaves a first-order error.",
+      "trigger": "refined_derivative(math.exp, 0.0, 0.1)",
+      "wrong_output": "1.01666 instead of a value within O(h**2) of 1 (2 * fine - coarse gives 0.99913)",
+      "reproduce": "checks/py-richardson-order.py"
+    },
+    {
+      "id": "py-lag-correction-sign",
+      "file": "src/sci/core/sensor.py",
+      "line": 31,
+      "anchor": "corrected.append(readings[i] - tau * rate)",
+      "dimension": "physical-modelling-and-units",
+      "language": "python",
+      "severity": "high",
+      "exposed_by": "experimentalist",
+      "description": "From tau * dT_s/dt = T_air - T_s, the air temperature is T_s + tau * dT_s/dt; the code subtracts the lag term, doubling the lag instead of removing it.",
+      "trigger": "lag_corrected([t - 5.0 for t in range(20)], dt=1.0, tau=5.0)[10], readings of a 1 K/s ramp",
+      "wrong_output": "0.0 instead of the air temperature 10.0",
+      "reproduce": "checks/py-lag-correction-sign.py"
+    },
+    {
+      "id": "ts-log1p-cancellation",
+      "file": "src/sci/core/rates.ts",
+      "line": 15,
+      "anchor": "return Math.log(1 + fractionalChange) / dt;",
+      "dimension": "numerical-stability",
+      "language": "typescript",
+      "severity": "medium",
+      "exposed_by": "numerical-analyst",
+      "description": "Math.log(1 + x) loses the low-order digits of x when 1 + x is rounded, so the documented use on slowly drifting quantities (|x| near 1e-12 and below) gives large relative errors; Math.log1p(x) is exact to rounding.",
+      "trigger": "continuousRate(1e-16, 1)",
+      "wrong_output": "0 instead of 1e-16; continuousRate(1e-12, 1) is off by 8.9e-5 relative"
+    },
+    {
+      "id": "py-small-sample-z",
+      "file": "src/sci/analysis/intervals.py",
+      "line": 22,
+      "anchor": "half = Z_95 * statistics.stdev",
+      "dimension": "statistical-integrity",
+      "language": "python",
+      "severity": "high",
+      "exposed_by": "methodologist",
+      "description": "The interval uses the normal quantile 1.96 with the sample standard deviation for three to ten replicates of unknown variance; Student's t with n - 1 degrees of freedom is required, so the nominal 95% interval covers far less (about 86% for n = 4).",
+      "trigger": "mean_interval([9.8, 10.4, 10.1, 9.7])",
+      "wrong_output": "half-width 0.310 instead of 0.503 (t = 3.182 with 3 degrees of freedom)",
+      "reproduce": "checks/py-small-sample-z.py"
+    },
+    {
+      "id": "ts-percentile-lexicographic-sort",
+      "file": "src/sci/analysis/rank.ts",
+      "line": 14,
+      "anchor": "const sorted = [...readings].sort();",
+      "dimension": "algorithmic-correctness",
+      "language": "typescript",
+      "severity": "high",
+      "exposed_by": "computer-scientist",
+      "description": "Array.prototype.sort without a comparator sorts by string conversion, so numeric readings are ordered lexicographically and the interpolated percentile is wrong whenever the readings have different numbers of digits.",
+      "trigger": "percentile([10, 9, 100, 2], 50)",
+      "wrong_output": "51 instead of 9.5",
+      "reproduce": "checks/ts-percentile-lexicographic-sort.mjs"
     }
   ],
   "lookalikes": [
@@ -192,15 +261,15 @@
     {
       "id": "ct-py-small-angle-elevation",
       "file": "src/sci/core/geometry.py",
-      "line": 14,
+      "line": 15,
       "anchor": "def elevation_gain",
-      "line_end": 30,
+      "line_end": 31,
       "anchor_end": "length * incline for",
       "dimension": "mathematical-derivations",
       "language": "python",
-      "description": "Elevation change is computed as length * incline, the documented first-order form of length * sin(incline). The module states a clinometer accuracy of 0.5 degrees (0.0087 rad) and paths along graded roads and footpaths. The truncation error, about length * incline^3 / 6, stays below the instrument error length * cos(incline) * 0.0087 for inclines under about 0.366 rad (21 degrees), where the relative error is 2.3%; above that the approximation dominates the error (4.7% at 30 degrees). The module neither bounds nor checks the inclines, and footpaths can exceed 21 degrees.",
+      "description": "Elevation change is computed as length * incline, the documented first-order form of length * sin(incline). The module states a clinometer accuracy of 0.5 degrees (0.0087 rad) and paths along graded roads and along unsurfaced hill paths between them. The truncation error, about length * incline^3 / 6, stays below the instrument error length * cos(incline) * 0.0087 for inclines under about 0.366 rad (21 degrees), where the relative error is 2.3%; above that the approximation dominates the error (4.7% at 30 degrees). The module neither bounds nor checks the inclines, and unsurfaced hill paths can exceed 21 degrees, while graded roads cannot.",
       "expected_label": "contested",
-      "expected_deciding_assumption": "Whether the surveyed inclines stay below about 0.366 rad (21 degrees), where the first-order truncation error is smaller than the stated clinometer error of 0.5 degrees; the module does not bound the inclines, and footpaths may be steeper."
+      "expected_deciding_assumption": "Whether the surveyed inclines stay below about 0.366 rad (21 degrees), where the first-order truncation error is smaller than the stated clinometer error of 0.5 degrees; graded roads do, but the module also covers unsurfaced hill paths and does not bound the inclines."
     }
   ]
 }

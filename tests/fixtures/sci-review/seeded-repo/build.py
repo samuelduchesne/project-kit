@@ -314,9 +314,10 @@ def diffuse(u0: Sequence[float], alpha: float, dx: float, dt: float, steps: int)
 GEOMETRY = '''\
 """Geometry of surveyed paths.
 
-The paths are surveyed along graded roads and footpaths. Segment inclines are
-read from a hand-held clinometer with a stated accuracy of 0.5 degrees
-(0.0087 rad), and the elevation model works to first order in the incline.
+The paths are surveyed along graded roads and along unsurfaced hill paths
+between them. Segment inclines are read from a hand-held clinometer with a
+stated accuracy of 0.5 degrees (0.0087 rad), and the elevation model works to
+first order in the incline.
 """
 
 from __future__ import annotations
@@ -710,6 +711,153 @@ export function operationalEmissions(region: string, energyKWh: number): number 
 """
 
 # ---------------------------------------------------------------------------
+# src/sci/core/extrapolate.py (defect exposed by the theorist: error order)
+# ---------------------------------------------------------------------------
+
+EXTRAPOLATE = """\
+\"\"\"Richardson extrapolation of finite-difference derivatives.\"\"\"
+
+from __future__ import annotations
+
+from collections.abc import Callable
+
+
+def forward_difference(f: Callable[[float], float], x: float, h: float) -> float:
+    \"\"\"One-sided difference quotient (f(x + h) - f(x)) / h.\"\"\"
+    return (f(x + h) - f(x)) / h
+
+
+def refined_derivative(f: Callable[[float], float], x: float, h: float) -> float:
+    \"\"\"Return the derivative of f at x, refined by one Richardson step.
+
+    The forward difference is evaluated at steps h and h / 2, and the two
+    estimates are combined to cancel the leading term of the truncation error.
+    \"\"\"
+    coarse = forward_difference(f, x, h)
+    fine = forward_difference(f, x, h / 2)
+    return (4.0 * fine - coarse) / 3.0
+"""
+
+# ---------------------------------------------------------------------------
+# src/sci/core/sensor.py (defect exposed by the experimentalist: lag correction)
+# ---------------------------------------------------------------------------
+
+SENSOR = """\
+\"\"\"Dynamic correction of first-order temperature sensors.\"\"\"
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+
+
+def lag_corrected(readings: Sequence[float], dt: float, tau: float) -> list[float]:
+    \"\"\"Recover the air temperature from a first-order sensor's readings.
+
+    A sensor with time constant tau obeys tau * dT_s/dt = T_air - T_s. The
+    rate of change is estimated by central differences, and by one-sided
+    differences at the two ends.
+
+    Args:
+        readings: Sensor temperatures at a fixed interval, in degC.
+        dt: Sampling interval, in s.
+        tau: Time constant of the sensor, in s.
+    \"\"\"
+    n = len(readings)
+    if n < 2:
+        raise ValueError("at least two readings are needed")
+    corrected = []
+    for i in range(n):
+        if i == 0:
+            rate = (readings[1] - readings[0]) / dt
+        elif i == n - 1:
+            rate = (readings[-1] - readings[-2]) / dt
+        else:
+            rate = (readings[i + 1] - readings[i - 1]) / (2 * dt)
+        corrected.append(readings[i] - tau * rate)
+    return corrected
+"""
+
+# ---------------------------------------------------------------------------
+# src/sci/core/rates.ts (defect exposed by the numerical analyst: log(1 + x))
+# ---------------------------------------------------------------------------
+
+RATES_TS = """\
+/**
+ * Continuous growth rates of slowly drifting quantities, such as clock offsets
+ * and oscillator frequencies.
+ */
+
+/**
+ * Continuous rate r such that exp(r * dt) = 1 + fractionalChange.
+ *
+ * @param fractionalChange - (next - previous) / previous, dimensionless
+ * @param dt - interval, in s
+ * @returns the rate, in 1/s
+ */
+export function continuousRate(fractionalChange: number, dt: number): number {
+  if (dt <= 0) throw new RangeError("dt must be positive");
+  return Math.log(1 + fractionalChange) / dt;
+}
+"""
+
+# ---------------------------------------------------------------------------
+# src/sci/analysis/intervals.py (defect exposed by the methodologist: z for small n)
+# ---------------------------------------------------------------------------
+
+INTERVALS = """\
+\"\"\"Confidence intervals for replicate measurements.\"\"\"
+
+from __future__ import annotations
+
+import math
+import statistics
+from collections.abc import Sequence
+
+Z_95 = 1.959963984540054
+
+
+def mean_interval(replicates: Sequence[float]) -> tuple[float, float]:
+    \"\"\"Return the two-sided 95% confidence interval of the mean.
+
+    Replicates are independent measurements of one quantity with normally
+    distributed error of unknown variance; a run has three to ten replicates.
+    \"\"\"
+    n = len(replicates)
+    if n < 2:
+        raise ValueError("at least two replicates are needed")
+    mean = statistics.fmean(replicates)
+    half = Z_95 * statistics.stdev(replicates) / math.sqrt(n)
+    return mean - half, mean + half
+"""
+
+# ---------------------------------------------------------------------------
+# src/sci/analysis/rank.ts (defect exposed by the computer scientist: default sort)
+# ---------------------------------------------------------------------------
+
+RANK_TS = """\
+/**
+ * Empirical percentiles of sensor readings.
+ */
+
+/**
+ * The p-th percentile by linear interpolation between closest ranks.
+ *
+ * @param readings - readings, in any order; left unchanged
+ * @param p - percentile, from 0 to 100
+ */
+export function percentile(readings: readonly number[], p: number): number {
+  if (readings.length === 0) throw new RangeError("no readings");
+  if (p < 0 || p > 100) throw new RangeError("p must lie in [0, 100]");
+  const sorted = [...readings].sort();
+  const position = (p / 100) * (sorted.length - 1);
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+  const weight = position - lower;
+  return sorted[lower] * (1 - weight) + sorted[upper] * weight;
+}
+"""
+
+# ---------------------------------------------------------------------------
 # Branch contents
 # ---------------------------------------------------------------------------
 
@@ -742,6 +890,9 @@ FEATURE_COMMITS: tuple[Commit, ...] = (
             SourceFile("src/sci/core/differentiate.ts", DIFFERENTIATE_TS),
             SourceFile("src/sci/core/normalise.ts", NORMALISE_TS_FEATURE),
             SourceFile("src/sci/core/surfaceHeat.ts", SURFACE_HEAT_TS),
+            SourceFile("src/sci/core/extrapolate.py", EXTRAPOLATE),
+            SourceFile("src/sci/core/sensor.py", SENSOR),
+            SourceFile("src/sci/core/rates.ts", RATES_TS),
         ),
     ),
     Commit(
@@ -752,6 +903,8 @@ FEATURE_COMMITS: tuple[Commit, ...] = (
             SourceFile("src/sci/analysis/resample.py", RESAMPLE),
             SourceFile("src/sci/analysis/summary.ts", SUMMARY_TS),
             SourceFile("src/sci/analysis/emissions.ts", EMISSIONS_TS),
+            SourceFile("src/sci/analysis/intervals.py", INTERVALS),
+            SourceFile("src/sci/analysis/rank.ts", RANK_TS),
         ),
     ),
 )

@@ -136,11 +136,13 @@ DebateRecord + ModeratorNote --adjudicate--> Finding(label) | RejectedFinding
 Adjudication rules (applied in order, by `panel.py adjudicate`). "Stance" means each member's latest position (Position, above). "Perspectives" means every perspective reviewer in the panel, default and domain, the raiser included, and never the defender.
 
 1. Raiser withdrew: rejected.
-2. Only the raiser accepts and a defender objection is unanswered: rejected.
+2. Fewer than two perspectives accept and a defender objection is unanswered: rejected. A co-raiser that still accepts counts as a second perspective.
 3. `trigger` or `wrong_output` is null: at most `contested`.
 4. No perspective's stance is `challenge` or `withdraw`, at least two perspectives accept, and every defender objection is answered: `consensus`.
 5. More than half of the perspectives have stance `accept`: `majority`.
 6. Otherwise: `contested`.
+
+Findings with several raisers: every raiser is a perspective like any other for rules 2, 4 and 5, with its own latest stance (accept when it recorded none). Rule 1 rejects only when every raiser withdraws. One raiser's withdrawal neither rejects the finding nor removes that raiser from `raised_by`; it is a dissenting stance, which prevents consensus and does not count towards a majority.
 
 Semantic checks that a JSON Schema cannot express, run by `panel.py` (exit code 1 on failure): `line_end >= line_start`; `withdraw` only from a member listed in the finding's `raised_by` (checked by `adjudicate`); a lowered merged severity has `severity_reason`; a moderator note has a non-null `no_trigger_reason` when its merged finding's `trigger` or `wrong_output` is null (checked by `adjudicate`).
 

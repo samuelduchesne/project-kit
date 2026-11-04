@@ -88,6 +88,22 @@ class TestDrift(unittest.TestCase):
         self.assertEqual(text.count("// BEGIN PURE"), 1)
         self.assertTrue(text.rstrip().endswith("return run"))
 
+    def test_missing_markers_exit_3(self) -> None:
+        plugin = self.copy_plugin()
+        workflow = plugin / "workflows" / "scientific-review.js"
+        workflow.write_text(workflow.read_text(encoding="utf-8").replace("// BEGIN GENERATED", ""), encoding="utf-8")
+        result = run([sys.executable, str(plugin / "scripts" / "build_workflow.py"), "--check"])
+        self.assertEqual(result.returncode, 3)
+        self.assertIn("error:", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_missing_role_briefs_exit_3(self) -> None:
+        plugin = self.copy_plugin()
+        shutil.rmtree(plugin / "skills" / "scientific-review" / "roles")
+        result = run([sys.executable, str(plugin / "scripts" / "build_workflow.py")])
+        self.assertEqual(result.returncode, 3)
+        self.assertIn("error: no role briefs or schemas", result.stderr)
+
     def test_every_source_is_embedded(self) -> None:
         generated = section(WORKFLOW.read_text(encoding="utf-8"), "// BEGIN GENERATED", "// END GENERATED")
         skill = PLUGIN / "skills" / "scientific-review"
@@ -300,6 +316,12 @@ class TestSimulation(unittest.TestCase):
         self.assertTrue(prompts)
         for label, prompt in prompts.items():
             self.assertIn(f"The reviewed project is {root}.", prompt, label)
+
+    def test_single_perspective_is_raised_to_two(self) -> None:
+        output = self.simulate({"perspectives": ["theorist"]})
+        independent = sorted(c.split(":")[1] for c in output["calls"] if c.startswith("independent:"))
+        self.assertEqual(independent, ["numerical-analyst", "theorist"])
+        self.assertTrue(output["result"]["candidates"])
 
     def test_empty_scope_returns_without_agents(self) -> None:
         output = self.simulate({"scope": {"files": [], "note": "nothing"}})

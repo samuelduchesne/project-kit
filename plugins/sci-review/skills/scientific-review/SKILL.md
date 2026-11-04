@@ -73,7 +73,7 @@ Run these in the orchestrating conversation.
    - repository: `$PANEL scope --run $RUN --mode repository`;
    - paths: `$PANEL scope --run $RUN --mode paths --path P [--path Q ...]`.
 
-   Add `--budget N` when the user asks for a smaller or larger review (default 6,000 lines). Files over the budget, generated and vendored files (unless named in paths mode), and, in paths mode, files outside the named paths are recorded as not reviewed, with the reason.
+   Add `--budget N` when the user asks for a smaller or larger review (default 6,000 lines). Files over the budget, generated and vendored files (unless named in paths mode), and, in paths mode, files outside the named paths are recorded as not reviewed, with the reason. Generated and vendored files are lock files, files under `node_modules/`, `dist/`, `vendor/`, `third_party/` or `__pycache__/`, and files marked `linguist-generated` or `linguist-vendored`; a file named in paths mode is reviewed even when it is one of them. Notebooks (`.ipynb`) are in scope and reviewed as Python code.
 3. **Empty scope.** When `scope.json` lists no files, skip to the closing steps: run `$PANEL panel --run $RUN --runner <runner>`, then `$PANEL report --run $RUN`, which renders the Scope, Panel and Extensions sections and the sentence "No reviewable scientific code changed in this scope." (US1 scenario 4). Do not launch any reviewer.
 4. **Extension discovery** (contracts/extension.md section 4, [extensions.md](extensions.md)):
    1. In the host's skill listing, find every skill whose name ends in `sci-review-extension`.

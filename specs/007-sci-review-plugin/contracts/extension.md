@@ -25,7 +25,7 @@ Any installed plugin, for Claude or for Codex, can extend `sci-review` by shippi
     "globs": ["**/*.idf", "**/*.epJSON", "**/*.epw", "**/eplusout*"],
     "file_types": [".idf", ".epjson", ".epw"],
     "languages": ["python", "typescript"],
-    "import_patterns": ["^\\s*(from|import)\\s+idfkit\\b", "from\\s+['\"]@?idfkit"]
+    "import_patterns": ["^\\s*(from\|import)\\s+idfkit\\b", "from\\s+['\"]@?idfkit"]
   },
   "checks": "checks.md"
 }
@@ -48,3 +48,11 @@ The orchestrator finds extensions in the host's skill listing, loads each to obt
 | id | plugin | install | adds |
 |----|--------|---------|------|
 | `building-energy-sci-review-extension` | idfkit | `idfkit@idfkit` | building physicist; heat transfer, psychrometrics, energy balances, IP and SI conversions, simulation time conventions; idfkit model checks |
+
+The registry in `scripts/panel.py` (`KNOWN_EXTENSIONS`) copies the applicability declaration of each known extension, so that a scope matching the installed extension also yields `recommended` when it is not installed:
+
+| id | globs | file_types | languages | import_patterns |
+|----|-------|------------|-----------|-----------------|
+| `building-energy-sci-review-extension` | `**/*.idf`, `**/*.epJSON`, `**/*.epw`, `**/eplusout*` | `.idf`, `.epjson`, `.epw` | python, typescript | `^\s*(from\|import)\s+idfkit\b`, `from\s+['"]@?idfkit` |
+
+When the extension's own `extension.json` changes its `applies_to`, the registry entry is updated in the same release.

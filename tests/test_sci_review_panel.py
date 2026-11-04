@@ -623,6 +623,35 @@ class TestIngest(RunDirMixin):
         self.assertFalse(list(run_dir.rglob("escape.json")))
         self.assertFalse((run_dir / "candidates").exists())
 
+    def test_ingest_drops_unsafe_debate_batch(self) -> None:
+        run_dir = self.init_run()
+        source = run_dir / "workflow-result.json"
+        data = self.panel_run()
+        bad = [dict(data["debate"][0], batch=value) for value in ("../../x", 0, -1, True, "1")]
+        data["debate"] = bad + data["debate"][1:]
+        source.write_text(json.dumps(data), encoding="utf-8")
+        result = run_panel("ingest", "--run", str(run_dir), str(source))
+        self.assertEqual(result.code, 0, result.err)
+        self.assertFalse((run_dir.parent / "x").exists(), "ingest wrote outside the run directory")
+        self.assertFalse([p for p in run_dir.rglob("*") if p.name in ("x", "batch-..")])
+        self.assertFalse((run_dir / "debate" / "batch-0").exists())
+        self.assertFalse((run_dir / "debate" / "batch-True").exists())
+        notices = json.loads((run_dir / "notices.json").read_text(encoding="utf-8"))
+        unsafe = [n for n in notices if "path components are unsafe" in n]
+        self.assertEqual(len(unsafe), len(bad), notices)
+        self.assertIn("'../../x'", unsafe[0])
+        self.assertTrue((run_dir / "debate" / "batch-1" / "round-0").is_dir())
+
+    def test_safe_component(self) -> None:
+        self.assertEqual(panel._safe_component("theorist", "id"), "theorist")
+        for value in ("../x", "Theorist", "a/b", "", 3):
+            self.assertIsNone(panel._safe_component(value, "id"), value)
+        self.assertEqual(panel._safe_component(2, "batch"), "2")
+        for value in (0, -1, True, "2", 1.0, None):
+            self.assertIsNone(panel._safe_component(value, "batch"), value)
+        self.assertEqual(panel._safe_component(0, "round"), "0")
+        self.assertIsNone(panel._safe_component(-1, "round"))
+
     def test_ingest_dry_run(self) -> None:
         run_dir = self.init_run()
         source = run_dir / "workflow-result.json"
@@ -862,6 +891,14 @@ class TestExtensions(RunDirMixin):
         self.assertIn("building-energy-sci-review-extension", self.statuses(scope, []))
         scope = self.scope_with({"plain.py": "x = 1\n"})
         self.assertNotIn("building-energy-sci-review-extension", self.statuses(scope, []))
+
+    def test_known_extension_recommended_by_glob(self) -> None:
+        scope = self.scope_with({"out/eplusout.csv": "Date/Time,Value\n"})
+        recommended = self.statuses(scope, [])["building-energy-sci-review-extension"]
+        self.assertEqual(recommended.status, "recommended")
+        self.assertIn("out/eplusout.csv", recommended.status_reason)
+        known = panel.KNOWN_EXTENSIONS[0]
+        self.assertEqual(set(known.globs), {"**/*.idf", "**/*.epJSON", "**/*.epw", "**/eplusout*"})
 
     def test_failed_known_extension_is_not_recommended(self) -> None:
         scope = self.scope_with({"sim.py": "from idfkit import load\n"})

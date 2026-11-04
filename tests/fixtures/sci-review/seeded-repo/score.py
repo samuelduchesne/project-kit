@@ -1,7 +1,8 @@
 """Score a sci-review report against the seeded fixture manifest.
 
 Usage:
-    python3 score.py REPORT [--manifest PATH] [--run DIR] [--verify-fixes REPO]
+    python3 score.py REPORT [--manifest PATH] [--run DIR] [--domain-perspective ID]
+                     [--verify-fixes REPO]
     python3 score.py --verify-fixes REPO
 
 A finding matches a manifest entry when its file equals the entry's file and the
@@ -23,6 +24,14 @@ Criteria printed, each with a final PASS, FAIL or SKIP line:
             positives
     SC-009  (--run) at least half of the independent-round false positives are
             rejected in debate or never reported
+    SC-012  (--domain-perspective ID) at least 90% of the seeded defects are
+            reported by a finding that lists ID among its raisers
+
+Two manifest formats are read: this fixture's (``defects``, ``lookalikes`` and
+``contested`` lists) and the entry format of the idfkit building-energy fixture
+(one ``entries`` list whose items carry ``kind``: ``defect``, ``lookalike`` or
+``contested``). Entries without a ``dimension`` are left out of the
+per-dimension recall; their languages are reported as found.
 
 ``--verify-fixes REPO`` runs every reproduction check listed in the manifest
 against REPO and prints which pass (SC-007). Python checks run with this
@@ -51,6 +60,7 @@ EXIT_OK = 0
 EXIT_UNREADABLE = 2
 RECALL_THRESHOLD = 0.90
 SC009_THRESHOLD = 0.5
+SC012_THRESHOLD = 0.90
 CHECK_TIMEOUT_S = 120
 DIMENSIONS = (
     "mathematical-derivations",
@@ -77,9 +87,9 @@ class Defect:
     id: str
     file: str
     line: int
-    dimension: str
+    dimension: str | None
     language: str
-    severity: str
+    severity: str | None
     description: str
     reproduce: str | None
 
@@ -190,26 +200,37 @@ def normalise_path(path: str) -> str:
     return path
 
 
+def defect_entry(raw: dict[str, Any]) -> Defect:
+    return Defect(
+        id=raw["id"],
+        file=normalise_path(raw["file"]),
+        line=int(raw["line"]),
+        dimension=raw.get("dimension"),
+        language=raw["language"],
+        severity=raw.get("severity"),
+        description=raw["description"],
+        reproduce=raw.get("reproduce"),
+    )
+
+
 def load_manifest(path: Path) -> Manifest:
     data = read_json(path)
     try:
-        defects = tuple(
-            Defect(
-                id=raw["id"],
-                file=normalise_path(raw["file"]),
-                line=int(raw["line"]),
-                dimension=raw["dimension"],
-                language=raw["language"],
-                severity=raw["severity"],
-                description=raw["description"],
-                reproduce=raw.get("reproduce"),
-            )
-            for raw in data["defects"]
-        )
-        lookalikes = tuple(ranged_entry(raw) for raw in data["lookalikes"])
-        contested = tuple(ranged_entry(raw) for raw in data["contested"])
+        if isinstance(data, dict) and "entries" in data:
+            # The idfkit building-energy fixture: one list of entries, each with a kind.
+            kinds = ("defect", "lookalike", "contested")
+            unknown = sorted({str(raw.get("kind")) for raw in data["entries"] if raw.get("kind") not in kinds})
+            if unknown:
+                raise ValueError(f"unknown entry kind(s): {', '.join(unknown)}")
+            defects = tuple(defect_entry(raw) for raw in data["entries"] if raw["kind"] == "defect")
+            lookalikes = tuple(ranged_entry(raw) for raw in data["entries"] if raw["kind"] == "lookalike")
+            contested = tuple(ranged_entry(raw) for raw in data["entries"] if raw["kind"] == "contested")
+        else:
+            defects = tuple(defect_entry(raw) for raw in data["defects"])
+            lookalikes = tuple(ranged_entry(raw) for raw in data["lookalikes"])
+            contested = tuple(ranged_entry(raw) for raw in data["contested"])
         tolerance = int(data.get("match_tolerance", 3))
-    except (KeyError, TypeError, ValueError) as error:
+    except (KeyError, TypeError, ValueError, AttributeError) as error:
         raise UnreadableInput(f"{path} is not a valid manifest: {error!r}") from error
     return Manifest(tolerance, defects, lookalikes, contested)
 
@@ -348,9 +369,11 @@ def score_recall(report: Report, manifest: Manifest) -> Verdict:
     total = len(manifest.defects)
     print(f"  overall: {len(found)}/{total} ({percent(len(found), total)})")
     gaps: list[str] = []
+    languages = tuple(dict.fromkeys((*LANGUAGES, *(d.language for d in manifest.defects))))
+    dimensions = DIMENSIONS if any(d.dimension for d in manifest.defects) else ()
     for title, key, values in (
-        ("dimension", lambda d: d.dimension, DIMENSIONS),
-        ("language", lambda d: d.language, LANGUAGES),
+        ("dimension", lambda d: d.dimension, dimensions),
+        ("language", lambda d: d.language, languages),
     ):
         for value in values:
             members = [d for d in manifest.defects if key(d) == value]
@@ -508,6 +531,26 @@ def score_debate_rejections(report: Report, manifest: Manifest, run: Path, candi
     return Verdict("SC-009", "PASS" if ok else "FAIL", f"{removed}/{total} false positives removed")
 
 
+def score_domain_attribution(report: Report, manifest: Manifest, perspective: str) -> Verdict:
+    print(f"SC-012 Seeded defects reported with {perspective} among the raisers")
+    attributed = 0
+    for defect in manifest.defects:
+        matched = [f for f in report.findings if matches_line(f.location, defect.file, defect.line, manifest.tolerance)]
+        with_domain = [f.id for f in matched if perspective in f.raised_by]
+        attributed += int(bool(with_domain))
+        if with_domain:
+            status = f"raised by {perspective} in {', '.join(with_domain)}"
+        elif matched:
+            status = f"reported as {', '.join(f.id for f in matched)} without {perspective}"
+        else:
+            status = "missed"
+        print(f"  {defect.id:<34} {status}")
+    total = len(manifest.defects)
+    print(f"  attributed: {attributed}/{total} ({percent(attributed, total)})")
+    ok = total > 0 and attributed / total >= SC012_THRESHOLD
+    return Verdict("SC-012", "PASS" if ok else "FAIL", f"{attributed}/{total} reported with {perspective} as a raiser")
+
+
 # ---------------------------------------------------------------------------
 # Reproduction checks
 # ---------------------------------------------------------------------------
@@ -574,6 +617,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("report", nargs="?", type=Path, help="report.json written by panel.py report")
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST, help="fixture manifest")
     parser.add_argument("--run", type=Path, help="run directory with candidates/ and merge/ (SC-008, SC-009)")
+    parser.add_argument(
+        "--domain-perspective", metavar="ID", help="check that seeded defects are raised by this perspective (SC-012)"
+    )
     parser.add_argument("--verify-fixes", type=Path, metavar="REPO", help="run every reproduction check against REPO")
     args = parser.parse_args(argv)
     if args.report is None and args.verify_fixes is None:
@@ -587,6 +633,8 @@ def main(argv: list[str] | None = None) -> int:
             verdicts.append(score_lookalikes(report, manifest))
             verdicts.append(score_fields(report))
             verdicts.append(score_contested(report, manifest))
+            if args.domain_perspective:
+                verdicts.append(score_domain_attribution(report, manifest, args.domain_perspective))
             if args.run is not None:
                 if not args.run.is_dir():
                     raise UnreadableInput(f"run directory {args.run} does not exist")

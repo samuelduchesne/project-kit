@@ -35,6 +35,10 @@ BEGIN = "// BEGIN GENERATED"
 END = "// END GENERATED"
 
 
+class PreconditionError(Exception):
+    """A precondition of the build is not met; main() reports it and exits 3."""
+
+
 def js_string(text: str) -> str:
     """A JavaScript string literal for `text` (JSON string syntax is valid JavaScript)."""
     return json.dumps(text, ensure_ascii=False)
@@ -61,7 +65,7 @@ def generated_section() -> str:
             "\n", "\n  "
         )
     if not roles or not schemas:
-        raise SystemExit(f"error: no role briefs or schemas found under {SKILL_DIR}")
+        raise PreconditionError(f"no role briefs or schemas found under {SKILL_DIR}")
     parts = [
         BEGIN,
         "// Sources: skills/scientific-review/protocol.md, roles/*.md, dimensions/*.md, schemas/*.schema.json",
@@ -82,7 +86,7 @@ def render(current: str) -> str:
     start = current.find(BEGIN)
     end = current.rfind(END)
     if start < 0 or end < start:
-        raise SystemExit(f"error: {WORKFLOW} lacks the {BEGIN!r} and {END!r} markers")
+        raise PreconditionError(f"{WORKFLOW} lacks the {BEGIN!r} and {END!r} markers")
     return current[:start] + generated_section() + current[end + len(END) :]
 
 
@@ -97,7 +101,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {WORKFLOW} not found", file=sys.stderr)
         return 3
     current = WORKFLOW.read_text(encoding="utf-8")
-    updated = render(current)
+    try:
+        updated = render(current)
+    except PreconditionError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 3
     diff = "".join(
         difflib.unified_diff(
             current.splitlines(keepends=True),

@@ -35,7 +35,7 @@ Each item records the decision, its rationale and the alternatives considered. I
 
 ## R6. One protocol source for all runners
 
-- **Decision**: `protocol.md`, `roles/*.md` and `schemas/*.json` are the source. `scripts/build_workflow.py` embeds them into `workflows/scientific-review.js` between generated-section markers. CI runs the generator in check mode and fails on drift.
+- **Decision**: `protocol.md`, `roles/*.md`, `dimensions/*.md` and `schemas/*.json` are the source. `scripts/build_workflow.py` embeds them into `workflows/scientific-review.js` between generated-section markers. CI runs the generator in check mode and fails on drift.
 - **Rationale**: Workflow scripts are self-contained and cannot read plugin files at run time; generating them keeps the Claude Workflow runner identical to the file-based runners. `build_workflow.py --dry-run` prints the diff it would write (Principle II); `--check` prints the same diff and exits 1 when it is not empty.
 - **Alternatives considered**: Having Workflow agents read the briefs from the plugin cache path (rejected: the cache path is version-dependent and not exposed to the script).
 

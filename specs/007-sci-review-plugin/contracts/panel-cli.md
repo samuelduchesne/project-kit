@@ -17,6 +17,6 @@ Standard library only, Python 3.10 or later. Every subcommand reads JSON files, 
 | `clean` | `--run DIR` | removes the run directory |
 | `notice` | `--run DIR TEXT` | appends a notice for the report (a missing tool, a dropped message, a changed project file) to `$RUN/notices.json` |
 
-`build_workflow.py [--check | --dry-run]` regenerates the generated section of `workflows/scientific-review.js` from `protocol.md`, `roles/` and `schemas/`. `--dry-run` prints the unified diff it would apply and writes nothing; `--check` prints the same diff and exits 1 if it is not empty.
+`build_workflow.py [--check | --dry-run]` regenerates the generated section of `workflows/scientific-review.js` from `protocol.md`, `roles/`, `dimensions/` and `schemas/`. `--dry-run` prints the unified diff it would apply and writes nothing; `--check` prints the same diff and exits 1 if it is not empty.
 
 `init` writes `$RUN/run.json` (`project`, `run`), which every later subcommand reads to find the project and to refuse a run directory inside it.

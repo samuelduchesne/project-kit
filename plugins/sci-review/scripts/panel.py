@@ -182,6 +182,7 @@ class KnownExtension:
     plugin: str
     install: str
     adds: str
+    globs: tuple[str, ...]
     file_types: tuple[str, ...]
     import_patterns: tuple[str, ...]
     languages: tuple[str, ...]
@@ -196,6 +197,7 @@ KNOWN_EXTENSIONS: tuple[KnownExtension, ...] = (
             "building physicist; heat transfer, psychrometrics, energy balances, IP and SI conversions, "
             "simulation time conventions; idfkit model checks"
         ),
+        globs=("**/*.idf", "**/*.epJSON", "**/*.epw", "**/eplusout*"),
         file_types=(".idf", ".epjson", ".epw"),
         import_patterns=(r"^\s*(from|import)\s+idfkit\b", r"from\s+['\"]@?idfkit"),
         languages=(Language.PYTHON, Language.TYPESCRIPT),
@@ -1415,7 +1417,10 @@ def select_extensions(project: Path, scope: ReviewScope, declarations: Sequence[
         if known.id in discovered:
             continue
         applies = Applicability(
-            file_types=known.file_types, import_patterns=known.import_patterns, languages=known.languages
+            globs=known.globs,
+            file_types=known.file_types,
+            import_patterns=known.import_patterns,
+            languages=known.languages,
         )
         matched = [f.path for f in scope.files if file_matches(project, f, applies)]
         if matched:
@@ -1686,6 +1691,27 @@ def cmd_debate_status(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 
+SAFE_PATH_ID = re.compile(r"^[a-z0-9-]+$")
+
+
+def _safe_component(value: Any, kind: str) -> str | None:
+    """A path component built from a Workflow result value, or None when the value is unsafe (FR-006).
+
+    `kind` is "id" for perspective and member ids, which must match ^[a-z0-9-]+$, "batch" for a batch
+    number, which must be a positive integer, and "round" for a round number, which must be a
+    non-negative integer. Booleans are refused although Python counts them as integers.
+    """
+    if kind == "id":
+        return value if isinstance(value, str) and SAFE_PATH_ID.fullmatch(value) else None
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    if kind == "batch" and value < 1:
+        return None
+    if kind == "round" and value < 0:
+        return None
+    return str(value)
+
+
 def cmd_ingest(args: argparse.Namespace) -> int:
     run_dir, _info = load_run(args.run)
     result = read_json(Path(args.file))
@@ -1693,37 +1719,64 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         raise ValidationFailure("the Workflow result is not a JSON object")
     notices = load_notices(run_dir)
     written: list[tuple[Path, Any]] = []
+    root = run_dir.resolve()
 
-    def accept(schema: str, message: Any, target: Path, role: str) -> None:
+    def accept(schema: str, message: Any, components: Sequence[tuple[Any, str]], layout: str, role: str) -> None:
+        """Validate `message`, build its path in the run directory from checked components, and queue it.
+
+        `layout` is a format string over the checked components; a component that fails its check, or a
+        target that resolves outside the run directory, drops the message with a notice.
+        """
         errors = validate_message(schema, message)
         if errors:
             notices.append(f"The {role} message was dropped because it failed validation: {errors[0]}")
             for error in errors:
                 print(f"invalid {role}: {error}", file=sys.stderr)
             return
+        parts = [_safe_component(value, kind) for value, kind in components]
+        target = (run_dir / layout.format(*parts)).resolve() if all(p is not None for p in parts) else None
+        if target is None or not is_inside(target, root):
+            bad = ", ".join(repr(value) for (value, _), part in zip(components, parts) if part is None)
+            notices.append(
+                f"The {role} message was dropped because its path components are unsafe" + (f": {bad}." if bad else ".")
+            )
+            print(f"unsafe path for {role}: {bad or target}", file=sys.stderr)
+            return
         written.append((target, message))
 
+    def field(message: Any, name: str, default: Any) -> Any:
+        return message.get(name, default) if isinstance(message, dict) else default
+
     for message in result.get("candidates", []):
-        perspective = message.get("perspective", "unknown") if isinstance(message, dict) else "unknown"
+        perspective = field(message, "perspective", "unknown")
         accept(
-            "candidate-findings", message, run_dir / "candidates" / f"{perspective}.json", f"{perspective} candidates"
+            "candidate-findings",
+            message,
+            [(perspective, "id")],
+            "candidates/{}.json",
+            f"{perspective} candidates",
         )
     for message in result.get("merge", []):
-        batch = message.get("batch", 0) if isinstance(message, dict) else 0
-        accept("merge-ruling", message, run_dir / "merge" / f"batch-{batch}.json", f"moderator merge (batch {batch})")
+        batch = field(message, "batch", 0)
+        accept("merge-ruling", message, [(batch, "batch")], "merge/batch-{}.json", f"moderator merge (batch {batch})")
     for entry in result.get("debate", []):
         if not isinstance(entry, dict) or "message" not in entry or "batch" not in entry:
             notices.append("A debate entry without batch and message was dropped.")
             continue
         message, batch = entry["message"], entry["batch"]
-        member = message.get("member", "unknown") if isinstance(message, dict) else "unknown"
-        round_ = message.get("round", 0) if isinstance(message, dict) else 0
-        target = run_dir / "debate" / f"batch-{batch}" / f"round-{round_}" / f"{member}.json"
-        accept("debate-positions", message, target, f"{member} debate (batch {batch}, round {round_})")
-    for message in result.get("notes", []):
-        batch = message.get("batch", 0) if isinstance(message, dict) else 0
+        member = field(message, "member", "unknown")
+        round_ = field(message, "round", 0)
         accept(
-            "moderator-notes", message, run_dir / "notes" / f"batch-{batch}.json", f"moderator notes (batch {batch})"
+            "debate-positions",
+            message,
+            [(batch, "batch"), (round_, "round"), (member, "id")],
+            "debate/batch-{}/round-{}/{}.json",
+            f"{member} debate (batch {batch}, round {round_})",
+        )
+    for message in result.get("notes", []):
+        batch = field(message, "batch", 0)
+        accept(
+            "moderator-notes", message, [(batch, "batch")], "notes/batch-{}.json", f"moderator notes (batch {batch})"
         )
     for role in result.get("dropped", []):
         notices.append(f"The output of {role} was dropped after failing validation twice.")
@@ -1796,12 +1849,13 @@ def adjudicate_finding(
     if finding.raised_by and all(stances.get(r) == Stance.WITHDRAW for r in finding.raised_by):
         return Outcome(None, "withdrawn")
     objection = unanswered_objection(positions, ids)
-    others_accept = any(s == Stance.ACCEPT for pid, s in perspective_stances.items() if pid not in finding.raised_by)
-    if not others_accept and objection:
+    accepts = sum(1 for s in perspective_stances.values() if s == Stance.ACCEPT)
+    # Rule 2 counts every accepting perspective, co-raisers included: a finding detected independently by two
+    # perspectives that both still accept it is corroborated, so one unanswered objection does not reject it.
+    if accepts < 2 and objection:
         return Outcome(None, "unsupported")
     if finding.trigger is None or finding.wrong_output is None:
         return Outcome(AgreementLabel.CONTESTED, None)
-    accepts = sum(1 for s in perspective_stances.values() if s == Stance.ACCEPT)
     # A withdrawing co-raiser dissents as a challenger does; consensus also needs a second accepting perspective,
     # so that no finding is reported as consensus on its raiser's word alone (FR-013).
     dissent = any(s in (Stance.CHALLENGE, Stance.WITHDRAW) for s in perspective_stances.values())
