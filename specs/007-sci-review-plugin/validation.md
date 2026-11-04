@@ -82,7 +82,7 @@ Run of 2026-11-04 on the seeded fixture (branch `feature`, 12 files, 405 lines),
 | SC-011 independence | Pass | None of the five independent-round prompts in the Workflow transcripts contains another perspective's finding id; each states the project root |
 | SC-007 reproduction after fixes | Not run | The High findings' fixes were not applied in a copy of the fixture during this run |
 
-One finding beyond the seeded set, F1001 (low, `preprocess.py:33`: `math.ceil` applied to a rounded floating-point product, for example `ceil(0.3 * 10) = 4`), was split from the scaler cluster by the moderator; it is a real defect and is not a look-alike.
+One finding beyond the seeded set, F1001 (low, `preprocess.py:33`: `math.ceil` applied to a rounded floating-point product, for example `ceil(0.07 * 100) = 8`, because the product evaluates to 7.000000000000001), was split from the scaler cluster by the moderator; it is a real defect and is not a look-alike.
 
 ### 4.2 Interpretation
 
@@ -123,7 +123,7 @@ Run of 2026-11-04 on a fresh build of the fixture (branch `feature`, 12 files, 4
 | SC-010 contested construct | Pass, see limits | F7 labelled contested (2 accept, 3 challenge) with both arguments; deciding assumption: whether the surveyed graded roads and footpaths include segments steeper than about 21 degrees |
 | SC-008, SC-009 | Not meaningful for this runner | `score.py` reports a pass (panel 11 of 11 against 5 of 11 for the best perspective), but one reviewer divided the findings among the perspectives, so the comparison measures that division, not the benefit of a panel |
 
-Two findings beyond the seeded set were reported, both counted by `score.py` against a seeded defect in the same cluster: F1001 (low, `preprocess.py:33`, `ceil(0.07 * 100) = 8` because the product evaluates to 7.000000000000001), and F1002 (medium, `normalise.ts:16-17`, `Math.min(...readings)` throws a RangeError for 200,000 readings in Node.js 22). Section 4.1 gave `ceil(0.3 * 10) = 4` as the example for F1001, but that product evaluates to exactly 3.0; 0.07 * 100 and 0.14 * 100 are correct examples.
+Two findings beyond the seeded set were reported, both counted by `score.py` against a seeded defect in the same cluster: F1001 (low, `preprocess.py:33`, `ceil(0.07 * 100) = 8` because the product evaluates to 7.000000000000001), and F1002 (medium, `normalise.ts:16-17`, `Math.min(...readings)` throws a RangeError for 200,000 readings in Node.js 22). Section 4.1 first gave `ceil(0.3 * 10) = 4` as the example for F1001, but that product evaluates to exactly 3.0; section 4.1 now gives `ceil(0.07 * 100) = 8` (T102).
 
 Limits of this run as evidence:
 
@@ -242,6 +242,8 @@ The idfkit manifest uses a format of its own (`entries` with `kind` and `line`),
 | Look-alikes | Pass | 0 of 8 reported, including the case-insensitive construction reference that `validate_model` also accepts |
 | No simulation, project unchanged | Pass | No `run_simulation` call; tree checksum and `git status --porcelain --ignored` unchanged |
 
+**Re-score with `score.py` (T095).** `score.py` now reads the entry format as well, and takes `--domain-perspective ID` for SC-012. The step 1 run directory was re-scored on 2026-11-04 with `score.py report.json --manifest <idfkit-plugin>/tests/fixtures/sci-review/manifest.json --domain-perspective building-physicist`: SC-001 Pass (7 of 7; Python 3 of 3, TypeScript 3 of 3, IDF 1 of 1), SC-002 Pass (0 of 8 look-alikes), SC-003 Pass (7 of 7 complete), SC-010 Skip (no contested construct in that fixture), SC-012 Pass (7 of 7 raised by the building physicist). The verdicts match those of the short script above.
+
 **Step 2: extension not installed.** Same fixture, `select-extensions` with no declaration: the extension is `recommended` ("not installed; it would apply to models/office.idf. Install it with idfkit@idfkit."), and the Extensions section names what it would add. The default perspectives' independent-round output does not depend on the extension, so their candidates were those of step 1; the debate was rerun with five perspectives. 6 consensus findings, none attributed to a domain perspective; the IDF failure is not reported, since only the domain checks find it. SC-012, second half: Pass.
 
 **Steps 3 and 4: contract-only test extension.** A scratch git project whose `feature` branch adds `src/levels.py` (27 lines, importing `scipy.signal`) with two acoustics defects and one look-alike. `select-extensions` received the declarations of `tests/fixtures/sci-review/test-extension-plugin/` and of its invalid copy: the first was `selected` (applies to `src/levels.py`, by its import pattern) and the acoustician joined the panel; the second was `failed` with "contract_version 2 is not supported (supported: 1)", and the review completed. The two defects (10 log10 applied to an RMS pressure; arithmetic mean of levels in dB) fell in one location cluster, which the moderator split into F1 and F1001; both are consensus findings raised by the acoustician, the first with the theorist and experimentalist, the second with the experimentalist and methodologist. The look-alike (a gain in dB added to a level) was not reported. No file of `plugins/sci-review/` changed. SC-013: Pass.
@@ -268,11 +270,57 @@ Run of 2026-11-04 on a fresh build of the fixture (branch `feature`, 12 files, 4
 
 **Effect of the corrections of section 4.9.** The computer scientist reported the `Math.min(...readings)` argument limit of `normalise.ts:16-17` as a finding of its own, separate from the zero-span NaN, so it was merged as F2001 and debated, where in section 4.6 the same defect was kept only in a fix field. The theorist stated the `permutation_pvalue` trigger as other code drawing from the global generator between `random.seed` and the call, the form rule 4 now requires, and no member challenged it.
 
+### 4.13 Claude Workflow run on the extended fixture (T090, T091)
+
+**Fixture changes.** Two changes were made to the fixture before this run.
+
+1. **Contested construct (T090).** The docstring of `src/sci/core/geometry.py` now states that the paths follow graded roads and "unsurfaced hill paths between them". This follows observation 1 of section 4.6: the documented regime should leave the inputs in scope open. The code is unchanged. The manifest entry `ct-py-small-angle-elevation` (lines 15 to 31) now records that graded roads stay below the 21 degree crossover and hill paths need not.
+2. **Perspective-specific defects (T091).** Five defects were added, one per default perspective. Each was chosen to need that perspective's expertise; the intended perspective is recorded in the manifest's `exposed_by` field:
+
+| Defect | Intended perspective | Dimension | Severity | Reproduction check |
+|--------|----------------------|-----------|----------|--------------------|
+| `py-richardson-order`: Richardson weights for an O(h**2) error applied to a first-order forward difference | theorist | mathematical-derivations | high | `checks/py-richardson-order.py` |
+| `ts-log1p-cancellation`: `Math.log(1 + x)` for fractional changes near 1e-16 | numerical analyst | numerical-stability | medium | none |
+| `py-lag-correction-sign`: first-order sensor lag subtracted instead of added | experimentalist | physical-modelling-and-units | high | `checks/py-lag-correction-sign.py` |
+| `py-small-sample-z`: normal quantile instead of Student's t for 3 to 10 replicates | methodologist | statistical-integrity | high | `checks/py-small-sample-z.py` |
+| `ts-percentile-lexicographic-sort`: `Array.prototype.sort()` without a comparator | computer scientist | algorithmic-correctness | high | `checks/ts-percentile-lexicographic-sort.mjs` |
+
+`build.py --check` verifies all 21 manifest entries. On `feature`, before any fix, all 13 reproduction checks fail. After a correct fix of each new High defect in a copy of the fixture, the 4 new checks pass; the fixes were applied by the fixture author.
+
+**Run.** The run took place on 2026-11-04, on a fresh build of the fixture (branch `feature`, 17 files, 526 lines), with `panel.py panel --runner claude-workflow`. The panel had five default perspectives, the defender and the moderator, with 2 rebuttal rounds, at most 2 batches and no extension.
+
+- **Launch.** The plugin was not installed in this session, so the script was launched by its path, as in section 4.12.
+- **Agents.** The Workflow ran 33 agents in 313 s and used 3.04 million subagent tokens. No agent failed.
+- **Debate.** The perspectives returned 87 candidates, which formed 17 location clusters in 2 batches. Both batches stopped after round 1.
+- **Messages.** `panel.py ingest` accepted all 33 messages and dropped none.
+- **Labels.** `adjudicate` gave 18 consensus findings, with 0 majority, 0 contested and 0 rejected.
+
+| Criterion | Verdict | Result |
+|-----------|---------|--------|
+| SC-001 recall | Pass | 16 of 16 seeded defects, including the 5 new ones; every dimension and both languages at 100% |
+| SC-002 look-alikes | Pass | 0 of 4 reported |
+| SC-003 FR-014 fields | Pass | 18 of 18 findings complete |
+| SC-004 project unchanged | Pass | Index checksum unchanged; `git status --porcelain --ignored` empty before and after |
+| SC-008 panel against best single perspective | Fail | Every perspective alone detected 16 of 16 with 0 false positives, the five new defects included |
+| SC-009 false positives rejected in debate | Pass | No independent-round false positive |
+| SC-010 contested construct | Fail | Reported as F10 and labelled consensus. All five perspectives raised it independently, and the defender accepted it in round 0 as well as round 1. The defender wrote that the only available defence, the documented first-order model, fails because the docstring places hill paths in scope and bounds no incline. The finding's trigger is `elevation_gain([100.0], [0.5])`, which returns 50.0 m instead of 47.94 m |
+
+**Interpretation.**
+
+1. **SC-010.** Over three wordings, the construct has been labelled consensus as a contradiction of its contract (section 4.1), checked and found correct (sections 4.6, 4.8 and 4.12), and consensus as a defect (this run). It has never been divided among independent agents. The agents settle the question from the documented regime in the same way, so the regime decides the label. The label depends on the wording of the regime, not on a division between perspectives. A contested label from independent agents therefore needs a construct whose validity turns on information the code does not contain, or else SC-010 must be amended.
+2. **SC-008.** Defects chosen to need one perspective's expertise were detected by every perspective. At the capability of the current agents, the five briefs do not partition the expertise needed for these defects. The panel's measurable benefit over one perspective lies in the debate and the labels, not in recall on this fixture.
+
+### 4.14 No determinable base (T102, edge case "No base branch")
+
+A live review was run on 2026-11-04 on a scratch repository: one commit on branch `experiment`, HEAD detached, no remote, and no `main` or `master`. The opening steps of `SKILL.md` ran `panel.py init`, then `panel.py scope --mode branch`. The scope step exited 3 with "no base branch could be determined (no remote default branch and no main or master branch); name a baseline with --baseline REF, or review with --mode repository or --mode paths".
+
+As section 3.3 of `SKILL.md` requires, the review then asked the user which scope to use: stop, review the repository, or name a baseline. It did not fall back to repository mode. The user chose to stop, and the run directory was removed with `panel.py clean`. Verdict: Pass.
+
 ## 5. Open criteria
 
-Every task of tasks.md is complete. Two success criteria remain unmet on every multi-agent runner, for reasons of the fixture rather than the plugin:
+Every task of tasks.md except T096 is complete. Two success criteria remain unmet on every multi-agent runner, after the fixture changes of section 4.13:
 
 | Criterion | Reason | Remedy |
 |-----------|--------|--------|
-| SC-008 | Each default perspective alone detects all 11 seeded defects (sections 4.1, 4.6, 4.8, 4.12), so the panel cannot exceed the best single perspective | A fixture with defects that only one perspective's expertise exposes |
-| SC-010 | Independent reviewers judge the contested construct correct within its documented regime, or raise it and withdraw it (sections 4.6, 4.8, 4.12) | A construct whose documented regime leaves the inputs in scope genuinely open (section 4.6, observation 1); the user chose to keep the construct as it is |
+| SC-008 | Each default perspective alone detects every seeded defect: 11 of 11 in sections 4.1, 4.6, 4.8 and 4.12, and 16 of 16 in section 4.13, including five defects chosen to need one perspective's expertise. The panel therefore cannot exceed the best single perspective | Amend SC-008 to measure the panel by its debate (false positives rejected, labels) rather than by recall over the best single perspective, or build defects that current agents miss without a specific expertise |
+| SC-010 | Independent agents settle the construct unanimously from its documented regime. They judged it correct when the regime was graded roads (sections 4.6, 4.8 and 4.12), and a defect when the regime includes hill paths (section 4.13) | Amend SC-010 through `/speckit-specify`, for example to require that a divided panel, when one occurs, is labelled contested with both arguments, as the sequential run of section 4.5 and the golden tests show; or use a construct whose validity depends on information outside the code |
