@@ -1,0 +1,17 @@
+{
+  "contract_version": 2,
+  "id": "acoustics-sci-review-extension",
+  "plugin": "acoustics-test-extension",
+  "perspective": {
+    "id": "acoustician",
+    "name": "Acoustician",
+    "brief": "perspective.md"
+  },
+  "reference": ["reference/acoustics.md"],
+  "applies_to": {
+    "globs": ["**/*.wav"],
+    "file_types": [".wav"],
+    "languages": ["python", "typescript"],
+    "import_patterns": ["^\\s*(from|import)\\s+(scipy\\.signal|soundfile)\\b", "from\\s+['\"]web-audio"]
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "perspective": "experimentalist",
+  "findings": [
+    {
+      "id": "experimentalist-1",
+      "raised_by": "experimentalist",
+      "file": "src/sci/heat.ts",
+      "line_start": 5,
+      "line_end": 5,
+      "dimension": "physical-modelling-and-units",
+      "severity": "medium",
+      "summary": "Temperature in Celsius is used where kelvin is required.",
+      "trigger": "T = 25 (Celsius) passed to radiate()",
+      "wrong_output": "418.7 W/m2 expected, 9.07e-3 W/m2 returned",
+      "fix": "Fix for temperature in celsius is used where kelvin is required.",
+      "evidence": "Read the code and evaluated the expression at the trigger."
+    }
+  ],
+  "checked_items": [],
+  "notes": ""
+}

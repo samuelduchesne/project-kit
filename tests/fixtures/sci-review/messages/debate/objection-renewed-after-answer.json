@@ -1,0 +1,115 @@
+{
+  "description": "The defender challenges again after the answer: unanswered, so majority. Round 1 changed no stance, so a live debate stops at round 1; round 2 is recorded only to test the rule.",
+  "rebuttal_rounds": 2,
+  "perspectives": [
+    "theorist",
+    "numerical-analyst",
+    "experimentalist",
+    "methodologist",
+    "computer-scientist"
+  ],
+  "finding": {
+    "id": "F1",
+    "members": [
+      "theorist-1"
+    ],
+    "raised_by": [
+      "theorist"
+    ],
+    "batch": 1,
+    "file": "m.py",
+    "line_start": 3,
+    "line_end": 4,
+    "dimension": "mathematical-derivations",
+    "severity": "high",
+    "summary": "S",
+    "trigger": "x = 0",
+    "wrong_output": "inf",
+    "fix": "Fix for s"
+  },
+  "rounds": [
+    [
+      {
+        "finding_id": "F1",
+        "member": "theorist",
+        "round": 0,
+        "stance": "accept",
+        "reason": "theorist accepts F1 in round 0.",
+        "answers": []
+      },
+      {
+        "finding_id": "F1",
+        "member": "numerical-analyst",
+        "round": 0,
+        "stance": "accept",
+        "reason": "numerical-analyst accepts F1 in round 0.",
+        "answers": []
+      },
+      {
+        "finding_id": "F1",
+        "member": "experimentalist",
+        "round": 0,
+        "stance": "accept",
+        "reason": "experimentalist accepts F1 in round 0.",
+        "answers": []
+      },
+      {
+        "finding_id": "F1",
+        "member": "methodologist",
+        "round": 0,
+        "stance": "accept",
+        "reason": "methodologist accepts F1 in round 0.",
+        "answers": []
+      },
+      {
+        "finding_id": "F1",
+        "member": "computer-scientist",
+        "round": 0,
+        "stance": "accept",
+        "reason": "computer-scientist accepts F1 in round 0.",
+        "answers": []
+      },
+      {
+        "finding_id": "F1",
+        "member": "defender",
+        "round": 0,
+        "stance": "challenge",
+        "reason": "defender challenges F1 in round 0.",
+        "answers": []
+      }
+    ],
+    [
+      {
+        "finding_id": "F1",
+        "member": "theorist",
+        "round": 1,
+        "stance": "accept",
+        "reason": "theorist accepts F1 in round 1.",
+        "answers": [
+          "defender:F1:0"
+        ]
+      },
+      {
+        "finding_id": "F1",
+        "member": "defender",
+        "round": 1,
+        "stance": "challenge",
+        "reason": "defender challenges F1 in round 1.",
+        "answers": []
+      }
+    ],
+    [
+      {
+        "finding_id": "F1",
+        "member": "defender",
+        "round": 2,
+        "stance": "challenge",
+        "reason": "defender challenges F1 in round 2.",
+        "answers": []
+      }
+    ]
+  ],
+  "expected_label": "majority",
+  "expected_rejection": null,
+  "expected_stop_round": 1
+}

@@ -1,0 +1,38 @@
+{
+  "member": "computer-scientist",
+  "round": 0,
+  "positions": [
+    {
+      "finding_id": "F1",
+      "member": "computer-scientist",
+      "round": 0,
+      "stance": "accept",
+      "reason": "computer-scientist accepts F1 in round 0.",
+      "answers": []
+    },
+    {
+      "finding_id": "F2",
+      "member": "computer-scientist",
+      "round": 0,
+      "stance": "accept",
+      "reason": "computer-scientist accepts F2 in round 0.",
+      "answers": []
+    },
+    {
+      "finding_id": "F5",
+      "member": "computer-scientist",
+      "round": 0,
+      "stance": "accept",
+      "reason": "computer-scientist accepts F5 in round 0.",
+      "answers": []
+    },
+    {
+      "finding_id": "F6",
+      "member": "computer-scientist",
+      "round": 0,
+      "stance": "challenge",
+      "reason": "computer-scientist challenges F6 in round 0.",
+      "answers": []
+    }
+  ]
+}

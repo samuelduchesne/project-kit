@@ -1,0 +1,116 @@
+{
+  "max_batches": 1,
+  "candidates": [
+    {
+      "id": "theorist-1",
+      "raised_by": "theorist",
+      "file": "x.py",
+      "line_start": 10,
+      "line_end": 10,
+      "dimension": "mathematical-derivations",
+      "severity": "low",
+      "summary": "S",
+      "trigger": "t",
+      "wrong_output": "w",
+      "fix": "Fix for s",
+      "evidence": "Read the code and evaluated the expression at the trigger."
+    },
+    {
+      "id": "theorist-2",
+      "raised_by": "theorist",
+      "file": "x.py",
+      "line_start": 20,
+      "line_end": 20,
+      "dimension": "mathematical-derivations",
+      "severity": "low",
+      "summary": "S",
+      "trigger": "t",
+      "wrong_output": "w",
+      "fix": "Fix for s",
+      "evidence": "Read the code and evaluated the expression at the trigger."
+    },
+    {
+      "id": "theorist-3",
+      "raised_by": "theorist",
+      "file": "x.py",
+      "line_start": 30,
+      "line_end": 30,
+      "dimension": "mathematical-derivations",
+      "severity": "low",
+      "summary": "S",
+      "trigger": "t",
+      "wrong_output": "w",
+      "fix": "Fix for s",
+      "evidence": "Read the code and evaluated the expression at the trigger."
+    },
+    {
+      "id": "theorist-4",
+      "raised_by": "theorist",
+      "file": "y.py",
+      "line_start": 40,
+      "line_end": 40,
+      "dimension": "mathematical-derivations",
+      "severity": "low",
+      "summary": "S",
+      "trigger": "t",
+      "wrong_output": "w",
+      "fix": "Fix for s",
+      "evidence": "Read the code and evaluated the expression at the trigger."
+    }
+  ],
+  "expected": {
+    "clusters": [
+      {
+        "id": "C1",
+        "suggested_finding_id": "F1",
+        "file": "x.py",
+        "line_start": 10,
+        "line_end": 10,
+        "members": [
+          "theorist-1"
+        ]
+      },
+      {
+        "id": "C2",
+        "suggested_finding_id": "F2",
+        "file": "x.py",
+        "line_start": 20,
+        "line_end": 20,
+        "members": [
+          "theorist-2"
+        ]
+      },
+      {
+        "id": "C3",
+        "suggested_finding_id": "F3",
+        "file": "x.py",
+        "line_start": 30,
+        "line_end": 30,
+        "members": [
+          "theorist-3"
+        ]
+      },
+      {
+        "id": "C4",
+        "suggested_finding_id": "F4",
+        "file": "y.py",
+        "line_start": 40,
+        "line_end": 40,
+        "members": [
+          "theorist-4"
+        ]
+      }
+    ],
+    "batches": [
+      {
+        "batch": 1,
+        "clusters": [
+          "C1",
+          "C2",
+          "C3",
+          "C4"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "perspective": "computer-scientist",
+  "findings": [
+    {
+      "id": "computer-scientist-1",
+      "raised_by": "computer-scientist",
+      "file": "src/sci/model.py",
+      "line_start": 80,
+      "line_end": 80,
+      "dimension": "algorithmic-correctness",
+      "severity": "low",
+      "summary": "The cache key omits the reference year.",
+      "trigger": "calls with year 2020 then 2021",
+      "wrong_output": "the 2020 value is returned for 2021",
+      "fix": "Fix for the cache key omits the reference year.",
+      "evidence": "Read the code and evaluated the expression at the trigger."
+    }
+  ],
+  "checked_items": [],
+  "notes": ""
+}

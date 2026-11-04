@@ -1,0 +1,21 @@
+{
+  "perspective": "theorist",
+  "findings": [
+    {
+      "id": "theorist-1",
+      "raised_by": "theorist",
+      "file": "src/sci/pendulum.py",
+      "line_start": 14,
+      "line_end": 15,
+      "dimension": "physical-modelling-and-units",
+      "severity": "medium",
+      "summary": "The pendulum period uses the small-angle form without a stated amplitude limit.",
+      "trigger": null,
+      "wrong_output": null,
+      "fix": "Fix for the pendulum period uses the small-angle form without a stated amplitude limit.",
+      "evidence": "Read the code and evaluated the expression at the trigger."
+    }
+  ],
+  "checked_items": [],
+  "notes": ""
+}

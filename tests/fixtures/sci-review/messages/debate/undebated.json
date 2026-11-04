@@ -1,0 +1,34 @@
+{
+  "description": "No member recorded a position: the raiser's word alone gives contested, not consensus.",
+  "rebuttal_rounds": 2,
+  "perspectives": [
+    "theorist",
+    "numerical-analyst",
+    "experimentalist",
+    "methodologist",
+    "computer-scientist"
+  ],
+  "finding": {
+    "id": "F1",
+    "members": [
+      "theorist-1"
+    ],
+    "raised_by": [
+      "theorist"
+    ],
+    "batch": 1,
+    "file": "m.py",
+    "line_start": 3,
+    "line_end": 4,
+    "dimension": "mathematical-derivations",
+    "severity": "high",
+    "summary": "S",
+    "trigger": "x = 0",
+    "wrong_output": "inf",
+    "fix": "Fix for s"
+  },
+  "rounds": [],
+  "expected_label": "contested",
+  "expected_rejection": null,
+  "expected_stop_round": 0
+}

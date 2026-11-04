@@ -1,0 +1,38 @@
+{
+  "member": "numerical-analyst",
+  "round": 0,
+  "positions": [
+    {
+      "finding_id": "F1",
+      "member": "numerical-analyst",
+      "round": 0,
+      "stance": "accept",
+      "reason": "numerical-analyst accepts F1 in round 0.",
+      "answers": []
+    },
+    {
+      "finding_id": "F2",
+      "member": "numerical-analyst",
+      "round": 0,
+      "stance": "accept",
+      "reason": "numerical-analyst accepts F2 in round 0.",
+      "answers": []
+    },
+    {
+      "finding_id": "F5",
+      "member": "numerical-analyst",
+      "round": 0,
+      "stance": "accept",
+      "reason": "numerical-analyst accepts F5 in round 0.",
+      "answers": []
+    },
+    {
+      "finding_id": "F6",
+      "member": "numerical-analyst",
+      "round": 0,
+      "stance": "accept",
+      "reason": "numerical-analyst accepts F6 in round 0.",
+      "answers": []
+    }
+  ]
+}

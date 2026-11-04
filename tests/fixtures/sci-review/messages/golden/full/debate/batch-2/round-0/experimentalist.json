@@ -1,0 +1,22 @@
+{
+  "member": "experimentalist",
+  "round": 0,
+  "positions": [
+    {
+      "finding_id": "F3",
+      "member": "experimentalist",
+      "round": 0,
+      "stance": "challenge",
+      "reason": "experimentalist challenges F3 in round 0.",
+      "answers": []
+    },
+    {
+      "finding_id": "F4",
+      "member": "experimentalist",
+      "round": 0,
+      "stance": "challenge",
+      "reason": "experimentalist challenges F4 in round 0.",
+      "answers": []
+    }
+  ]
+}

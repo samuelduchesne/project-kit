@@ -1,0 +1,16 @@
+{
+  "member": "experimentalist",
+  "round": 1,
+  "positions": [
+    {
+      "finding_id": "F2",
+      "member": "experimentalist",
+      "round": 1,
+      "stance": "accept",
+      "reason": "The documented speed range reaches 40 m/s, where the flow is turbulent.",
+      "answers": [
+        "defender:F2:0"
+      ]
+    }
+  ]
+}

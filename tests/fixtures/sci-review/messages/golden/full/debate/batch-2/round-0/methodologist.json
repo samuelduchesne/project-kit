@@ -1,0 +1,22 @@
+{
+  "member": "methodologist",
+  "round": 0,
+  "positions": [
+    {
+      "finding_id": "F3",
+      "member": "methodologist",
+      "round": 0,
+      "stance": "accept",
+      "reason": "methodologist accepts F3 in round 0.",
+      "answers": []
+    },
+    {
+      "finding_id": "F4",
+      "member": "methodologist",
+      "round": 0,
+      "stance": "challenge",
+      "reason": "methodologist challenges F4 in round 0.",
+      "answers": []
+    }
+  ]
+}

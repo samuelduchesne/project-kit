@@ -1,0 +1,22 @@
+{
+  "member": "computer-scientist",
+  "round": 0,
+  "positions": [
+    {
+      "finding_id": "F3",
+      "member": "computer-scientist",
+      "round": 0,
+      "stance": "challenge",
+      "reason": "computer-scientist challenges F3 in round 0.",
+      "answers": []
+    },
+    {
+      "finding_id": "F4",
+      "member": "computer-scientist",
+      "round": 0,
+      "stance": "accept",
+      "reason": "computer-scientist accepts F4 in round 0.",
+      "answers": []
+    }
+  ]
+}

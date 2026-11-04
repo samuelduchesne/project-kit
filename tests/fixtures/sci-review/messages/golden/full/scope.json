@@ -1,0 +1,44 @@
+{
+  "mode": "branch",
+  "base": "0123456789abcdef0123456789abcdef01234567",
+  "head": "HEAD with uncommitted and untracked changes",
+  "files": [
+    {
+      "path": "src/sci/heat.ts",
+      "language": "typescript",
+      "line_ranges": [
+        [
+          1,
+          40
+        ]
+      ]
+    },
+    {
+      "path": "src/sci/model.py",
+      "language": "python",
+      "line_ranges": [
+        [
+          1,
+          90
+        ]
+      ]
+    },
+    {
+      "path": "src/sci/train.py",
+      "language": "python",
+      "line_ranges": [
+        [
+          30,
+          80
+        ]
+      ]
+    }
+  ],
+  "excluded": [
+    {
+      "path": "uv.lock",
+      "reason": "generated (lock file)"
+    }
+  ],
+  "note": "Changes since merge-base with origin/main on branch feature (0123456789ab), including uncommitted and untracked files: 3 files, 181 lines."
+}

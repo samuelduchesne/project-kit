@@ -1,0 +1,37 @@
+{
+  "batch": 1,
+  "notes": [
+    {
+      "finding_id": "F1",
+      "argument_for": "The failure scenario of F1 holds at the stated trigger.",
+      "argument_against": "No member argued against.",
+      "deciding_assumption": null,
+      "rejection_reason": "Not rejected.",
+      "no_trigger_reason": null
+    },
+    {
+      "finding_id": "F2",
+      "argument_for": "The failure scenario of F2 holds at the stated trigger.",
+      "argument_against": "The approximation is accurate to 1% below 0.24 rad, which may be the intended range.",
+      "deciding_assumption": "Whether input angles are bounded below 0.24 rad.",
+      "rejection_reason": "Not rejected.",
+      "no_trigger_reason": "No member could name an input range the callers actually use."
+    },
+    {
+      "finding_id": "F5",
+      "argument_for": "The failure scenario of F5 holds at the stated trigger.",
+      "argument_against": "The defender argued that the split is stratified; this does not prevent leakage.",
+      "deciding_assumption": null,
+      "rejection_reason": "Not rejected.",
+      "no_trigger_reason": null
+    },
+    {
+      "finding_id": "F6",
+      "argument_for": "The failure scenario of F6 holds at the stated trigger.",
+      "argument_against": "-9999.0 is a documented sentinel.",
+      "deciding_assumption": null,
+      "rejection_reason": "The raiser withdrew: the value is a documented sentinel.",
+      "no_trigger_reason": null
+    }
+  ]
+}

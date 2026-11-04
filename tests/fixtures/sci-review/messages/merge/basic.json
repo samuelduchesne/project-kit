@@ -1,0 +1,126 @@
+{
+  "max_batches": 2,
+  "candidates": [
+    {
+      "id": "theorist-1",
+      "raised_by": "theorist",
+      "file": "b.py",
+      "line_start": 10,
+      "line_end": 12,
+      "dimension": "mathematical-derivations",
+      "severity": "high",
+      "summary": "S",
+      "trigger": "t",
+      "wrong_output": "w",
+      "fix": "Fix for s",
+      "evidence": "Read the code and evaluated the expression at the trigger."
+    },
+    {
+      "id": "numerical-analyst-1",
+      "raised_by": "numerical-analyst",
+      "file": "b.py",
+      "line_start": 15,
+      "line_end": 15,
+      "dimension": "numerical-stability",
+      "severity": "high",
+      "summary": "S",
+      "trigger": "t",
+      "wrong_output": "w",
+      "fix": "Fix for s",
+      "evidence": "Read the code and evaluated the expression at the trigger."
+    },
+    {
+      "id": "experimentalist-1",
+      "raised_by": "experimentalist",
+      "file": "b.py",
+      "line_start": 19,
+      "line_end": 20,
+      "dimension": "physical-modelling-and-units",
+      "severity": "low",
+      "summary": "S",
+      "trigger": "t",
+      "wrong_output": "w",
+      "fix": "Fix for s",
+      "evidence": "Read the code and evaluated the expression at the trigger."
+    },
+    {
+      "id": "methodologist-1",
+      "raised_by": "methodologist",
+      "file": "a.ts",
+      "line_start": 15,
+      "line_end": 15,
+      "dimension": "statistical-integrity",
+      "severity": "medium",
+      "summary": "S",
+      "trigger": "t",
+      "wrong_output": "w",
+      "fix": "Fix for s",
+      "evidence": "Read the code and evaluated the expression at the trigger."
+    },
+    {
+      "id": "computer-scientist-1",
+      "raised_by": "computer-scientist",
+      "file": "a.ts",
+      "line_start": 1,
+      "line_end": 30,
+      "dimension": "algorithmic-correctness",
+      "severity": "low",
+      "summary": "S",
+      "trigger": "t",
+      "wrong_output": "w",
+      "fix": "Fix for s",
+      "evidence": "Read the code and evaluated the expression at the trigger."
+    }
+  ],
+  "expected": {
+    "clusters": [
+      {
+        "id": "C1",
+        "suggested_finding_id": "F1",
+        "file": "a.ts",
+        "line_start": 1,
+        "line_end": 30,
+        "members": [
+          "computer-scientist-1",
+          "methodologist-1"
+        ]
+      },
+      {
+        "id": "C2",
+        "suggested_finding_id": "F2",
+        "file": "b.py",
+        "line_start": 10,
+        "line_end": 15,
+        "members": [
+          "theorist-1",
+          "numerical-analyst-1"
+        ]
+      },
+      {
+        "id": "C3",
+        "suggested_finding_id": "F3",
+        "file": "b.py",
+        "line_start": 19,
+        "line_end": 20,
+        "members": [
+          "experimentalist-1"
+        ]
+      }
+    ],
+    "batches": [
+      {
+        "batch": 1,
+        "clusters": [
+          "C2",
+          "C3"
+        ]
+      },
+      {
+        "batch": 2,
+        "clusters": [
+          "C1"
+        ]
+      }
+    ]
+  }
+}
