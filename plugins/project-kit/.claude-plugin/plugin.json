@@ -1,6 +1,6 @@
 {
   "name": "project-kit",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Create, audit and upgrade software projects from the project-kit-cookiecutter templates, with spec-kit, linting and a changelog set up, and maintain their changelogs, releases, pull requests and documentation.",
   "author": {
     "name": "Samuel Letellier-Duchesne",
