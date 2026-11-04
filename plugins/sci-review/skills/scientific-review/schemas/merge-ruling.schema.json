@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sci-review/schemas/merge-ruling.schema.json",
+  "title": "Merge ruling",
+  "description": "Moderator ruling for one batch: clusters of candidate findings confirmed as one defect, and clusters split apart. Semantic check in panel.py: severity_reason is present when severity is lower than the highest member severity; line_end >= line_start.",
+  "type": "object",
+  "required": [
+    "batch",
+    "findings",
+    "split"
+  ],
+  "properties": {
+    "batch": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/MergedFinding"
+      }
+    },
+    "split": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "cluster",
+          "reason"
+        ],
+        "properties": {
+          "cluster": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "Dimension": {
+      "type": "string",
+      "enum": [
+        "mathematical-derivations",
+        "numerical-stability",
+        "physical-modelling-and-units",
+        "statistical-integrity",
+        "algorithmic-correctness"
+      ]
+    },
+    "Severity": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "MergedFinding": {
+      "description": "A cluster of candidate findings with representative fields chosen by the moderator.",
+      "type": "object",
+      "required": [
+        "id",
+        "members",
+        "raised_by",
+        "batch",
+        "file",
+        "line_start",
+        "line_end",
+        "dimension",
+        "severity",
+        "summary",
+        "trigger",
+        "wrong_output",
+        "fix"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^F[0-9]+$"
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+-[0-9]+$"
+          },
+          "minItems": 1
+        },
+        "raised_by": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "minItems": 1
+        },
+        "batch": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "file": {
+          "type": "string"
+        },
+        "line_start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "line_end": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dimension": {
+          "$ref": "#/$defs/Dimension"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "trigger": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "wrong_output": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fix": {
+          "type": "string"
+        },
+        "severity_reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

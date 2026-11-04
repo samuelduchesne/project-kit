@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sci-review/schemas/debate-positions.schema.json",
+  "title": "Debate positions",
+  "description": "Positions of one panel member in one debate round, one entry per finding in the batch. Position ids are of the form <member>:<finding_id>:<round>. Semantic check in panel.py: withdraw only from a member listed in the finding's raised_by.",
+  "type": "object",
+  "required": [
+    "member",
+    "round",
+    "positions"
+  ],
+  "properties": {
+    "member": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "round": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "positions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Position"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "Position": {
+      "type": "object",
+      "required": [
+        "finding_id",
+        "member",
+        "round",
+        "stance",
+        "reason",
+        "answers"
+      ],
+      "properties": {
+        "finding_id": {
+          "type": "string",
+          "pattern": "^F[0-9]+$"
+        },
+        "member": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "round": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stance": {
+          "type": "string",
+          "enum": [
+            "accept",
+            "challenge",
+            "withdraw"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "answers": {
+          "description": "Ids of earlier positions this one responds to, each of the form <member>:<finding_id>:<round>.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -13,7 +13,7 @@ env:
 
 jobs:
   validate:
-    name: Validate marketplace and plugin
+    name: Validate marketplace and plugins
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -29,8 +29,14 @@ jobs:
       - name: Validate marketplace
         run: claude plugin validate . --strict
 
-      - name: Validate plugin
+      - name: Validate project-kit plugin
         run: claude plugin validate ./plugins/project-kit --strict
+
+      - name: Validate sci-review plugin
+        run: claude plugin validate ./plugins/sci-review --strict
+
+      - name: Check the generated sci-review Workflow script
+        run: python3 plugins/sci-review/scripts/build_workflow.py --check
 
       - name: Check manifest consistency
         run: python3 .github/scripts/check_manifests.py
@@ -52,6 +58,35 @@ jobs:
             || { echo "::error::agent editor is missing from the installed plugin"; exit 1; }
           ls "$HOME"/.claude/plugins/cache/project-kit/project-kit/*/workflows/review-docs.js > /dev/null \
             || { echo "::error::workflow review-docs is missing from the installed plugin"; exit 1; }
+          if echo "$details" | grep -Eq '\b(scientific-review|scientific-auditor)\b'; then
+            echo "::error::a sci-review component is present when only project-kit is installed"; exit 1
+          fi
+          if ls "$HOME"/.claude/plugins/cache/project-kit/sci-review > /dev/null 2>&1; then
+            echo "::error::sci-review was installed alongside project-kit"; exit 1
+          fi
+
+      - name: Install smoke test (sci-review only)
+        run: |
+          set -euo pipefail
+          export HOME="$(mktemp -d)"
+          claude plugin marketplace add ./
+          claude plugin install sci-review@project-kit
+          details="$(claude plugin details sci-review)"
+          echo "$details"
+          echo "$details" | grep -E '^\s*Skills \(1\)\s.*\bscientific-review\b' > /dev/null \
+            || { echo "::error::skill scientific-review is missing from the installed plugin"; exit 1; }
+          echo "$details" | grep -E '^\s*Agents \(1\)\s.*\bscientific-auditor\b' > /dev/null \
+            || { echo "::error::agent scientific-auditor is missing from the installed plugin"; exit 1; }
+          ls "$HOME"/.claude/plugins/cache/project-kit/sci-review/*/workflows/scientific-review.js > /dev/null \
+            || { echo "::error::workflow scientific-review is missing from the installed plugin"; exit 1; }
+          for skill in new-project upgrade-project audit-project changelog-keeper create-release stacked-prs diataxis editorial review-docs; do
+            if echo "$details" | grep -Eq "\b${skill}\b"; then
+              echo "::error::project-kit skill ${skill} is present when only sci-review is installed"; exit 1
+            fi
+          done
+          if ls "$HOME"/.claude/plugins/cache/project-kit/project-kit > /dev/null 2>&1; then
+            echo "::error::project-kit was installed alongside sci-review"; exit 1
+          fi
 
   script-tests:
     name: Helper script tests
@@ -63,6 +98,11 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           version: "0.11.32"
+
+      # Node.js runs the sci-review Workflow parity and simulation tests, which skip without it.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
       - name: Run tests against a fixture template
         run: uv run --no-project --python 3.12 python -m unittest discover -s tests -v

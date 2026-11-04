@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sci-review/schemas/candidate-findings.schema.json",
+  "title": "Candidate findings",
+  "description": "Output of one perspective reviewer in the independent round. Semantic checks in panel.py: line_end >= line_start; every location lies inside the review scope.",
+  "type": "object",
+  "required": [
+    "perspective",
+    "findings",
+    "checked_items",
+    "notes"
+  ],
+  "properties": {
+    "perspective": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CandidateFinding"
+      }
+    },
+    "checked_items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CheckedItem"
+      }
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "Dimension": {
+      "type": "string",
+      "enum": [
+        "mathematical-derivations",
+        "numerical-stability",
+        "physical-modelling-and-units",
+        "statistical-integrity",
+        "algorithmic-correctness"
+      ]
+    },
+    "Severity": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "CandidateFinding": {
+      "description": "A defect reported by one perspective. A null trigger or wrong_output makes the finding non-concrete.",
+      "type": "object",
+      "required": [
+        "id",
+        "raised_by",
+        "file",
+        "line_start",
+        "line_end",
+        "dimension",
+        "severity",
+        "summary",
+        "trigger",
+        "wrong_output",
+        "fix",
+        "evidence"
+      ],
+      "properties": {
+        "id": {
+          "description": "Of the form <perspective>-<n>.",
+          "type": "string",
+          "pattern": "^[a-z0-9-]+-[0-9]+$"
+        },
+        "raised_by": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "file": {
+          "type": "string"
+        },
+        "line_start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "line_end": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dimension": {
+          "$ref": "#/$defs/Dimension"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "trigger": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "wrong_output": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fix": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CheckedItem": {
+      "description": "A location examined and found correct for one dimension. line_end >= line_start is checked by panel.py.",
+      "type": "object",
+      "required": [
+        "file",
+        "line_start",
+        "line_end",
+        "dimension",
+        "note"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "line_start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "line_end": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dimension": {
+          "$ref": "#/$defs/Dimension"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
