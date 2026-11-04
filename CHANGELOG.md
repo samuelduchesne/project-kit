@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-11-04
+
+### Changed
+
+- The project constitution is amended to version 1.2.0: the repository is a marketplace of plugins, each under `plugins/<name>/`; it defines the scope of `sci-review`, states that Principle I does not apply to it, and introduces per-plugin release tags of the form `sci-review-vX.Y.Z`.
+- The validation workflow now also validates `sci-review`, checks that its workflow script is up to date with its skill files, and installs it in a clean environment.
+
+## [sci-review-v0.1.0] - 2026-11-04
+
+First release of the `sci-review` plugin, tagged separately from `project-kit` as the constitution requires.
+
 ### Added
 
 - The `sci-review` plugin 0.1.0 in `plugins/sci-review/`, which reviews code for scientific correctness with a panel of independent reviewers. It covers five dimensions (mathematical derivations, numerical stability, physical modelling and units, statistical integrity, algorithmic correctness) and reports only findings with a concrete failure scenario. The review never modifies the reviewed project.
@@ -14,11 +25,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Four `sci-review` runners, selected by host: the Claude Workflow, Codex subagents, Claude agents, and a sequential runner for claude.ai chat, Cowork and Codex without agents.
 - The `sci-review` domain-extension contract, version 1 (`plugins/sci-review/skills/scientific-review/extensions.md`), through which any plugin can add a domain perspective. The first extension, `building-energy-sci-review-extension`, ships in the idfkit plugin and is released separately.
 - A Codex manifest for `sci-review` and a Codex marketplace at `.agents/plugins/marketplace.json`, so that `sci-review` installs in Codex from `samuelduchesne/project-kit`.
-
-### Changed
-
-- The project constitution is amended to version 1.2.0: the repository is a marketplace of plugins, each under `plugins/<name>/`; it defines the scope of `sci-review`, states that Principle I does not apply to it, and introduces per-plugin release tags of the form `sci-review-vX.Y.Z`.
-- The validation workflow now also validates `sci-review`, checks that its workflow script is up to date with its skill files, and installs it in a clean environment.
 
 ## [0.5.1] - 2026-11-02
 
@@ -54,7 +60,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README with install and update steps for each surface.
 - A validation workflow that runs `claude plugin validate --strict` on the marketplace and the plugin, checks manifest consistency, installs the plugin in a clean environment, and tests the helper scripts against fixture templates.
 
-[Unreleased]: https://github.com/samuelduchesne/project-kit/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/samuelduchesne/project-kit/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/samuelduchesne/project-kit/compare/v0.5.1...v0.5.2
+[sci-review-v0.1.0]: https://github.com/samuelduchesne/project-kit/releases/tag/sci-review-v0.1.0
 [0.5.1]: https://github.com/samuelduchesne/project-kit/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/samuelduchesne/project-kit/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/samuelduchesne/project-kit/releases/tag/v0.4.0
