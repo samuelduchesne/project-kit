@@ -226,6 +226,31 @@ Runs of 2026-11-04 on a fresh build of the fixture with the sequential runner, f
 
 The path-mode review reused the merge rulings, positions and notes of the branch run, with finding identifiers renumbered to the path-mode clusters by file. It therefore shows that the scope, merge, adjudication and report steps handle path mode; it adds no independent evidence of detection beyond section 4.5.
 
+### 4.11 Extensions (T071, quickstart.md section 6, SC-012, SC-013)
+
+Runs of 2026-11-04 with the sequential runner, five default perspectives plus any selected domain perspective, defender and moderator, 2 rebuttal rounds and at most 2 batches. Every message passed `panel.py validate` at the first attempt, and every debate stopped after round 1.
+
+**Step 1: idfkit extension installed.** Fixture built with the idfkit plugin's `tests/fixtures/sci-review/build.py` (branch `feature`, 7 files, 142 lines). `select-extensions` selected `building-energy-sci-review-extension`, and the building physicist joined the panel with source `building-energy-sci-review-extension`. Its domain checks ran by route A of `checks.md`: `load_model`, then `validate_model` (one error, E009, `BuildingSurface:Detailed 'Office North Wall'.construction_name` references the missing construction 'Exterior Wall Insulated') and `check_model_integrity` (passed); no simulation was run and the model was not saved. `adjudicate` gave 7 consensus findings.
+
+The idfkit manifest uses a format of its own (`entries` with `kind` and `line`), which `score.py` does not read, so the run was scored by a short script against it with the same 3-line tolerance:
+
+| Criterion | Verdict | Result |
+|-----------|---------|--------|
+| Seeded building-energy defects reported | Pass | 7 of 7: hour-ending stamps read as starting (Python, TypeScript), kBtu-to-kWh factor (Python, TypeScript), leap-year truncation (Python, TypeScript), missing construction in the IDF |
+| SC-012, first half | Pass | 7 of 7 list the building physicist among their raisers (at least 90% required) |
+| IDF validation failure debated | Pass | E009 is F1, raised by the building physicist and accepted by every member |
+| Look-alikes | Pass | 0 of 8 reported, including the case-insensitive construction reference that `validate_model` also accepts |
+| No simulation, project unchanged | Pass | No `run_simulation` call; tree checksum and `git status --porcelain --ignored` unchanged |
+
+**Step 2: extension not installed.** Same fixture, `select-extensions` with no declaration: the extension is `recommended` ("not installed; it would apply to models/office.idf. Install it with idfkit@idfkit."), and the Extensions section names what it would add. The default perspectives' independent-round output does not depend on the extension, so their candidates were those of step 1; the debate was rerun with five perspectives. 6 consensus findings, none attributed to a domain perspective; the IDF failure is not reported, since only the domain checks find it. SC-012, second half: Pass.
+
+**Steps 3 and 4: contract-only test extension.** A scratch git project whose `feature` branch adds `src/levels.py` (27 lines, importing `scipy.signal`) with two acoustics defects and one look-alike. `select-extensions` received the declarations of `tests/fixtures/sci-review/test-extension-plugin/` and of its invalid copy: the first was `selected` (applies to `src/levels.py`, by its import pattern) and the acoustician joined the panel; the second was `failed` with "contract_version 2 is not supported (supported: 1)", and the review completed. The two defects (10 log10 applied to an RMS pressure; arithmetic mean of levels in dB) fell in one location cluster, which the moderator split into F1 and F1001; both are consensus findings raised by the acoustician, the first with the theorist and experimentalist, the second with the experimentalist and methodologist. The look-alike (a gain in dB added to a level) was not reported. No file of `plugins/sci-review/` changed. SC-013: Pass.
+
+Limits of these runs as evidence:
+
+1. **Single reviewer.** As in sections 4.5 and 4.10, one reviewer performed every role. The runs show that selection, panel membership, domain checks, the debate, adjudication and the report handle extensions end to end; detection by independent agents with a domain perspective remains untested.
+2. **Prior knowledge.** The reviewer did not read the idfkit manifest before scoring, but section 2 of this record names the IDF defect and its look-alike, and the extension's reference document contains worked examples of the hour-ending and leap-year defects, by design. The acoustics project was written by the reviewer, so steps 3 and 4 test the contract mechanics only.
+
 ## 5. Not yet run
 
 These need live agent runs and, for the Workflow runner, the user's opt-in to a multi-agent workflow. The Codex CLI works since section 3. They remain open in tasks.md.
@@ -233,4 +258,3 @@ These need live agent runs and, for the Workflow runner, the user's opt-in to a 
 | Task | Run |
 |------|-----|
 | T047 | A Workflow re-run after the corrections of sections 4.3 and 4.4; SC-010 needs a construct redesigned once more (section 4.6, observation 1) |
-| T071 | quickstart.md section 6 with live reviews (SC-012 first half, SC-013 contribution of findings) |

@@ -181,7 +181,7 @@ description: "Task list for the sci-review plugin"
 - [X] T068 [P] [US4] Write `idfkit-plugin/skills/building-energy-sci-review-extension/checks.md` (FR-034, research R10): for each in-scope IDF or epJSON file run `validate_model` and `check_model_integrity` through the idfkit MCP server, falling back to the `idfkit` Python package, and otherwise reporting the checks as not run; each failure becomes a candidate finding; never run a simulation without the user's request
 - [X] T069 [US4] Write the building-energy fixture in `idfkit-plugin/tests/fixtures/sci-review/` (`build.py`, `manifest.json`): Python and TypeScript code seeded with an hour-ending timestamp read as hour-starting, a kBtu to kWh conversion with the wrong factor, a leap-year series truncated to 8760 hours, and one IDF file with an integrity failure; plus correct look-alikes
 - [X] T070 [US4] Register the new skill in the idfkit plugin manifests `idfkit-plugin/.claude-plugin/plugin.json` and `idfkit-plugin/.codex-plugin/plugin.json` if they enumerate skills, and add a changelog entry in `idfkit-plugin/CHANGELOG.md`
-- [ ] T071 [US4] Run quickstart.md section 6 (steps 1 to 4) and record the results, including SC-012 and SC-013, in `specs/007-sci-review-plugin/validation.md`
+- [X] T071 [US4] Run quickstart.md section 6 (steps 1 to 4) and record the results, including SC-012 and SC-013, in `specs/007-sci-review-plugin/validation.md`
 
 **Checkpoint**: Extensions work on the contract alone; User Stories 1 to 4 pass independently.
 
