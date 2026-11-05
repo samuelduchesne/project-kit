@@ -126,6 +126,37 @@ class TestScore(unittest.TestCase):
         self.assertIn("SC-012: FAIL (1/2 reported with building-physicist as a raiser)", text)
         self.assertIn("reported as F2 without building-physicist", text)
 
+    def test_domain_attribution_leaves_out_general_defects(self) -> None:
+        """SC-012 counts only domain defects; SC-001 still counts every defect."""
+        data = json.loads(json.dumps(ENTRY_MANIFEST))
+        data["entries"].append(
+            {
+                "id": "py-general",
+                "file": "src/bem/units.py",
+                "line": 27,
+                "anchor": "W",
+                "description": "d",
+                "language": "python",
+                "kind": "defect",
+                "domain": False,
+            }
+        )
+        manifest = self.write("manifest.json", data)
+        report = self.write(
+            "report.json",
+            {
+                "findings": [
+                    finding("F1", "src/bem/units.py", 6, ["building-physicist"]),
+                    finding("F2", "models/office.idf", 73, ["building-physicist"]),
+                    finding("F3", "src/bem/units.py", 27, ["computer-scientist"]),
+                ]
+            },
+        )
+        text = self.run_score(str(report), "--manifest", str(manifest), "--domain-perspective", "building-physicist")
+        self.assertIn("SC-001: PASS (3/3 detected)", text)
+        self.assertIn("py-general                         not a domain defect; left out", text)
+        self.assertIn("SC-012: PASS (2/2 reported with building-physicist as a raiser)", text)
+
     def run_score(self, *args: str) -> str:
         out = io.StringIO()
         with redirect_stdout(out):

@@ -32,8 +32,11 @@ Criteria printed, each with a final PASS, FAIL or SKIP line:
             positives
     SC-009  (--run) at least half of the independent-round false positives are
             rejected in debate or never reported
-    SC-012  (--domain-perspective ID) at least 90% of the seeded defects are
-            reported by a finding that lists ID among its raisers
+    SC-012  (--domain-perspective ID) at least 90% of the seeded domain defects
+            are reported by a finding that lists ID among its raisers; a defect
+            entry with ``"domain": false`` (one that needs no domain knowledge
+            to recognise) is left out, and an entry without the field counts
+            as a domain defect
 
 Two manifest formats are read: this fixture's (``defects``, ``lookalikes`` and
 ``contested`` lists) and the entry format of the idfkit building-energy fixture
@@ -100,6 +103,7 @@ class Defect:
     severity: str | None
     description: str
     reproduce: str | None
+    domain: bool = True
 
 
 @dataclass(frozen=True)
@@ -219,6 +223,7 @@ def defect_entry(raw: dict[str, Any]) -> Defect:
         severity=raw.get("severity"),
         description=raw["description"],
         reproduce=raw.get("reproduce"),
+        domain=bool(raw.get("domain", True)),
     )
 
 
@@ -556,9 +561,13 @@ def score_debate_rejections(report: Report, manifest: Manifest, run: Path, candi
 
 
 def score_domain_attribution(report: Report, manifest: Manifest, perspective: str) -> Verdict:
-    print(f"SC-012 Seeded defects reported with {perspective} among the raisers")
+    print(f"SC-012 Seeded domain defects reported with {perspective} among the raisers")
     attributed = 0
+    domain_defects = [d for d in manifest.defects if d.domain]
     for defect in manifest.defects:
+        if not defect.domain:
+            print(f"  {defect.id:<34} not a domain defect; left out")
+    for defect in domain_defects:
         matched = [f for f in report.findings if matches_line(f.location, defect.file, defect.line, manifest.tolerance)]
         with_domain = [f.id for f in matched if perspective in f.raised_by]
         attributed += int(bool(with_domain))
@@ -569,7 +578,7 @@ def score_domain_attribution(report: Report, manifest: Manifest, perspective: st
         else:
             status = "missed"
         print(f"  {defect.id:<34} {status}")
-    total = len(manifest.defects)
+    total = len(domain_defects)
     print(f"  attributed: {attributed}/{total} ({percent(attributed, total)})")
     ok = total > 0 and attributed / total >= SC012_THRESHOLD
     return Verdict("SC-012", "PASS" if ok else "FAIL", f"{attributed}/{total} reported with {perspective} as a raiser")
