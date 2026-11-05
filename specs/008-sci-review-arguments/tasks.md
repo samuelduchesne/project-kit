@@ -288,3 +288,10 @@ T060 README  |  T061 007 contract pointers  |  T062 version bump  |  T063 CHANGE
 - Every new `panel.py` subcommand that writes (`args`, `prefs`, `parts`) accepts `--dry-run` (Principle II).
 - No task writes into a reviewed project except the `--fix` prompt section executed by the orchestrating conversation.
 - Commit after each task or logical group; stop at each checkpoint to validate the story independently.
+
+---
+
+## Phase 10: Convergence
+
+- [X] T069 In `plugins/sci-review/skills/scientific-review/SKILL.md` section 5 step 4, require the large-scope confirmation as a separate question, asked after the scope and its mode are resolved and `parts.json` is written, with the exact wording "This scope has <L> lines in <F> files and will be reviewed in <K> parts. Continue?"; state that it is never folded into another question (for example the mode question of section 3) and that answering another question never counts as confirmation; extend the T035 test in `tests/test_sci_review_arguments.py` to assert this sentence (validation.md section 5.4 observation 2) per FR-022, US4/AC4 (partial)
+- [X] T070 Verify with `sci-review` installed from the marketplace (not from a worktree under `.claude/worktrees/`) whether copying `plugins/sci-review/scripts/scientific-review-panel.js` into the session's scratchpad is refused; record the result in `specs/008-sci-review-arguments/validation.md`; if it is refused, prescribe in `plugins/sci-review/skills/scientific-review/runners/claude-workflow.md` and SKILL.md section 4 a single deterministic fallback (switch to the `claude-agents` runner and record it with `panel.py panel --runner claude-agents`) instead of the ad hoc recoveries observed (validation.md section 5.4 observation 1) per plan: runner selection, Constitution IV (partial)

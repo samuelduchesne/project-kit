@@ -9,6 +9,8 @@ Validation record for tasks T066 to T068 of [tasks.md](./tasks.md), against the 
 | T066 (SC-009, seeded recall) | Done (section 3) | None. Recall 16 of 16, equal to the baseline. |
 | T067 (manual scenarios 1 to 11) | Done | Steps before the panel verified (section 2); scenarios 1 and 2 run live interactively (sections 4.1 to 4.4); scenarios 3 to 11 run live in headless sessions (section 5). Open observations are listed in section 5.4. |
 | T068 (cross-host) | Open | Requires a Codex session and a claude.ai session with the plugin installed. |
+| T069 (separate large-scope confirmation) | Done | SKILL.md section 5 step 4 requires the question on its own; covered by a test. |
+| T070 (Workflow copy from an installed plugin) | Done (section 6) | The copy is refused in a non-interactive `acceptEdits` session; the runner now falls back to the next runner. |
 
 ## 2. Steps before the panel (2026-11-05)
 
@@ -189,3 +191,24 @@ Scenarios 3 to 11 pass, subject to the observations below.
 3. **The finding of scenario 10 was anchored five lines above the seeded line.** The finding names the correct file, function and inverted factor (3.412141633 instead of 0.29307107). Its line is 642, the definition of `WATTS_PER_BTU_PER_HOUR`, whereas the manifest gives line 647, the `return` statement. With the 3-line tolerance of `score.py`, a start line of 642 alone would not match. The run directory had been cleaned, so the finding's full line range could not be checked. The defect was found; the anchoring is outside the scoring tolerance.
 4. **`gh` needs a token in headless sessions.** The first run of scenario 6 stopped before any reviewer ran, because `gh` inside the session could not read the keyring. The session correctly reported the `auth` precondition of SKILL.md section 3 and offered alternatives. The re-run with `GH_TOKEN` set in the environment is the one recorded above.
 5. **Scenario 6 left a throwaway repository.** `samuelduchesne/sci-review-scenario6-throwaway` is private and can be deleted.
+
+## 6. Workflow copy from an installed plugin (T070, 2026-11-05)
+
+This section addresses observation 1 of section 5.4: whether the copy of the panel script into the scratchpad is also refused when the plugin is installed from the marketplace rather than loaded from a worktree.
+
+### 6.1 Method
+
+Two non-interactive sessions ran with Claude Code 2.1.318, `CLAUDE_CONFIG_DIR=~/.claude`, `--permission-mode acceptEdits` and `--allowedTools "Bash Read Write"`. Each was asked to run one command, `cp <source> <scratchpad>/probe-copy.txt`, to make no second attempt, and to report the outcome. Version 0.2.0 is not yet published, so the installed 0.1.0 cache stood in for an installed plugin; the refusal depends on the source path, not on the file's content.
+
+| Probe | Source | Outcome |
+|-------|--------|---------|
+| Installed plugin | `~/.claude/plugins/cache/project-kit/sci-review/0.1.0/scripts/build_workflow.py` | Refused: "Claude requested permissions to edit <source> which is a sensitive file." |
+| Control | a file in the session's scratchpad, outside every `.claude/` directory | Copied |
+
+### 6.2 Result
+
+The refusal is not specific to a worktree. It was observed for both sources tested under a `.claude/` directory: the worktree of section 5.4 and the plugin cache of the configuration directory. Every plugin installed from a marketplace lies in that cache. Other configuration directories (`CLAUDE_CONFIG_DIR`) were not tested. An interactive session can ask the user for permission instead of refusing; this was not tested.
+
+### 6.3 Change
+
+`runners/claude-workflow.md` step 3 now states that a refused copy leads to section 6 (fallback to `claude-agents`, else `sequential`, recorded with `panel.py panel --runner`). It forbids copying the script by another means. `SKILL.md` section 4 states the same fallback. `tests/test_sci_review_workflow_build.py` checks both sentences. The three ad hoc recoveries of observation 1 are therefore no longer permitted.

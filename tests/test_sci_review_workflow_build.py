@@ -144,7 +144,6 @@ process.stdout.write(JSON.stringify(out))
 """
 
 
-@unittest.skipIf(NODE is None, "node is not installed, so the Workflow parity test cannot run")
 class TestNames(unittest.TestCase):
     def test_plugin_registers_no_workflow(self) -> None:
         # A registered workflow is a second slash command, `/sci-review:<name>`, which runs the panel alone with no
@@ -159,8 +158,13 @@ class TestNames(unittest.TestCase):
         self.assertIn('cp "$SOURCE" "$WORKFLOW"', runner)
         self.assertIn("$SCRATCH/scientific-review-panel.js", runner)
         self.assertIn("scripts/scientific-review-panel.js", runner)
+        # T070: a refused copy has one deterministic fallback, not an ad hoc recovery.
+        self.assertIn("When the copy is refused", runner)
+        self.assertIn("Do not copy the script by another means", runner)
+        self.assertIn("the copy of the script into the scratchpad is refused", runner)
 
 
+@unittest.skipIf(NODE is None, "node is not installed, so the Workflow parity test cannot run")
 class TestParity(unittest.TestCase):
     def test_pure_section_matches_panel(self) -> None:
         pure = section(WORKFLOW.read_text(encoding="utf-8"), "// BEGIN PURE", "// END PURE")

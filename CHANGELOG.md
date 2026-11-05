@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `sci-review`: `/sci-review:scientific-review` now opens the skill. The panel Workflow had the same name, so the command ran the Workflow alone, with no scope. The Workflow script is now `scripts/scientific-review-panel.js`, no longer registered, so the plugin has a single slash command; the skill copies it into the session's scratchpad and launches the copy, because the Workflow tool refuses a script path inside an installed plugin.
+- `sci-review`: `/sci-review:scientific-review` now opens the skill. The panel Workflow had the same name, so the command ran the Workflow alone, with no scope. The Workflow script is now `scripts/scientific-review-panel.js`, no longer registered, so the plugin has a single slash command; the skill copies it into the session's scratchpad and launches the copy, because the Workflow tool refuses a script path inside an installed plugin. When the copy itself is refused, as it is in a non-interactive session in `acceptEdits` mode, the review falls back to the next runner and records it.
 
 ## [0.5.2] - 2026-11-04
 

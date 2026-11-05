@@ -948,6 +948,10 @@ class TestParts(RunMixin):
         for sentence in (
             "A review started on your own initiative always asks before a scope that requires confirmation.",
             "will be reviewed in <K> parts. Continue?",
+            # T069 (validation.md section 5.4 observation 2): the confirmation is its own question.
+            "Ask this as a separate question, after the scope and its mode are resolved and `parts.json` is written.",
+            "Never fold it into another question, such as the mode question of section 3",
+            "an answer to another question never counts as confirmation.",
         ):
             self.assertTrue(sentence in text, f"SKILL.md lacks: {sentence}")
 
@@ -1059,7 +1063,8 @@ class TestReproducedSections(unittest.TestCase):
                 (line for line in path.read_text(encoding="utf-8").splitlines() if line.startswith("| `$PANEL` |")), None
             )
             with self.subTest(file=path.name):
-                assert definition is not None, f"{path.name} does not define $PANEL"
+                if definition is None:
+                    self.fail(f"{path.name} does not define $PANEL")
                 self.assertIn("never store it in a shell variable", definition)
 
     def test_comment_sections(self) -> None:

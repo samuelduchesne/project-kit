@@ -8,7 +8,7 @@ The plugin runs on Claude (Claude Code, the Claude desktop app, claude.ai chat a
 |-----------|------|------|
 | Skill | `scientific-review` | Entry point; orchestrates the review on every host |
 | Agent | `scientific-auditor` | Panel member used by the `claude-agents` runner |
-| Workflow | `scientific-review` | Panel phases for the `claude-workflow` runner |
+| Script | `scripts/scientific-review-panel.js` | Panel phases for the `claude-workflow` runner; not registered as a workflow, it is copied to the session's scratchpad and launched by path |
 | Script | `scripts/panel.py` | Deterministic steps: arguments and preferences, scope and targets, review parts, panel levels and limits, extension selection, validation, merge, adjudication, report |
 | Script | `scripts/build_workflow.py` | Regenerates the workflow script, which embeds the protocol, role briefs, dimension documents and message schemas |
 
@@ -128,7 +128,7 @@ A runner executes the panel phases on a given host. The skill selects the first 
 
 | Order | Runner | Condition | Independence |
 |-------|--------|-----------|--------------|
-| 1 | `claude-workflow` | The `Workflow` tool is available and the session has a scratchpad directory, into which the panel script is copied and launched | Independent agents |
+| 1 | `claude-workflow` | The `Workflow` tool is available and the session has a scratchpad directory, into which the panel script is copied and launched; when the copy is refused, the next runner is used | Independent agents |
 | 2 | `codex-subagents` | Running in Codex with multi-agent tools enabled | Independent agents |
 | 3 | `claude-agents` | The `Agent` tool is available with the `sci-review:scientific-auditor` agent | Independent agents |
 | 4 | `sequential` | Otherwise (claude.ai chat, Cowork, Codex with agents disabled) | Not independent |

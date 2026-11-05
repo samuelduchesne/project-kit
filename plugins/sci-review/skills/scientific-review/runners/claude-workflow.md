@@ -61,6 +61,8 @@ The arguments of section 4 are the only information the orchestrating conversati
    ```
 
    Write both paths out in full. Never edit the copy.
+
+   When the copy is refused (for example, a non-interactive session in `acceptEdits` mode reports the source as a sensitive file, because an installed plugin lies under the Claude configuration directory, `~/.claude/` unless `CLAUDE_CONFIG_DIR` names another), apply section 6. Do not copy the script by another means (reading it and writing it out, a shell redirection or another tool): the refusal is the host's decision, and section 6 is the only recovery.
 4. **Launch** the Workflow:
 
    ```text
@@ -94,7 +96,7 @@ The arguments of section 4 are the only information the orchestrating conversati
 
 ## 6. Fallback
 
-When the Workflow is unavailable, the session has no scratchpad directory, the Workflow is declined or fails, or returns a result that `ingest` rejects:
+When the Workflow is unavailable, the session has no scratchpad directory, the copy of the script into the scratchpad is refused, the Workflow is declined or fails, or returns a result that `ingest` rejects:
 
 1. Select the next runner in the order of contracts/invocation.md section 3 that is available: `claude-agents` when the Agent tool lists `sci-review:scientific-auditor`, otherwise `sequential`.
 2. Record it, repeating the panel recorded in `$RUN/panel.json`:

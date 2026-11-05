@@ -91,7 +91,7 @@ plugins/sci-review/
 ├── scripts/
 │   ├── panel.py                                # args, prefs, scope --target, panel --level, parts; budget removed
 │   └── build_workflow.py                       # part loop in the independent round
-├── workflows/scientific-review.js              # regenerated
+├── scripts/scientific-review-panel.js          # regenerated (moved from workflows/scientific-review.js in commit 8c93198; not registered)
 └── skills/scientific-review/
     ├── SKILL.md                                # argument-hint; sections 2, 5, 7 rewritten; --comment, --fix, fixed-later sections
     ├── protocol.md                             # independent round per part; section 10 fallback rules for args/parts
