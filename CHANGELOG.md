@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [sci-review-v0.2.0] - 2026-11-05
+
+Second release of the `sci-review` plugin, tagged separately from `project-kit`.
+
 ### Added
 
 - `sci-review` 0.2.0 accepts explicit arguments: `/sci-review:scientific-review [low|medium|high|xhigh|max] [<pr#>|<branch>|<path>] [--comment] [--fix] [--max-findings <n>|all|default]`, in any order, with an argument hint. On hosts without an argument field, the same arguments are accepted when written in the request.
@@ -83,6 +87,7 @@ First release of the `sci-review` plugin, tagged separately from `project-kit` a
 - A validation workflow that runs `claude plugin validate --strict` on the marketplace and the plugin, checks manifest consistency, installs the plugin in a clean environment, and tests the helper scripts against fixture templates.
 
 [Unreleased]: https://github.com/samuelduchesne/project-kit/compare/v0.5.2...HEAD
+[sci-review-v0.2.0]: https://github.com/samuelduchesne/project-kit/compare/sci-review-v0.1.0...sci-review-v0.2.0
 [0.5.2]: https://github.com/samuelduchesne/project-kit/compare/v0.5.1...v0.5.2
 [sci-review-v0.1.0]: https://github.com/samuelduchesne/project-kit/releases/tag/sci-review-v0.1.0
 [0.5.1]: https://github.com/samuelduchesne/project-kit/compare/v0.5.0...v0.5.1
