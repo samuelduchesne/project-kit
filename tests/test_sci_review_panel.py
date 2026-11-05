@@ -243,11 +243,13 @@ class TestScopeBranch(RunDirMixin):
         scope = self.scope("--baseline", "main")
         self.assertEqual(scope["mode"], "explicit")
 
-    def test_budget_records_remainder(self) -> None:
-        scope = self.scope("--budget", "4")
-        excluded = {e["path"]: e["reason"] for e in scope["excluded"]}
-        self.assertIn("over budget", excluded.values())
-        self.assertIn("budget", scope["note"])
+    def test_no_file_is_excluded_for_size(self) -> None:
+        scope = self.scope()
+        self.assertFalse([e for e in scope["excluded"] if "budget" in e["reason"]])
+        self.assertNotIn("budget", scope["note"])
+        self.assertEqual(scope["total_lines"], 5 + 1 + 4 + 2 + 1)
+        result = run_panel("scope", "--run", str(self.init_run()), "--mode", "branch", "--budget", "4")
+        self.assertEqual(result.code, 2, "--budget was removed (FR-020)")
 
     def test_scope_dry_run(self) -> None:
         run_dir = self.init_run()
@@ -365,6 +367,58 @@ class TestMerge(unittest.TestCase):
                 batches = panel.batch_clusters(clusters, case["max_batches"])
                 self.assertEqual([b.to_json() for b in batches], case["expected"]["batches"])
                 self.assertLessEqual(len(batches), case["max_batches"])
+
+    def test_merge_clusters_candidates_of_two_parts(self) -> None:
+        """FR-021: a defect raised in two review parts is one location cluster, so it is debated once."""
+        project = Path(tempfile.mkdtemp(prefix="sci-review-project-"))
+        self.addCleanup(shutil.rmtree, project, True)
+        run_dir = Path(run_panel("init", "--project", str(project)).out.strip())
+        self.addCleanup(shutil.rmtree, run_dir, True)
+        run_panel("panel", "--run", str(run_dir), "--runner", "claude-agents")
+        (run_dir / "candidates").mkdir()
+
+        def candidate(part: str, line: int) -> dict:
+            return {
+                "id": f"theorist-{part}-1",
+                "raised_by": "theorist",
+                "file": "src/units.py",
+                "line_start": line,
+                "line_end": line,
+                "dimension": "physical-modelling-and-units",
+                "severity": "high",
+                "summary": "inverted conversion factor",
+                "trigger": "q = 1000",
+                "wrong_output": "3412 instead of 293",
+                "fix": "divide",
+                "evidence": "line",
+            }
+
+        for part, line in (("p1", 40), ("p2", 41)):
+            message = {"perspective": "theorist", "part": part, "findings": [candidate(part, line)],
+                       "checked_items": [], "notes": ""}  # fmt: skip
+            (run_dir / "candidates" / f"theorist--{part}.json").write_text(json.dumps(message))
+        result = run_panel("merge", "--run", str(run_dir))
+        self.assertEqual(result.code, 0, result.err)
+        clusters = json.loads(result.out)["clusters"]
+        self.assertEqual(len(clusters), 1)
+        self.assertEqual(clusters[0]["members"], ["theorist-p1-1", "theorist-p2-1"])
+
+    def test_duplicate_candidate_ids_across_parts_fail(self) -> None:
+        project = Path(tempfile.mkdtemp(prefix="sci-review-project-"))
+        self.addCleanup(shutil.rmtree, project, True)
+        run_dir = Path(run_panel("init", "--project", str(project)).out.strip())
+        self.addCleanup(shutil.rmtree, run_dir, True)
+        run_panel("panel", "--run", str(run_dir), "--runner", "claude-agents")
+        (run_dir / "candidates").mkdir()
+        finding = {"id": "theorist-1", "raised_by": "theorist", "file": "a.py", "line_start": 1, "line_end": 1,
+                   "dimension": "numerical-stability", "severity": "low", "summary": "s", "trigger": None,
+                   "wrong_output": None, "fix": "f", "evidence": "e"}  # fmt: skip
+        for part in ("p1", "p2"):
+            message = {"perspective": "theorist", "part": part, "findings": [finding], "checked_items": [], "notes": ""}
+            (run_dir / "candidates" / f"theorist--{part}.json").write_text(json.dumps(message))
+        result = run_panel("merge", "--run", str(run_dir))
+        self.assertEqual(result.code, 1)
+        self.assertIn("theorist-1", result.err)
 
     def test_never_clusters_across_files(self) -> None:
         case = json.loads((MESSAGES / "merge" / "basic.json").read_text(encoding="utf-8"))
@@ -563,6 +617,34 @@ class TestReport(GoldenMixin):
         self.assertFalse((run_dir / "report.json").exists())
 
 
+class TestPartStatus(RunDirMixin):
+    """T042: report derives each part's status from the candidate files, identically on every runner."""
+
+    def test_one_missing_candidate_file_yields_one_incomplete_part(self) -> None:
+        for name in ("a.py", "b.py"):
+            (self.project / "pkg" / name.split(".")[0]).mkdir(parents=True)
+            (self.project / "pkg" / name.split(".")[0] / name).write_text("x = 1\n" * 1500)
+        run_dir = self.init_run()
+        self.assertEqual(run_panel("scope", "--run", str(run_dir), "--mode", "repository").code, 0)
+        self.assertEqual(run_panel("parts", "--run", str(run_dir)).code, 0)
+        parts = json.loads((run_dir / "parts.json").read_text())
+        self.assertEqual([p["id"] for p in parts["parts"]], ["p1", "p2"])
+        run_panel("panel", "--run", str(run_dir), "--runner", "claude-agents", "--perspectives", "theorist,methodologist")
+        (run_dir / "candidates").mkdir()
+        for perspective, part in (("theorist", "p1"), ("methodologist", "p1"), ("theorist", "p2")):
+            message = {"perspective": perspective, "part": part, "findings": [], "checked_items": [], "notes": ""}
+            (run_dir / "candidates" / f"{perspective}--{part}.json").write_text(json.dumps(message))
+        (run_dir / "adjudication.json").write_text(json.dumps({"findings": [], "rejected": [], "records": []}))
+        result = run_panel("report", "--run", str(run_dir), "--format", "json")
+        self.assertEqual(result.code, 0, result.err)
+        report = json.loads(result.out)
+        self.assertEqual((report["parts"], report["incomplete_parts"]), (2, ["p2"]))
+        unreviewed = [u for u in report["unreviewed"] if "review part p2" in u["reason"]]
+        self.assertEqual([u["path"] for u in unreviewed], ["pkg/b/b.py"])
+        markdown = run_panel("report", "--run", str(run_dir)).out
+        self.assertIn("Not completed: p2", markdown)
+
+
 class TestIngest(RunDirMixin):
     def panel_run(self) -> dict:
         full = GOLDEN / "full"
@@ -605,6 +687,23 @@ class TestIngest(RunDirMixin):
         for path in (GOLDEN / "full").glob("debate/**/*.json"):
             relative = path.relative_to(GOLDEN / "full")
             self.assertEqual(path.read_text(encoding="utf-8"), (run_dir / relative).read_text(encoding="utf-8"))
+
+    def test_ingest_names_candidate_files_by_part(self) -> None:
+        run_dir = self.init_run()
+        source = run_dir / "workflow-result.json"
+        data = self.panel_run()
+        for message in data["candidates"]:
+            message["part"] = "p1"
+        data["candidates"].append({"perspective": "theorist", "part": "../p2", "findings": [], "checked_items": [],
+                                   "notes": ""})  # fmt: skip
+        source.write_text(json.dumps(data), encoding="utf-8")
+        result = run_panel("ingest", "--run", str(run_dir), str(source))
+        self.assertEqual(result.code, 0, result.err)
+        self.assertTrue((run_dir / "candidates" / "theorist--p1.json").is_file())
+        self.assertFalse((run_dir / "candidates" / "theorist.json").exists())
+        self.assertEqual(len(list((run_dir / "candidates").glob("*.json"))), 5)
+        notices = json.loads((run_dir / "notices.json").read_text(encoding="utf-8"))
+        self.assertTrue(any("theorist candidates" in n for n in notices), notices)
 
     def test_ingest_rejects_ids_that_are_not_kebab_case(self) -> None:
         run_dir = self.init_run()
@@ -762,10 +861,11 @@ class TestScopeModes(RunDirMixin):
         result, _scope = self.scope("--mode", "paths")
         self.assertEqual(result.code, 2)
 
-    def test_budget(self) -> None:
-        result, scope = self.scope("--mode", "repository", "--budget", "2")
+    def test_no_budget(self) -> None:
+        result, scope = self.scope("--mode", "repository")
         self.assertEqual(result.code, 0, result.err)
-        self.assertTrue(any(e["reason"] == "over budget" for e in scope["excluded"]))
+        self.assertFalse(any("budget" in e["reason"] for e in scope["excluded"]))
+        self.assertEqual(self.scope("--mode", "repository", "--budget", "2")[0].code, 2)
 
     def test_non_git_repository_mode(self) -> None:
         shutil.rmtree(self.project / ".git")

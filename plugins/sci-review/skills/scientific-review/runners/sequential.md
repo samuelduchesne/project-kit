@@ -22,7 +22,7 @@ Because one reviewer performs every role, the perspectives are not independent a
 ## 2. Rules
 
 1. **One role at a time.** Before each task, state its header (section 3) in the conversation, read the role brief, and work only from the inputs the header lists. Write the output file before starting the next task.
-2. **Independent round discipline.** Perform the perspectives in the order of `panel.perspectives`. Write each perspective's candidates file before reading the next perspective's brief. While performing a perspective, do not reread, consult or refer to any candidates file already written; review the scope afresh from that perspective's brief.
+2. **Independent round discipline.** Perform the perspectives in the order of `panel.perspectives`. Each perspective completes every review part, in the order `p1`, `p2`, ... of `$RUN/parts.json`, before the next perspective starts (feature 007 FR-028). Write each candidates file before starting the next task. While performing a perspective, do not reread, consult or refer to any candidates file of another perspective; review each part afresh from that perspective's brief.
 3. **Debate discipline.** In round 0, state each member's positions from the merge ruling and, for a perspective, its own candidates file only; do not revise or refer to positions already written in round 0. In round k >= 1, use only positions of rounds 0 to k-1.
 4. **Writing files.** Write each message as one JSON object with a file-writing tool or a shell heredoc, at the path given in its header. Write nothing outside `$RUN`, and never create, modify or delete a file of `$PROJECT`. Use git only for read-only commands.
 5. **Validation.** Validate each message with `$PANEL validate --schema <name> <file>`. When validation fails, correct the message once from the validator's errors and write it again to the same path. When the second attempt also fails, delete the file and record:
@@ -52,16 +52,17 @@ Output file: <absolute path inside $RUN>
 
 The phase-specific fields are as follows.
 
-### 3.1 Independent round (one task per perspective `<p>`)
+### 3.1 Independent round (one task per perspective `<p>` and review part `<q>` of `$RUN/parts.json`)
 
 - Role: `<p.id>`; phase `independent round`; role brief `<p.brief_path>`.
-- Task: `Review the scope under every dimension and write the candidate findings and checked items.`
+- Task: `Review review part <q.id> of the scope under every dimension and write the candidate findings and checked items. Review every line of the part; you may read any file of the reviewed project, inside or outside the scope, to follow a reference, but raise findings only on lines of the part. Set `part` to `<q.id>`. When parts.json holds more than one part, number your findings `<p.id>-<q.id>-1`, `<p.id>-<q.id>-2`, ...; otherwise `<p.id>-1`, `<p.id>-2`, ....`
 - Inputs:
   - `$SKILL/protocol.md`
   - `$SKILL/dimensions/mathematical-derivations.md`, `numerical-stability.md`, `physical-modelling-and-units.md`, `statistical-integrity.md`, `algorithmic-correctness.md` (absolute paths; loaded on demand)
   - each path of `<p.reference_paths>` (domain perspectives only)
   - `$RUN/scope.json`
-- Output schema: `candidate-findings`. Output file: `$RUN/candidates/<p.id>.json`.
+  - `$RUN/parts.json` (review part `<q.id>`: its files and line ranges)
+- Output schema: `candidate-findings`. Output file: `$RUN/candidates/<p.id>--<q.id>.json`.
 
 ### 3.2 Merge (one task per batch `<b>`)
 
@@ -76,7 +77,7 @@ The phase-specific fields are as follows.
 - Task: `State the round 0 position of <m> on every merged finding of batch <b>.`
 - Inputs:
   - `$RUN/merge/batch-<b>.json`
-  - for a perspective only: `$RUN/candidates/<m>.json`, when that file exists
+  - for a perspective only: every file `$RUN/candidates/<m>--*.json` that exists (its candidates of every part)
 - Output schema: `debate-positions`. Output file: `$RUN/debate/batch-<b>/round-0/<m>.json`.
 
 ### 3.4 Debate round k >= 1 (one task per member `<m>` called in round `<k>` of batch `<b>`)
@@ -100,7 +101,7 @@ The phase-specific fields are as follows.
 ## 4. Steps
 
 1. **Project baseline.** When `$PROJECT` is a git repository, run `git -C "$PROJECT" status --porcelain --ignored` and keep its output as the baseline. Otherwise, the baseline is the modification time of `$RUN/run.json`.
-2. **Independent round.** For each perspective in turn, perform the task of section 3.1, write `$RUN/candidates/<id>.json`, and validate it with `--schema candidate-findings` (rule 2.5) before reading the next perspective's brief.
+2. **Independent round.** For each perspective in turn, and for each review part in order, perform the task of section 3.1, write `$RUN/candidates/<id>--<part>.json`, and validate it with `--schema candidate-findings` (rule 2.5) before starting the next task. When the host stops the review partway, the parts whose candidates files are missing are reported as not reviewed by `panel.py report`.
 3. **Merge.**
    1. Run `$PANEL merge --run $RUN > $RUN/clusters.json`. The file holds `clusters` (each with `id`, `suggested_finding_id`, `file`, `line_start`, `line_end`, `members` and `batch`) and `batches` (each with `batch`, `clusters` and `next_finding_id`). The `next_finding_id` of batch b is the first identifier of the range reserved for findings created by splits in that batch, F(1000*b + 1) onward (`F1001` for batch 1, `F2001` for batch 2), so that moderators working in parallel never assign the same identifier.
    2. When `batches` is empty, no candidate finding was raised: skip steps 4 and 5 and go to step 6.
@@ -141,12 +142,14 @@ Each `panel.py` step is replaced as follows.
 |------|--------------------|-------------------|
 | Opening | `init` | Create a directory under the system temporary directory (for example with `mktemp -d`), never inside the project, as `$RUN`, and write `$RUN/run.json` as `{"project": <absolute project path>, "run": <absolute run path>}`. |
 | Opening | `scope` | protocol.md section 10, rule **scope**: write `$RUN/scope.json` with `mode`, `base`, `head`, `files` (each with `path`, `language` and `line_ranges`), `excluded` (each with `path` and `reason`) and a one-sentence `note`. When no base can be determined, ask the user. |
+| Opening | `args` | protocol.md section 10, rule **args**: write `$RUN/arguments.json` with `level`, `level_source`, `target_text`, `near_level`, `comment`, `fix`, `max_findings`, `max_findings_source`, `notes` and `raw`. Preferences cannot be stored without `python3`; add the note that they could not be read or stored. |
+| Opening | `parts` | protocol.md section 10, rule **parts**: write `$RUN/parts.json` with `threshold` (6000), `total_lines`, `confirm_required` and `parts` (each with `id`, `files`, `lines` and `status: "pending"`). |
 | Opening | `select-extensions` | protocol.md section 10, rule **select-extensions**, applied to each discovered `extension.json`. |
-| Opening | `panel` | protocol.md section 6 limits: write `$RUN/panel.json` with `panel` (`perspectives` with absolute `brief_path` and `reference_paths`, `rebuttal_rounds`, `max_batches`, `runner: "sequential"`, `independent: false`, `models: []`), `extensions` and `notices`. Default perspective briefs are `$SKILL/roles/<id>.md`. |
+| Opening | `panel` | protocol.md section 6, level and limits: write `$RUN/panel.json` with `panel` (`perspectives` with absolute `brief_path` and `reference_paths`, `rebuttal_rounds`, `max_batches`, `runner: "sequential"`, `independent: false`, `models: []`, `level`, `level_source`, `overrides`, `parts`), `extensions` and `notices`. Default perspective briefs are `$SKILL/roles/<id>.md`. |
 | Runner | `validate` | Check each message by eye against its schema: every required field present, no unknown field, enumerations respected, `line_end >= line_start`, each candidate's `raised_by` equal to the message `perspective`, each position's `member` and `round` equal to the message's. Rule 2.5 applies, with the notice added to `$RUN/notices.json`. |
 | Runner | `merge` | protocol.md section 7: cluster and batch the candidates, and write the result to `$RUN/clusters.json` in the form of step 3.1, with suggested finding ids `F1`, `F2`, ... in cluster order and the `next_finding_id` of batch b set to F(1000*b + 1). |
 | Runner | `notice` | Append the sentence to `$RUN/notices.json`. |
 | Runner | debate stop rule | protocol.md section 8, by inspection of the position files. |
 | Closing | `adjudicate` | protocol.md section 5: for every merged finding, collect the positions of its batch, apply the six rules in order, stop on a `withdraw` from a member outside `raised_by`, and attach the moderator notes. |
 | Closing | `report` | protocol.md section 10, rule **report**: write the report in the eight sections of contracts/report.md section 1, with every finding field of section 2, the notices of `$RUN/notices.json` and `panel.json`, and deliver it as a Markdown table per label. |
-| Closing | `clean` | Delete `$RUN` unless the user asked to keep it. |
+| Closing | `clean` | Delete `$RUN` unless the user asked to keep it, and delete every git ref under `refs/sci-review/` with `git update-ref -d`. |

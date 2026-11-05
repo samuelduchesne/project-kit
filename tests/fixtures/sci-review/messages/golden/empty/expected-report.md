@@ -6,7 +6,11 @@ Changes since merge-base with origin/main on branch docs (0123456789ab), includi
 
 Runner: `sequential`. The perspectives were not independent agents.
 
+Review parts: 1.
+
 ## Panel
+
+Effort level: medium (default).
 
 - Theorist (`theorist`, source `sci-review`)
 - Numerical analyst (`numerical-analyst`, source `sci-review`)

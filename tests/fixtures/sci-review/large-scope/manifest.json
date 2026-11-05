@@ -1,0 +1,20 @@
+{
+  "description": "Large-scope fixture of feature 008 (SC-008): about 18,000 reviewable lines of Python, with one seeded defect in the last file in path order. score.py matches a finding to an entry when the files are equal and the entry line lies within three lines of the finding range.",
+  "match_tolerance": 3,
+  "defects": [
+    {
+      "id": "py-btuh-to-watts",
+      "file": "units/conversions.py",
+      "line": 647,
+      "anchor": "return heat_flow_btu_per_hour * 3.412141633",
+      "dimension": "physical-modelling-and-units",
+      "language": "python",
+      "severity": "high",
+      "description": "btu_per_hour_to_watts multiplies by 3.412 (BTU/h per W) instead of 0.29307 (W per BTU/h): the conversion factor is inverted.",
+      "trigger": "btu_per_hour_to_watts(3412.14), a heat flow of 1 kW",
+      "wrong_output": "11642.7 W instead of 1000 W"
+    }
+  ],
+  "lookalikes": [],
+  "contested": []
+}

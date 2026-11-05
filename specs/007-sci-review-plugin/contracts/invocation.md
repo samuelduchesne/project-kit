@@ -8,6 +8,8 @@
 
 ## 2. Arguments (read from the request, all optional)
 
+> Feature 008 adds explicit arguments (an effort level, a pull request, branch or paths target, `--comment`, `--fix` and `--max-findings`), specified in [008 contracts/arguments.md](../../008-sci-review-arguments/contracts/arguments.md) and [008 contracts/targets-and-parts.md](../../008-sci-review-arguments/contracts/targets-and-parts.md). The natural-language arguments below remain valid where no explicit argument covers them; the defaults of `rebuttal_rounds`, `max_batches` and `perspectives` are those of the `medium` level.
+
 | Argument | Type | Default | Limits |
 |----------|------|---------|--------|
 | `mode` | `branch` \| `repository` \| `paths` | `branch` | |

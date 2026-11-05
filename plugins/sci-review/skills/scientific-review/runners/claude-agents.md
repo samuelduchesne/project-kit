@@ -43,7 +43,7 @@ Every path placed in a prompt is expanded to an absolute path first; the agents 
 
 ## 4. Prompt templates
 
-Each launch is an Agent tool call with `subagent_type: "sci-review:scientific-auditor"`, a short `description` (for example `sci-review theorist independent`), and a `prompt` of the following form. Lines in angle brackets are filled by the orchestrator; no other content is added.
+Each launch is an Agent tool call with `subagent_type: "sci-review:scientific-auditor"`, a short `description` (for example `sci-review theorist independent p2`), and a `prompt` of the following form. Lines in angle brackets are filled by the orchestrator; no other content is added.
 
 ```text
 sci-review panel task: <role> (<phase>)
@@ -62,16 +62,17 @@ Write exactly one file, the output file, as one JSON object conforming to the ou
 
 The phase-specific fields are as follows.
 
-### 4.1 Independent round (one prompt per perspective `<p>`)
+### 4.1 Independent round (one prompt per perspective `<p>` and review part `<q>` of `$RUN/parts.json`)
 
 - Role: `<p.id>`; phase `independent round`; role brief `<p.brief_path>`.
-- Task: `Review the scope under every dimension and write your candidate findings and checked items.`
+- Task: `Review review part <q.id> of the scope under every dimension and write your candidate findings and checked items. Review every line of the part; you may read any file of the reviewed project, inside or outside the scope, to follow a reference, but raise findings only on lines of the part. Set `part` to `<q.id>`. When parts.json holds more than one part, number your findings `<p.id>-<q.id>-1`, `<p.id>-<q.id>-2`, ...; otherwise `<p.id>-1`, `<p.id>-2`, ....`
 - Inputs:
   - `$SKILL/protocol.md`
   - `$SKILL/dimensions/mathematical-derivations.md`, `numerical-stability.md`, `physical-modelling-and-units.md`, `statistical-integrity.md`, `algorithmic-correctness.md` (absolute paths; loaded on demand)
   - each path of `<p.reference_paths>` (domain perspectives only)
   - `$RUN/scope.json`
-- Output schema: `$SCHEMAS/candidate-findings.schema.json`. Output file: `$RUN/candidates/<p.id>.json`.
+  - `$RUN/parts.json` (review part `<q.id>`: its files and line ranges)
+- Output schema: `$SCHEMAS/candidate-findings.schema.json`. Output file: `$RUN/candidates/<p.id>--<q.id>.json`.
 
 ### 4.2 Merge (one prompt per batch `<b>`)
 
@@ -86,7 +87,7 @@ The phase-specific fields are as follows.
 - Task: `State your round 0 position on every merged finding of batch <b>.`
 - Inputs:
   - `$RUN/merge/batch-<b>.json`
-  - for a perspective only: `$RUN/candidates/<m>.json`, when that file exists
+  - for a perspective only: every file `$RUN/candidates/<m>--*.json` that exists (its candidates of every part)
 - Output schema: `$SCHEMAS/debate-positions.schema.json`. Output file: `$RUN/debate/batch-<b>/round-0/<m>.json`.
 
 ### 4.4 Debate round k >= 1 (one prompt per member `<m>` called in round `<k>` of batch `<b>`)
@@ -118,9 +119,9 @@ Correct the file and write it again to the same path. Change nothing else.
 ## 5. Steps
 
 1. **Independent round.**
-   1. In a single message, launch one `sci-review:scientific-auditor` agent per perspective, each with the prompt of section 4.1.
+   1. Launch one `sci-review:scientific-auditor` agent per perspective and review part of `$RUN/parts.json`, each with the prompt of section 4.1. Launch them in a single message when they fit within the host's concurrency limit; otherwise launch them in batches no larger than that limit, each batch in a single message, starting the next batch when the previous one has finished. Batches never change an agent's inputs.
    2. Wait for all of them.
-   3. Validate each `$RUN/candidates/<id>.json` with `--schema candidate-findings`, and apply rule 3.4.
+   3. Validate each `$RUN/candidates/<id>--<part>.json` with `--schema candidate-findings`, and apply rule 3.4. Write no part status: `panel.py report` derives it, and reports a part whose candidates file is missing or invalid as not reviewed.
 2. **Merge.**
    1. Run `$PANEL merge --run $RUN > $RUN/clusters.json`. The file holds `clusters` (each with `id`, `suggested_finding_id`, `file`, `line_start`, `line_end`, `members` and `batch`) and `batches` (each with `batch`, `clusters` and `next_finding_id`). The `next_finding_id` of batch b is the first identifier of the range reserved for findings created by splits in that batch, F(1000*b + 1) onward (`F1001` for batch 1, `F2001` for batch 2), so that moderators working in parallel never assign the same identifier.
    2. When `batches` is empty, no candidate finding was raised: skip steps 3 and 4 and go to step 5.

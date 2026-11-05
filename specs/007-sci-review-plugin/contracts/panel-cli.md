@@ -5,7 +5,7 @@ Standard library only, Python 3.10 or later. Every subcommand reads JSON files, 
 | Subcommand | Arguments | Output |
 |------------|-----------|--------|
 | `init` | `--project PATH` | creates a run directory under the system temp dir; prints its path |
-| `scope` | `--run DIR --mode {branch,repository,paths} [--baseline REF] [--path P ...] [--budget N]` | writes `scope.json` (ReviewScope) |
+| `scope` | `--run DIR --mode {branch,repository,paths} [--baseline REF] [--path P ...] [--budget N]` | writes `scope.json` (ReviewScope). Superseded by feature 008: `scope` gains `--target`, `--mode` becomes optional, and `--budget` and the `over budget` exclusion are removed; see [008 contracts/targets-and-parts.md](../../008-sci-review-arguments/contracts/targets-and-parts.md). Feature 008 also adds `args`, `prefs` and `parts` ([008 contracts/arguments.md](../../008-sci-review-arguments/contracts/arguments.md)). |
 | `select-extensions` | `--run DIR --declaration FILE ...` | writes `panel.json` extension statuses, including `recommended` known extensions |
 | `panel` | `--run DIR [--perspectives ...] [--rounds N] [--batches N] --runner R [--models ROLE=MODEL ...]` | writes `panel.json` with clamped values |
 | `validate` | `--schema NAME FILE` | prints errors; exit 1 if invalid (types, enums, required, `additionalProperties`, patterns, nullable, minimum, `minItems`, `minLength`, `if`/`then` on `const` or `enum`, and the single-message semantic checks) |

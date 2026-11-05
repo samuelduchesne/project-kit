@@ -3,7 +3,7 @@ export const meta = {
   description: 'Panel review of code for scientific correctness: independent perspectives, merge, debate and moderator notes; returns every panel message for panel.py',
   whenToUse: 'Launched by the sci-review:scientific-review skill after panel.py has resolved the scope and the panel. Not for style, lint or documentation reviews.',
   phases: [
-    { title: 'Independent', detail: 'one agent per perspective reviews the scope without seeing the others' },
+    { title: 'Independent', detail: 'one agent per perspective and review part reviews its part without seeing the others' },
     { title: 'Merge', detail: 'the moderator confirms or splits the location clusters of each debate batch' },
     { title: 'Debate', detail: 'perspectives and the defender state positions over rebuttal rounds, per batch' },
     { title: 'Notes', detail: 'the moderator records the arguments of each finding, without labels' },
@@ -19,7 +19,7 @@ export const meta = {
 
 // BEGIN GENERATED
 // Sources: skills/scientific-review/protocol.md, roles/*.md, dimensions/*.md, schemas/*.schema.json
-const PROTOCOL = "# Panel protocol\n\nThis document is the single source of the review protocol. Every runner (Claude Workflow, Codex subagents, Claude agents, sequential) follows it, and `scripts/panel.py` implements its deterministic steps. The Workflow script embeds this file verbatim.\n\n## 1. Roles\n\n- **Perspective reviewers**: the five defaults (`theorist`, `numerical-analyst`, `experimentalist`, `methodologist`, `computer-scientist`) and any selected domain perspective contributed by an extension. Each reviews the full scope across all five dimensions from its own perspective.\n- **Defender**: argues that each finding is not a defect. Always present. Never raises findings and never withdraws.\n- **Moderator**: merges duplicate candidates, then writes notes on each finding after its debate. Always present. Never introduces findings and never assigns labels.\n\n## 2. Phases\n\nThe review proceeds in three phases (FR-023).\n\n1. **Independent round.** Each perspective reviewer reviews the scope without access to any other reviewer's output and writes one candidate-findings message.\n2. **Debate.** `panel.py merge` clusters the candidates by location and groups the clusters into debate batches. For each batch, the moderator confirms or splits each cluster (merge ruling). The perspectives and the defender then state positions on every merged finding of the batch in round 0, followed by at most `rebuttal_rounds` rebuttal rounds. When the debate of a batch ends, the moderator writes notes on every finding of the batch.\n3. **Adjudication.** The moderator's notes have been written; `panel.py adjudicate` then computes each finding's label, or rejects it, from the recorded positions by the rules of section 5, and attaches the notes. No model takes part in this step.\n\n## 3. Role inputs\n\nEach role receives exactly the inputs below and nothing else (SC-011).\n\n| Phase | Role | Receives | Must not receive |\n|-------|------|----------|------------------|\n| Independent | perspective | its brief; `protocol.md`; the five dimension documents (loaded on demand); extension reference material if it is a domain perspective; `scope.json`; output path | any other perspective's output |\n| Merge | moderator | its brief; all `candidates/*.json`; the clusters from `panel.py merge` | none |\n| Debate round 0 | each perspective and defender | its brief; the batch's merged findings; its own independent output | other members' round 0 positions |\n| Debate round k > 0 | each perspective and defender | its brief; the batch's merged findings; all positions from rounds 0 to k-1 | positions from round k |\n| Moderator notes | moderator | its brief; the batch's merged findings; all positions of the batch | labels (they are computed afterwards) |\n\n## 4. Severity\n\nEach finding carries one of three severities (FR-018):\n\n- **High**: produces a wrong result under realistic inputs.\n- **Medium**: produces a wrong result only under plausible edge-case inputs, or prevents reproduction of a result.\n- **Low**: a latent risk that does not currently produce a wrong result.\n\nA merged finding takes the highest severity among its members unless the moderator records a `severity_reason` for a lower one.\n\n## 5. Stances and adjudication\n\n**Stance.** A member's stance on a finding is its latest position on that finding. A member that is not called in a later round (because section 8 did not call it, or the batch stopped early) keeps its latest position. A raiser that recorded no position is taken to accept the finding it raised.\n\n**Position identifiers.** A position is identified as `<member>:<finding_id>:<round>`, for example `defender:F3:0`. The `answers` field of a position lists the identifiers of the positions it responds to.\n\n**Answered objection.** A defender objection is a defender position with stance `challenge`. It is answered when a later position by any perspective reviewer lists it in `answers` and the defender does not challenge again in a subsequent round. A defender objection is therefore unanswered when the defender's latest stance on the finding is `challenge` and either no perspective position has answered any earlier defender position on the finding, or the defender challenged again in a round after the latest such answer. A challenge the defender repeats in the same round as the answer does not reopen the objection, because the defender had not yet seen the answer.\n\n**Undebated findings.** A merged finding on which no member recorded a position, and a candidate finding that no merge ruling includes, are reported as notices.\n\n**Perspectives.** For the rules below, \"perspectives\" means every perspective reviewer in the panel, default and domain, the raiser included, and never the defender. The majority denominator is the number of perspectives in the panel.\n\nThe rules are applied in order; the first that matches decides:\n\n1. **Raiser withdrew**: every raiser of the finding has stance `withdraw`. The finding is rejected (reason `withdrawn`).\n2. **Only one perspective accepts and a defender objection is unanswered**: fewer than two perspectives have stance `accept`, and a defender objection is unanswered. The finding is rejected (reason `unsupported`). A co-raiser that still accepts counts as a second perspective, because it detected the defect independently.\n3. **No concrete failure scenario**: `trigger` or `wrong_output` is null. The finding is at most `contested`, so it is labelled `contested`.\n4. **Consensus**: no perspective has stance `challenge` or `withdraw` (a co-raiser that withdraws dissents), at least two perspectives have stance `accept` (so that no finding is reported as consensus on its raiser's word alone, FR-013), and no defender objection is unanswered. Label `consensus`.\n5. **Majority**: more than half of the perspectives have stance `accept`. Label `majority`.\n6. **Otherwise**: label `contested`.\n\n**Several raisers.** When `raised_by` lists more than one perspective, each raiser is a perspective like any other for rules 2, 4 and 5, and its stance is its own latest position (accept when it recorded none). The finding is rejected as withdrawn only when every raiser withdraws (rule 1). One raiser's withdrawal does not reject the finding and does not remove that raiser from `raised_by`; it is a dissenting stance, so it prevents consensus (rule 4) and does not count towards a majority (rule 5).\n\n`withdraw` is valid only from a member listed in the finding's `raised_by`; any other `withdraw` is a protocol violation and stops adjudication with exit code 1.\n\nThe moderator's notes are attached after labelling: `argument_for`, `argument_against` and `deciding_assumption` only to contested findings, `rejection_reason` only to rejected findings (replacing `withdrawn` or `unsupported` unless it is \"Not rejected.\"), and `no_trigger_reason` to every finding whose `trigger` or `wrong_output` is null.\n\n## 6. Limits\n\n- Panel size 2 to 7 perspectives, counting domain perspectives; a request for more than are available yields all of them.\n- Rebuttal rounds 0 to 3, default 2. Round 0 (initial positions) always runs; rounds 1 to `rebuttal_rounds` follow.\n- max_batches 1 to 4, default 2.\n- Out-of-range values are clamped, and the report states the panel actually used.\n\n## 7. Clustering and batching\n\n**Clustering.** Two candidates belong to the same location cluster when they are in the same file and their line ranges are within three lines of each other: candidate B joins the cluster of candidate A when `B.line_start <= max_end + 3`, where `max_end` is the largest `line_end` in A's cluster. Candidates in different files never cluster. Within each file, candidates are taken in order of `(line_start, line_end, id)`. Files are taken in lexicographic order, and clusters are numbered `C1`, `C2`, ... in that order; the suggested merged finding identifier of cluster `Cn` is `Fn`. When the moderator splits a cluster, each additional finding takes the next identifier of its batch's reserved range: batch b reserves `F(1000 b + 1)` onward (`F1001`, `F1002`, ... for batch 1, `F2001`, ... for batch 2), so that moderators of different batches never assign the same identifier.\n\n**Batching.** Clusters are grouped into at most `max_batches` debate batches by file: all clusters of one file go to the same batch. Files are taken in order of decreasing cluster count (ties broken by file name), and each is assigned to the batch that currently holds the fewest clusters (ties broken by the lowest batch number). Empty batches are dropped, and batches are numbered from 1.\n\n## 8. Debate stop rule\n\nThe debate of a batch runs round 0, then rebuttal rounds 1 to `rebuttal_rounds`. Round 0 and round 1 call every member. After each rebuttal round k (k >= 1), each member's stance on each finding (carried forward when the member was not called) is compared with its stance after round k-1.\n\n1. **Stop.** If no stance changed in round k, the batch stops.\n2. **Who is called in round k+1.** Otherwise round k+1 calls the members whose stance changed in round k, and, for every finding on which some member newly took the stance `challenge` in round k, every perspective whose current stance on that finding is `accept` (its raisers among them), so that the new objection can be answered. Every other member is settled for that round and keeps its latest position.\n\n`panel.py debate-status --run DIR --batch B --round K` applies this rule to the recorded positions and prints `{\"stopped\": ..., \"call\": [...]}`.\n\nAn objection first raised in the final rebuttal round cannot be answered, because no round follows it; it counts as unanswered in section 5. Raise the number of rebuttal rounds when this matters.\n\n## 9. Message validation\n\nEvery message conforms to its JSON Schema in `schemas/`. A message that fails validation is returned once to its author with the validator's errors; a second failure drops the message, and the report carries a notice naming the role.\n\n## 10. Written fallback rules\n\nWhen `python3` is absent, perform each `panel.py` step by hand, in the conversation, as follows, and add the notice \"python3 was not available; the deterministic steps were performed by hand from the written rules of protocol.md.\" to the report.\n\n- **init**: use a directory under the system temporary directory, never inside the project, as `$RUN`.\n- **scope**: for branch mode, find the default branch (`git symbolic-ref --quiet --short refs/remotes/origin/HEAD`, else the first of `origin/main`, `origin/master`, `main`, `master` that exists), take `git merge-base <default> HEAD` as the base, and list the files of `git diff --name-only <base>` plus untracked files from `git ls-files --others --exclude-standard`. If no base can be determined, ask the user. Exclude `node_modules/`, `dist/`, lock files and files marked `linguist-generated` or `linguist-vendored`, recording each with its reason. For repository mode, list `git ls-files`; for paths mode, list the tracked files under the named paths. Exclude binary files and, in branch mode, deleted files. A file the user named in paths mode is kept even when it is generated or vendored. Notebooks (`.ipynb`) are reviewed as Python code. Then apply the line budget (`--budget`, default 6000 lines): take the kept files in path order, counting the changed lines of each in branch mode and all its lines otherwise; always keep the first file, and exclude with reason `over budget` every later file that would take the total past the budget. The scope note reads \"<description>: <n> files, <lines> lines.\" and, when files were excluded for the budget, \"<description>: <n> files, <lines> lines; <k> files over the <budget>-line budget were not reviewed.\"\n- **select-extensions**: for each extension declaration, mark it `failed` if a required field is missing or `contract_version` is not 1; otherwise `selected` if any scoped file matches a glob or file type (case-insensitively) or is in a listed language and matches an import pattern; otherwise `not-applicable`. A selected extension whose perspective id is already in the panel is `failed`. Then, if the known extension `building-energy-sci-review-extension` (plugin idfkit) was not discovered, mark it `recommended`, with the reason \"not installed; it would apply to <first matching file>. Install it with idfkit@idfkit.\" and the note that it would add a building physicist (heat transfer, psychrometrics, energy balances, IP and SI conversions, simulation time conventions) and idfkit model checks, if any scoped file matches its applicability (globs `**/*.idf`, `**/*.epJSON`, `**/*.epw`, `**/eplusout*`; file types `.idf`, `.epjson`, `.epw`; or a Python or TypeScript file that imports `idfkit`).\n- **panel**: apply the limits of section 6.\n- **validate**: check each message by eye against its schema: every required field present, no unknown field, enumerations respected, `line_end >= line_start`.\n- **merge**: apply section 7.\n- **debate-status**: apply section 8.\n- **adjudicate**: apply section 5 to every merged finding.\n- **report**: write the report in the eight sections of the report contract: Scope, Panel, Extensions, Findings (ordered consensus, majority, contested, and within each high, medium, low), Rejected findings, Checked and found correct, Not reviewed, Notices. When the scope holds no file, stop after the Extensions section with the sentence \"No reviewable scientific code changed in this scope.\" When any scoped file is in a language other than Python or TypeScript, add the notice \"Files in languages other than Python and TypeScript were reviewed without worked examples: <suffixes>.\" listing the distinct suffixes (or file names without a suffix) in sorted order.\n- **clean**: delete `$RUN`.\n\n## 11. Domain extensions\n\nA domain extension is a skill, named `<domain>-sci-review-extension`, that any installed plugin can ship; its contract is in `extensions.md`. At the start of a review the orchestrator discovers extensions in the host's skill listing and passes each declaration to `panel.py select-extensions`, which marks it `selected`, `not-applicable` or `failed` (with the reason), and adds known but uninstalled extensions that would apply as `recommended`. A selected extension contributes one domain perspective, which takes part in the independent round and the debate on the same terms as the default perspectives, receives its reference documents in addition to the dimension documents, counts toward the panel limit of seven and toward the majority denominator, and, when the extension declares domain checks, runs them during the independent round and reports their failures as candidate findings. Two selected extensions that claim the same file both join the panel.\n"
+const PROTOCOL = "# Panel protocol\n\nThis document is the single source of the review protocol. Every runner (Claude Workflow, Codex subagents, Claude agents, sequential) follows it, and `scripts/panel.py` implements its deterministic steps. The Workflow script embeds this file verbatim.\n\n## 1. Roles\n\n- **Perspective reviewers**: the five defaults (`theorist`, `numerical-analyst`, `experimentalist`, `methodologist`, `computer-scientist`) and any selected domain perspective contributed by an extension. Each reviews every review part of the scope across all five dimensions from its own perspective.\n- **Defender**: argues that each finding is not a defect. Always present. Never raises findings and never withdraws.\n- **Moderator**: merges duplicate candidates, then writes notes on each finding after its debate. Always present. Never introduces findings and never assigns labels.\n\n## 2. Phases\n\nThe review proceeds in three phases (FR-023).\n\n1. **Independent round.** `panel.py parts` divides the scope into review parts of at most 2,000 lines (section 6). Each perspective reviewer reviews every part, one part per task, without access to any other reviewer's output, and writes one candidate-findings message per part, `candidates/<perspective>--<part>.json`, whose `part` field names the part. A reviewer may read any file of the project, inside or outside the scope, to follow a reference (for example a unit defined in one file and used in another), but raises findings only on lines of its part. In a review of several parts, it numbers its findings `<perspective>-<part>-<n>` (for example `theorist-p2-1`), so that ids are unique across parts; in a review of one part, `<perspective>-<n>`.\n2. **Debate.** `panel.py merge` clusters the candidates of every part by location, so that a defect raised in several parts is debated and reported once, and groups the clusters into debate batches. For each batch, the moderator confirms or splits each cluster (merge ruling). The perspectives and the defender then state positions on every merged finding of the batch in round 0, followed by at most `rebuttal_rounds` rebuttal rounds. When the debate of a batch ends, the moderator writes notes on every finding of the batch.\n3. **Adjudication.** The moderator's notes have been written; `panel.py adjudicate` then computes each finding's label, or rejects it, from the recorded positions by the rules of section 5, and attaches the notes. No model takes part in this step.\n\n## 3. Role inputs\n\nEach role receives exactly the inputs below and nothing else (SC-011). Besides its inputs, a panel member may read the files of the reviewed project. When `scope.json` has a `target` of kind `branch` or `pull-request`, the reviewed files are not in the working tree: read each one at the scope's `head` with `git -C <project> show <head>:<path>`.\n\n| Phase | Role | Receives | Must not receive |\n|-------|------|----------|------------------|\n| Independent (one task per part) | perspective | its brief; `protocol.md`; the five dimension documents (loaded on demand); extension reference material if it is a domain perspective; `scope.json`; its review part (the part's files and line ranges in `parts.json`); output path `candidates/<perspective>--<part>.json` | any other perspective's output |\n| Merge | moderator | its brief; all `candidates/*.json`, of every part; the clusters from `panel.py merge` | none |\n| Debate round 0 | each perspective and defender | its brief; the batch's merged findings; its own independent output (its candidate files of every part) | other members' round 0 positions |\n| Debate round k > 0 | each perspective and defender | its brief; the batch's merged findings; all positions from rounds 0 to k-1 | positions from round k |\n| Moderator notes | moderator | its brief; the batch's merged findings; all positions of the batch | labels (they are computed afterwards) |\n\n## 4. Severity\n\nEach finding carries one of three severities (FR-018):\n\n- **High**: produces a wrong result under realistic inputs.\n- **Medium**: produces a wrong result only under plausible edge-case inputs, or prevents reproduction of a result.\n- **Low**: a latent risk that does not currently produce a wrong result.\n\nA merged finding takes the highest severity among its members unless the moderator records a `severity_reason` for a lower one.\n\n## 5. Stances and adjudication\n\n**Stance.** A member's stance on a finding is its latest position on that finding. A member that is not called in a later round (because section 8 did not call it, or the batch stopped early) keeps its latest position. A raiser that recorded no position is taken to accept the finding it raised.\n\n**Position identifiers.** A position is identified as `<member>:<finding_id>:<round>`, for example `defender:F3:0`. The `answers` field of a position lists the identifiers of the positions it responds to.\n\n**Answered objection.** A defender objection is a defender position with stance `challenge`. It is answered when a later position by any perspective reviewer lists it in `answers` and the defender does not challenge again in a subsequent round. A defender objection is therefore unanswered when the defender's latest stance on the finding is `challenge` and either no perspective position has answered any earlier defender position on the finding, or the defender challenged again in a round after the latest such answer. A challenge the defender repeats in the same round as the answer does not reopen the objection, because the defender had not yet seen the answer.\n\n**Undebated findings.** A merged finding on which no member recorded a position, and a candidate finding that no merge ruling includes, are reported as notices.\n\n**Perspectives.** For the rules below, \"perspectives\" means every perspective reviewer in the panel, default and domain, the raiser included, and never the defender. The majority denominator is the number of perspectives in the panel.\n\nThe rules are applied in order; the first that matches decides:\n\n1. **Raiser withdrew**: every raiser of the finding has stance `withdraw`. The finding is rejected (reason `withdrawn`).\n2. **Only one perspective accepts and a defender objection is unanswered**: fewer than two perspectives have stance `accept`, and a defender objection is unanswered. The finding is rejected (reason `unsupported`). A co-raiser that still accepts counts as a second perspective, because it detected the defect independently.\n3. **No concrete failure scenario**: `trigger` or `wrong_output` is null. The finding is at most `contested`, so it is labelled `contested`.\n4. **Consensus**: no perspective has stance `challenge` or `withdraw` (a co-raiser that withdraws dissents), at least two perspectives have stance `accept` (so that no finding is reported as consensus on its raiser's word alone, FR-013), and no defender objection is unanswered. Label `consensus`.\n5. **Majority**: more than half of the perspectives have stance `accept`. Label `majority`.\n6. **Otherwise**: label `contested`.\n\n**Several raisers.** When `raised_by` lists more than one perspective, each raiser is a perspective like any other for rules 2, 4 and 5, and its stance is its own latest position (accept when it recorded none). The finding is rejected as withdrawn only when every raiser withdraws (rule 1). One raiser's withdrawal does not reject the finding and does not remove that raiser from `raised_by`; it is a dissenting stance, so it prevents consensus (rule 4) and does not count towards a majority (rule 5).\n\n`withdraw` is valid only from a member listed in the finding's `raised_by`; any other `withdraw` is a protocol violation and stops adjudication with exit code 1.\n\nThe moderator's notes are attached after labelling: `argument_for`, `argument_against` and `deciding_assumption` only to contested findings, `rejection_reason` only to rejected findings (replacing `withdrawn` or `unsupported` unless it is \"Not rejected.\"), and `no_trigger_reason` to every finding whose `trigger` or `wrong_output` is null.\n\n## 6. Limits\n\n- Panel size 2 to 7 perspectives, counting domain perspectives; a request for more than are available yields all of them.\n- Rebuttal rounds 0 to 3, default 2. Round 0 (initial positions) always runs; rounds 1 to `rebuttal_rounds` follow.\n- max_batches 1 to 4, default 2.\n- Out-of-range values are clamped, and the report states the panel actually used.\n- Effort levels set the panel size, the rebuttal rounds and the debate batches together: `low` (theorist, numerical analyst, methodologist; 1 round; 1 batch), `medium` (the five defaults plus selected extensions; 2; 2), `high` (2; 3), `xhigh` (3; 4) and `max` (all available, at most seven; 3; 4). Explicit options override single parameters.\n- Review parts hold at most 2,000 lines, unless a single indivisible definition is larger. No file is excluded for the size of the scope. Above 6,000 lines (the large-scope threshold), the review states its size and asks for confirmation before any reviewer runs.\n- With P perspectives and K review parts, the independent round makes P x K reviewer invocations instead of P; the merge, the debate and the notes run on merged findings and do not grow with K.\n\n## 7. Clustering and batching\n\n**Clustering.** Two candidates belong to the same location cluster when they are in the same file and their line ranges are within three lines of each other: candidate B joins the cluster of candidate A when `B.line_start <= max_end + 3`, where `max_end` is the largest `line_end` in A's cluster. Candidates in different files never cluster. Within each file, candidates are taken in order of `(line_start, line_end, id)`. Files are taken in lexicographic order, and clusters are numbered `C1`, `C2`, ... in that order; the suggested merged finding identifier of cluster `Cn` is `Fn`. When the moderator splits a cluster, each additional finding takes the next identifier of its batch's reserved range: batch b reserves `F(1000 b + 1)` onward (`F1001`, `F1002`, ... for batch 1, `F2001`, ... for batch 2), so that moderators of different batches never assign the same identifier.\n\n**Batching.** Clusters are grouped into at most `max_batches` debate batches by file: all clusters of one file go to the same batch. Files are taken in order of decreasing cluster count (ties broken by file name), and each is assigned to the batch that currently holds the fewest clusters (ties broken by the lowest batch number). Empty batches are dropped, and batches are numbered from 1.\n\n## 8. Debate stop rule\n\nThe debate of a batch runs round 0, then rebuttal rounds 1 to `rebuttal_rounds`. Round 0 and round 1 call every member. After each rebuttal round k (k >= 1), each member's stance on each finding (carried forward when the member was not called) is compared with its stance after round k-1.\n\n1. **Stop.** If no stance changed in round k, the batch stops.\n2. **Who is called in round k+1.** Otherwise round k+1 calls the members whose stance changed in round k, and, for every finding on which some member newly took the stance `challenge` in round k, every perspective whose current stance on that finding is `accept` (its raisers among them), so that the new objection can be answered. Every other member is settled for that round and keeps its latest position.\n\n`panel.py debate-status --run DIR --batch B --round K` applies this rule to the recorded positions and prints `{\"stopped\": ..., \"call\": [...]}`.\n\nAn objection first raised in the final rebuttal round cannot be answered, because no round follows it; it counts as unanswered in section 5. Raise the number of rebuttal rounds when this matters.\n\n## 9. Message validation\n\nEvery message conforms to its JSON Schema in `schemas/`. A message that fails validation is returned once to its author with the validator's errors; a second failure drops the message, and the report carries a notice naming the role.\n\n## 10. Written fallback rules\n\nWhen `python3` is absent, perform each `panel.py` step by hand, in the conversation, as follows, and add the notice \"python3 was not available; the deterministic steps were performed by hand from the written rules of protocol.md.\" to the report.\n\n- **init**: use a directory under the system temporary directory, never inside the project, as `$RUN`.\n- **scope**: for branch mode, find the default branch (`git symbolic-ref --quiet --short refs/remotes/origin/HEAD`, else the first of `origin/main`, `origin/master`, `main`, `master` that exists), take `git merge-base <default> HEAD` as the base, and list the files of `git diff --name-only <base>` plus untracked files from `git ls-files --others --exclude-standard`. If no base can be determined, ask the user. Exclude `node_modules/`, `dist/`, lock files and files marked `linguist-generated` or `linguist-vendored`, recording each with its reason. For repository mode, list `git ls-files`; for paths mode, list the tracked files under the named paths. Exclude binary files and, in branch mode, deleted files. A file the user named in paths mode is kept even when it is generated or vendored. Notebooks (`.ipynb`) are reviewed as Python code. No file is excluded for the size of the scope. Count the lines of the kept files, the changed lines of each in branch mode and all its lines otherwise; the scope note reads \"<description>: <n> files, <lines> lines.\"\n- **scope, target**: resolve the target text token by token, without checking anything out. A whole number, `#<n>` or a GitHub pull request URL is a GitHub pull request; `!<n>`, a `/-/merge_requests/<n>` URL, or a number when the `origin` remote is a GitLab host, is a GitLab merge request. A local or remote branch name is a branch. Existing paths inside the project are paths mode; several tokens must all be paths. A token that matches more than one kind is not resolved: ask the user. A path outside the project, or a token that names nothing, is a usage error. A token such as `hig` (the first three letters of a level, but not a level) that is neither a branch nor a path is a usage error naming the levels. For a branch that is not checked out, the scope is the diff from `git merge-base <default> <branch>` to the branch, and its files are read with `git show <branch>:<path>`. For a pull request, read its base with `gh pr view <n> --json baseRefOid,headRefOid` (or `glab mr view <n> -F json`), fetch its head with `git fetch origin pull/<n>/head:refs/sci-review/pr-<n>` (GitLab: `merge-requests/<n>/head`), and take the diff from the merge base of the base and that ref; when `gh` or `glab` is absent or not authenticated, say what is missing and offer a branch or paths review.\n- **args**: take the level word (`low`, `medium`, `high`, `xhigh`, `max`, in any position, once), `--comment`, `--fix` and `--max-findings <n>|all|default` (the last one wins; any other value is ignored with a note) from the arguments; any other `--flag`, a second level or `ultra` is a usage error. The remaining tokens are the target. Without a level, use the level the user last typed if it is known, else `medium`.\n- **parts**: group the scoped files by directory, in path order; fill parts of at most 2,000 lines, keeping a directory's files together where they fit; cut a larger file at top-level definition boundaries (`def`, `class`, `export`, `function`, notebook cells), else into windows of 2,000 lines. Number the parts `p1`, `p2`, ... in path order. Confirmation is required above 6,000 lines.\n- **select-extensions**: for each extension declaration, mark it `failed` if a required field is missing or `contract_version` is not 1; otherwise `selected` if any scoped file matches a glob or file type (case-insensitively) or is in a listed language and matches an import pattern; otherwise `not-applicable`. A selected extension whose perspective id is already in the panel is `failed`. Then, if the known extension `building-energy-sci-review-extension` (plugin idfkit) was not discovered, mark it `recommended`, with the reason \"not installed; it would apply to <first matching file>. Install it with idfkit@idfkit.\" and the note that it would add a building physicist (heat transfer, psychrometrics, energy balances, IP and SI conversions, simulation time conventions) and idfkit model checks, if any scoped file matches its applicability (globs `**/*.idf`, `**/*.epJSON`, `**/*.epw`, `**/eplusout*`; file types `.idf`, `.epjson`, `.epw`; or a Python or TypeScript file that imports `idfkit`).\n- **panel**: apply the level of section 6, then the limits of section 6.\n- **validate**: check each message by eye against its schema: every required field present, no unknown field, enumerations respected, `line_end >= line_start`.\n- **merge**: apply section 7.\n- **debate-status**: apply section 8.\n- **adjudicate**: apply section 5 to every merged finding.\n- **report**: state the effort level and whether it was given, reused or defaulted, the number of review parts (a part is incomplete when a perspective's candidates file for it is missing or invalid, and its files are then listed as not reviewed), and the finding cap with the number of findings it withheld (deliver the first findings in report order up to the cap). Write the report in the eight sections of the report contract: Scope, Panel, Extensions, Findings (ordered consensus, majority, contested, and within each high, medium, low), Rejected findings, Checked and found correct, Not reviewed, Notices. When the scope holds no file, stop after the Extensions section with the sentence \"No reviewable scientific code changed in this scope.\" When any scoped file is in a language other than Python or TypeScript, add the notice \"Files in languages other than Python and TypeScript were reviewed without worked examples: <suffixes>.\" listing the distinct suffixes (or file names without a suffix) in sorted order.\n- **clean**: delete `$RUN` and every git ref under `refs/sci-review/`.\n\n## 11. Domain extensions\n\nA domain extension is a skill, named `<domain>-sci-review-extension`, that any installed plugin can ship; its contract is in `extensions.md`. At the start of a review the orchestrator discovers extensions in the host's skill listing and passes each declaration to `panel.py select-extensions`, which marks it `selected`, `not-applicable` or `failed` (with the reason), and adds known but uninstalled extensions that would apply as `recommended`. A selected extension contributes one domain perspective, which takes part in the independent round and the debate on the same terms as the default perspectives, receives its reference documents in addition to the dimension documents, counts toward the panel limit of seven and toward the majority denominator, and, when the extension declares domain checks, runs them during the independent round and reports their failures as candidate findings. Two selected extensions that claim the same file both join the panel.\n"
 
 const ROLES = {
   "computer-scientist": "# Computer scientist\n\nYou are the computer scientist on a scientific review panel. The panel reviews code for scientific correctness: whether it computes what it claims to compute. Your perspective id is `computer-scientist`. You review the scope independently, then defend or challenge the panel's merged findings in a debate.\n\n## Stance\n\nYou examine algorithms, termination, determinism and the behaviour of concurrent or parallel execution. You state each algorithm's invariants and its pre- and postconditions and verify that the code maintains them on every path, including the empty, single-element and duplicate cases. You report the input or execution order under which an invariant breaks, a loop fails to terminate or two runs disagree.\n\n## Guiding questions\n\n1. What are the algorithm's invariants and its pre- and postconditions, and does every path through the code maintain them?\n2. Does every iterative method terminate, and do its convergence criteria guarantee the accuracy that callers assume?\n3. Can integer arithmetic or index computation overflow, wrap or go negative for realistic sizes?\n4. Is the result correct for empty input, a single element, duplicate keys and other data-structure edge cases?\n5. Does the result depend on evaluation order, hash ordering, or the scheduling of parallel or concurrent work?\n6. Can two runs, or runs on two platforms, produce different results from the same inputs?\n7. Can a cache or memoised value be returned after the inputs it depends on have changed?\n\n## Checks owned\n\nYou lead on every check of `dimensions/algorithmic-correctness.md`: invariants and pre- and postconditions, termination and convergence criteria, integer overflow and index arithmetic, data-structure edge cases, dependence on evaluation order or on parallel or concurrent execution, nondeterminism across runs or platforms, and stale caching or memoisation.\n\n## What not to flag\n\n- Style, formatting, naming, lint warnings, type-annotation gaps and missing or imperfect documentation.\n- Performance concerns that do not change any result.\n- Constructs that are correct in context, including floating-point equality against a sentinel value or an exactly representable integer-valued float, and seeding that is deliberately left to the caller and documented as such.\n- Anything outside the files and line ranges listed in `scope.json`, even when you read surrounding code for context.\n- Nondeterminism that changes only the order of an output whose order is documented as unspecified, or that stays below a documented tolerance.\n\n## Independent round\n\n1. Review the whole scope under every one of the five dimensions (`mathematical-derivations`, `numerical-stability`, `physical-modelling-and-units`, `statistical-integrity`, `algorithmic-correctness`), not only the checks you own. Your perspective decides where you look hardest; it does not limit what you report.\n2. Load a dimension document (`dimensions/<name>.md`, relative to the skill directory) on demand, when the code under review calls for its checks.\n3. Work only from the inputs you were given: this brief, `protocol.md`, the dimension documents, `scope.json`, and, for a domain perspective, its reference material. Never read or use another reviewer's output.\n4. Make every failure scenario concrete. `trigger` is a specific input or program state (for example, a named argument value, array shape or data condition), and `wrong_output` is the specific wrong result or behaviour that follows. When no concrete scenario can be established, set both `trigger` and `wrong_output` to null and state in `evidence` why none could be established. Choose a trigger that the obvious defence does not answer: for a reproducibility or seeding defect, state a program state in which the documented or customary seeding still fails to reproduce the result (for example, other code drawing from the global generator between the seed and the call), not a change of seed, which only starts a different random experiment.\n5. Assign a severity: `high` when the defect produces a wrong result under realistic inputs; `medium` when it produces a wrong result only under plausible edge-case inputs, or prevents reproduction of a result; `low` when it is a latent risk that does not currently produce a wrong result.\n6. Give each finding the id `computer-scientist-<n>`, numbered from 1, and set `raised_by` to `computer-scientist`. Every finding states a one-sentence `summary`, a `fix` (a derivation or code change) and the `evidence` you read or computed. Each finding states one defect: report two defects at the same location as two findings, each with its own trigger, wrong output and fix.\n7. Record checked items: each location you examined and found correct, with `file`, `line_start`, `line_end`, `dimension` and a `note` stating what was verified.\n8. Output exactly one JSON object conforming to `candidate-findings.schema.json`: `{\"perspective\": \"computer-scientist\", \"findings\": [...], \"checked_items\": [...], \"notes\": \"...\"}`. Write nothing else before or after it. Never modify project files.\n\n## Debate\n\n1. In round 0, state one position on every merged finding of the batch. Each position has `finding_id`, `member` set to `computer-scientist`, `round`, `stance`, a non-empty `reason`, and `answers`.\n2. `stance` is `accept` or `challenge`. Use `withdraw` only for a finding you raised, that is, when `computer-scientist` appears in its `raised_by`.\n3. `answers` lists the ids of the positions you respond to. A position id has the form `<member>:<finding_id>:<round>`, for example `defender:F3:0`. Leave `answers` empty when you respond to no earlier position.\n4. Judge each finding on its stated `trigger` and `wrong_output`. Accept a finding when the scenario holds; challenge it when the scenario does not hold, when the construct is correct in context, or when no concrete trigger is given and you cannot supply one.\n5. In each later round, read all positions from the earlier rounds before writing yours. Change your stance on a finding only for a reason you state; otherwise repeat it.\n6. Answer explicitly every defender objection to a finding you accept, by listing the objection's position id in `answers` and stating in `reason` why the objection does not hold, or by changing your stance if it does.\n7. Output exactly one JSON object conforming to `debate-positions.schema.json`: `{\"member\": \"computer-scientist\", \"round\": <round>, \"positions\": [...]}`. Write nothing else before or after it. Never modify project files.\n",
@@ -44,7 +44,7 @@ const SCHEMAS = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "sci-review/schemas/candidate-findings.schema.json",
     "title": "Candidate findings",
-    "description": "Output of one perspective reviewer in the independent round. Semantic checks in panel.py: line_end >= line_start; every location lies inside the review scope.",
+    "description": "Output of one perspective reviewer in the independent round, for one review part. Semantic checks in panel.py: line_end >= line_start; every location lies inside the review scope.",
     "type": "object",
     "required": [
       "perspective",
@@ -56,6 +56,11 @@ const SCHEMAS = {
       "perspective": {
         "type": "string",
         "pattern": "^[a-z0-9][a-z0-9-]*$"
+      },
+      "part": {
+        "description": "The review part this message covers (parts.json id, p1, p2, ...). In a review of several parts, finding ids are <perspective>-<part>-<n>.",
+        "type": "string",
+        "pattern": "^p[1-9][0-9]*$"
       },
       "findings": {
         "type": "array",
@@ -112,7 +117,7 @@ const SCHEMAS = {
         ],
         "properties": {
           "id": {
-            "description": "Of the form <perspective>-<n>.",
+            "description": "Of the form <perspective>-<n>, or <perspective>-<part>-<n> in a review of several parts.",
             "type": "string",
             "pattern": "^[a-z0-9-]+-[0-9]+$"
           },
@@ -490,7 +495,7 @@ const SCHEMAS = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "sci-review/schemas/report.schema.json",
     "title": "Review report",
-    "description": "ReviewReport produced by panel.py report. Semantic checks in panel.py: no_trigger_reason is present and non-null when trigger or wrong_output is null; line_end >= line_start; findings are ordered by label then severity.",
+    "description": "ReviewReport produced by panel.py report. Semantic checks in panel.py: no_trigger_reason is present and non-null when trigger or wrong_output is null; line_end >= line_start; findings are ordered by label then severity. findings holds the delivered findings only, at most max_findings of them; withheld counts the rest.",
     "type": "object",
     "required": [
       "scope",
@@ -500,7 +505,14 @@ const SCHEMAS = {
       "rejected",
       "checked_items",
       "unreviewed",
-      "notices"
+      "notices",
+      "level",
+      "level_source",
+      "max_findings",
+      "withheld",
+      "parts",
+      "incomplete_parts",
+      "notes"
     ],
     "properties": {
       "scope": {
@@ -540,6 +552,44 @@ const SCHEMAS = {
         }
       },
       "notices": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "level": {
+        "$ref": "#/$defs/Level"
+      },
+      "level_source": {
+        "$ref": "#/$defs/Source"
+      },
+      "max_findings": {
+        "description": "The finding cap applied: a whole number, \"all\", or null for the level's default (no limit).",
+        "type": [
+          "integer",
+          "string",
+          "null"
+        ]
+      },
+      "withheld": {
+        "description": "Adjudicated findings not delivered because of the cap; they remain in adjudication.json.",
+        "type": "integer",
+        "minimum": 0
+      },
+      "parts": {
+        "description": "Number of review parts.",
+        "type": "integer",
+        "minimum": 0
+      },
+      "incomplete_parts": {
+        "description": "Ids of review parts whose independent round did not complete; listed under unreviewed.",
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "notes": {
+        "description": "One-line notes about the arguments (from arguments.json).",
         "type": "array",
         "items": {
           "type": "string"
@@ -662,9 +712,48 @@ const SCHEMAS = {
           },
           "note": {
             "type": "string"
+          },
+          "target": {
+            "description": "The resolved target, or null when none was given.",
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "total_lines": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pull_request_ref": {
+            "description": "Temporary git ref of a fetched pull request head, deleted by panel.py clean.",
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "target": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "target"
+              ]
+            },
+            "then": {
+              "properties": {
+                "target": {
+                  "$ref": "#/$defs/Target"
+                }
+              }
+            }
+          }
+        ]
       },
       "Perspective": {
         "type": "object",
@@ -755,6 +844,28 @@ const SCHEMAS = {
             "items": {
               "$ref": "#/$defs/ModelAssignment"
             }
+          },
+          "level": {
+            "$ref": "#/$defs/Level"
+          },
+          "level_source": {
+            "$ref": "#/$defs/Source"
+          },
+          "overrides": {
+            "description": "Level-profile parameters overridden by explicit options (perspectives, rounds, batches).",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "perspectives",
+                "rounds",
+                "batches"
+              ]
+            }
+          },
+          "parts": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "additionalProperties": false
@@ -1066,6 +1177,78 @@ const SCHEMAS = {
           }
         },
         "additionalProperties": false
+      },
+      "Level": {
+        "type": "string",
+        "enum": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      "Source": {
+        "type": "string",
+        "enum": [
+          "given",
+          "reused",
+          "default"
+        ]
+      },
+      "Target": {
+        "type": "object",
+        "required": [
+          "kind",
+          "host",
+          "number",
+          "ref",
+          "paths",
+          "text"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "pull-request",
+              "branch",
+              "paths"
+            ]
+          },
+          "host": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "github",
+              "gitlab",
+              null
+            ]
+          },
+          "number": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       }
     }
   },
@@ -1211,6 +1394,11 @@ const scope = input.scope || { files: [], note: 'No scope was given.' }
 const skillDir = typeof input.skill_dir === 'string' && input.skill_dir ? input.skill_dir : null
 // Scope paths are relative to the project root; agents start in the session's working directory, which may differ.
 const project = typeof input.project === 'string' && input.project ? input.project : null
+// Review parts of parts.json (feature 008); a run without them reviews the whole scope as one part.
+const parts = Array.isArray(input.parts) && input.parts.length
+  ? input.parts.filter(part => part && typeof part.id === 'string' && Array.isArray(part.files))
+  : [{ id: 'p1', files: scope.files || [], lines: null }]
+const multiPart = parts.length > 1
 const rebuttalRounds = clamp(input.rebuttal_rounds, 0, 3, 2)
 const maxBatches = clamp(input.max_batches, 1, 4, 2)
 const models = (input.models && typeof input.models === 'object' && !Array.isArray(input.models))
@@ -1298,8 +1486,13 @@ function fence(label, value) {
 const PROJECT_RULE = project
   ? `- The reviewed project is ${project}. Every path in the scope, and every \`file\` you report, is relative to it: read ${project}/<path>, but report <path>.\n`
   : ''
+// A branch or pull request target is not checked out: its files are read from the git ref recorded as the head.
+const fromRef = scope.target && (scope.target.kind === 'branch' || scope.target.kind === 'pull-request') && scope.head
+const REF_RULE = fromRef
+  ? `- The reviewed files are not in the working tree: read each one with \`git ${project ? `-C ${project} ` : ''}show ${scope.head}:<path>\`.\n`
+  : ''
 const COMMON_RULES = `Rules for every panel member:
-${PROJECT_RULE}- Read the project's files freely to verify claims, but never create, modify or delete any file, and run no command that writes anywhere. Run Python with \`python3 -B\`, so that importing a project module writes no \`__pycache__\` in the project.
+${PROJECT_RULE}${REF_RULE}- Read the project's files freely to verify claims, but never create, modify or delete any file, and run no command that writes anywhere. Run Python with \`python3 -B\`, so that importing a project module writes no \`__pycache__\` in the project.
 - Use only the inputs given below for this phase; you have no other panel member's output except where it is given.
 - Your final answer is the structured output only.`
 
@@ -1315,10 +1508,14 @@ function dimensionBlock() {
   return Object.entries(DIMENSIONS).map(([name, text]) => fence(`dimension name="${name}"`, text)).join('\n\n')
 }
 
-function independentPrompt(member) {
+function independentPrompt(member, part) {
   const references = member.references.length
     ? `Your reference material, to read before reviewing: ${member.references.join(', ')}.`
     : ''
+  const partRule = multiPart
+    ? `The scope is divided into ${parts.length} review parts; you review part \`${part.id}\` only. Review every line of it. You may read any file of the project, inside or outside the scope, to follow a reference, but raise findings only on lines of your part.`
+    : 'Review every file and line range of the scope.'
+  const ids = multiPart ? `\`${member.id}-${part.id}-1\`, \`${member.id}-${part.id}-2\`` : `\`${member.id}-1\`, \`${member.id}-2\``
   return `You are the ${member.name} (perspective id \`${member.id}\`) on a scientific-correctness review panel. This is the INDEPENDENT ROUND.
 
 ${COMMON_RULES}
@@ -1333,7 +1530,9 @@ ${references}
 
 ${fence('scope', scope)}
 
-Review every file and line range of the scope across all five dimensions. Set \`perspective\` to \`${member.id}\`, give findings ids \`${member.id}-1\`, \`${member.id}-2\`, ..., and set each finding's \`raised_by\` to \`${member.id}\`. Record checked items. Return one candidate-findings message.`
+${multiPart ? fence(`review-part id="${part.id}"`, part) : ''}
+
+${partRule} Review across all five dimensions. Set \`perspective\` to \`${member.id}\` and \`part\` to \`${part.id}\`, give findings ids ${ids}, ..., and set each finding's \`raised_by\` to \`${member.id}\`. Record checked items. Return one candidate-findings message.`
 }
 
 function mergePrompt(batch, clusters, candidateMessages) {
@@ -1403,29 +1602,42 @@ if (members.length < 2) {
   return run
 }
 
-log(`Panel: ${members.map(m => m.id).join(', ')}, defender, moderator; ${rebuttalRounds} rebuttal rounds; at most ${maxBatches} batches.`)
+log(`Panel: ${members.map(m => m.id).join(', ')}, defender, moderator; ${rebuttalRounds} rebuttal rounds; at most ${maxBatches} batches; ${parts.length} review part(s).`)
 
+// Independent round: every perspective reviews every part (protocol.md section 2). A failed agent writes nothing,
+// so panel.py report derives that part as incomplete; no part status is written here.
 phase('Independent')
-const independent = await parallel(members.map(member => () =>
-  agent(independentPrompt(member), {
+const pairs = members.flatMap(member => parts.map(part => ({ member, part })))
+const independent = await parallel(pairs.map(({ member, part }) => () =>
+  agent(independentPrompt(member, part), {
     phase: 'Independent',
-    label: `independent:${member.id}`,
+    label: `independent:${member.id}:${part.id}`,
     schema: workflowSchema('candidate-findings'),
     ...modelFor(member.id),
   })))
 
+// A perspective's own output for debate round 0 is the union of its messages over every part.
 const candidatesBy = new Map()
 independent.forEach((message, index) => {
-  const member = members[index]
+  const { member, part } = pairs[index]
   if (!message) {
-    run.dropped.push(`${member.id} (independent round)`)
+    run.dropped.push(`${member.id} candidates (part ${part.id})`)
     return
   }
   message.perspective = member.id
-  for (const finding of message.findings || []) finding.raised_by = member.id
+  message.part = part.id
+  ;(message.findings || []).forEach((finding, n) => {
+    finding.raised_by = member.id
+    // Ids must be unique across parts, as panel.py merge requires.
+    if (multiPart) finding.id = `${member.id}-${part.id}-${n + 1}`
+  })
   normaliseRanges(message.findings)
   normaliseRanges(message.checked_items)
-  candidatesBy.set(member.id, message)
+  const own = candidatesBy.get(member.id) || { perspective: member.id, findings: [], checked_items: [], notes: '' }
+  own.findings = own.findings.concat(message.findings || [])
+  own.checked_items = own.checked_items.concat(message.checked_items || [])
+  own.notes = [own.notes, message.notes].filter(Boolean).join('\n')
+  candidatesBy.set(member.id, own)
   run.candidates.push(message)
 })
 

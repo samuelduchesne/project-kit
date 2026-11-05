@@ -41,7 +41,10 @@
         "reason": "generated (lock file)"
       }
     ],
-    "note": "Changes since merge-base with origin/main on branch feature (0123456789ab), including uncommitted and untracked files: 3 files, 181 lines."
+    "note": "Changes since merge-base with origin/main on branch feature (0123456789ab), including uncommitted and untracked files: 3 files, 181 lines.",
+    "target": null,
+    "total_lines": 0,
+    "pull_request_ref": null
   },
   "panel": {
     "perspectives": [
@@ -85,7 +88,11 @@
     "max_batches": 2,
     "runner": "claude-workflow",
     "independent": true,
-    "models": []
+    "models": [],
+    "level": "medium",
+    "level_source": "default",
+    "overrides": [],
+    "parts": 1
   },
   "extensions": [],
   "findings": [
@@ -231,5 +238,12 @@
       "reason": "generated (lock file)"
     }
   ],
-  "notices": []
+  "notices": [],
+  "level": "medium",
+  "level_source": "default",
+  "max_findings": null,
+  "withheld": 0,
+  "parts": 1,
+  "incomplete_parts": [],
+  "notes": []
 }

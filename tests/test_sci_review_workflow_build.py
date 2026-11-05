@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -326,6 +327,59 @@ class TestSimulation(unittest.TestCase):
     def test_empty_scope_returns_without_agents(self) -> None:
         output = self.simulate({"scope": {"files": [], "note": "nothing"}})
         self.assertEqual(output["calls"], [])
+
+    def test_independent_round_runs_per_perspective_and_part(self) -> None:
+        """T036: the independent round runs over perspective x part and each message names its part."""
+        scope = json.loads((GOLDEN / "scope.json").read_text(encoding="utf-8"))
+        files = scope["files"]
+        parts = [
+            {"id": "p1", "files": files[:1], "lines": 10, "status": "pending"},
+            {"id": "p2", "files": files[1:], "lines": 10, "status": "pending"},
+        ]
+        output = self.simulate({"parts": parts})
+        independent = sorted(c for c in output["calls"] if c.startswith("independent:"))
+        members = json.loads((GOLDEN / "panel.json").read_text(encoding="utf-8"))["panel"]["perspectives"]
+        expected = sorted(f"independent:{m['id']}:{p}" for m in members for p in ("p1", "p2"))
+        self.assertEqual(independent, expected)
+        messages = output["result"]["candidates"]
+        self.assertEqual(len(messages), 2 * len(members))
+        for message in messages:
+            self.assertIn(message["part"], ("p1", "p2"))
+            for finding in message["findings"]:
+                self.assertTrue(finding["id"].startswith(f"{message['perspective']}-{message['part']}-"))
+        prompt = output["prompts"]["independent:theorist:p2"]
+        self.assertIn('review-part id="p2"', prompt)
+        self.assertIn("raise findings only on lines of your part", prompt)
+
+        project = Path(tempfile.mkdtemp(prefix="sci-review-project-"))
+        self.addCleanup(shutil.rmtree, project, True)
+        script = str(PLUGIN / "scripts" / "panel.py")
+        run_dir = Path(run([sys.executable, script, "init", "--project", str(project)]).stdout.strip())
+        self.addCleanup(shutil.rmtree, run_dir, True)
+        (run_dir / "result.json").write_text(json.dumps(output["result"]), encoding="utf-8")
+        step = run([sys.executable, script, "ingest", "--run", str(run_dir), str(run_dir / "result.json")])
+        self.assertEqual(step.returncode, 0, step.stderr)
+        names = sorted(p.name for p in (run_dir / "candidates").glob("*.json"))
+        self.assertEqual(names, sorted(f"{m['id']}--{p}.json" for m in members for p in ("p1", "p2")))
+
+    def test_single_part_keeps_feature_007_ids(self) -> None:
+        output = self.simulate()
+        self.assertTrue(all(c.endswith(":p1") for c in output["calls"] if c.startswith("independent:")))
+        theorist = next(m for m in output["result"]["candidates"] if m["perspective"] == "theorist")
+        self.assertTrue(all(re.fullmatch(r"theorist-\d+", f["id"]) for f in theorist["findings"]))
+
+    def test_workflow_writes_no_part_status(self) -> None:
+        source = WORKFLOW.read_text(encoding="utf-8")
+        body = source[source.rfind("// END GENERATED") :]
+        self.assertIsNone(re.search(r"\bstatus\s*[:=]", body), "the Workflow must not write a part status")
+
+    def test_branch_target_prompts_read_from_the_ref(self) -> None:
+        scope = json.loads((GOLDEN / "scope.json").read_text(encoding="utf-8"))
+        scope["target"] = {"kind": "branch", "host": None, "number": None, "ref": "feature/x", "paths": [], "text": "x"}
+        scope["head"] = "refs/heads/feature/x"
+        prompts = self.simulate({"scope": scope, "project": "/p"})["prompts"]
+        for label, prompt in prompts.items():
+            self.assertIn("git -C /p show refs/heads/feature/x:<path>", prompt, label)
 
     def test_harness_is_dedented(self) -> None:
         self.assertEqual(textwrap.dedent(SIMULATION_HARNESS), SIMULATION_HARNESS)

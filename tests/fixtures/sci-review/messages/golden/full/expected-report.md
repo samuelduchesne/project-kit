@@ -6,7 +6,11 @@ Changes since merge-base with origin/main on branch feature (0123456789ab), incl
 
 Runner: `claude-workflow`. The perspectives were independent agents.
 
+Review parts: 1.
+
 ## Panel
+
+Effort level: medium (default).
 
 - Theorist (`theorist`, source `sci-review`)
 - Numerical analyst (`numerical-analyst`, source `sci-review`)
@@ -22,6 +26,8 @@ Rebuttal rounds: 2. Debate batches: at most 2.
 No extensions were discovered or recommended.
 
 ## Findings
+
+Finding cap: none (the usual limit); 0 findings were withheld by it.
 
 ### Consensus
 
