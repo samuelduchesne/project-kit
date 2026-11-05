@@ -9,11 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `sci-review` 0.2.0 accepts the arguments of `/code-review`: `/sci-review:scientific-review [low|medium|high|xhigh|max] [<pr#>|<branch>|<path>] [--comment] [--fix] [--max-findings <n>|all|default]`, in any order, with an argument hint. On hosts without an argument field, the same arguments are accepted when written in the request.
+- `sci-review` 0.2.0 accepts explicit arguments: `/sci-review:scientific-review [low|medium|high|xhigh|max] [<pr#>|<branch>|<path>] [--comment] [--fix] [--max-findings <n>|all|default]`, in any order, with an argument hint. On hosts without an argument field, the same arguments are accepted when written in the request.
 - Five `sci-review` effort levels, from `low` (three perspectives, one rebuttal round, one debate batch) to `max` (up to seven perspectives, three rounds, four batches). `medium` is the configuration of 0.1.0, so a review without arguments is unchanged. The model uses `max` only when the user or an instruction file asks for it.
 - `sci-review` targets: a pull request (GitHub number, `#number` or URL; GitLab `!number` or URL), a branch reviewed without being checked out, or one or more paths. A target that matches several kinds is not guessed; a pull request that cannot be read (no `gh` or `glab`, no authentication, no network) is reported with an offer of a branch or paths review.
 - `--max-findings` limits the delivered `sci-review` findings in report order and states the number withheld; the level and the cap that a user types are stored per user outside every project (`panel.py prefs` shows or clears them).
-- `--comment` posts the delivered `sci-review` findings on a GitHub pull request (one inline comment per finding) or a GitLab merge request (one note), and `--fix` applies them to the working tree after the report, runs the relevant checks and reports each finding again with its outcome. Both reproduce the corresponding sections of `/code-review` in Claude Code 2.1.317.
+- `--comment` posts the delivered `sci-review` findings on a GitHub pull request (one inline comment per finding) or a GitLab merge request (one note), and `--fix` applies them to the working tree after the report, runs the relevant checks and reports each finding again with its outcome.
 - `sci-review` review parts: scopes are divided into parts of at most 2,000 lines, each reviewed in full by every perspective and merged before the debate; above 6,000 lines the skill states the size and asks for confirmation before any reviewer runs. The report lists any part that did not complete as not reviewed.
 
 ### Changed

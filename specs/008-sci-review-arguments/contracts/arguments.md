@@ -18,7 +18,7 @@ Tokenisation (research R3):
 
 1. Remove `--comment`, `--fix` and `--max-findings[ =]<value>` from any position. The last `--max-findings` wins.
 2. Any remaining token starting with `--` is an unknown flag: usage error.
-3. A token equal (case-insensitive) to a level is the level; a second one is a usage error; `ultra` is a usage error with the message "`ultra` is the cloud review of /code-review and is not available for the scientific review; use `max`."
+3. A token equal (case-insensitive) to a level is the level; a second one is a usage error; `ultra` is a usage error with the message "`ultra` is not an effort level of the scientific review; use `max`."
 4. A token that begins with the first three letters of a level but is not one (for example `hig`) is recorded as `near_level` and kept in the target text. `scope` resolves each target token separately; it treats the near-level token as a target when it is an existing branch or path, and otherwise exits 2, whatever the other target tokens are, with the usage error "`<token>` is not a recognised level: use low, medium, high, xhigh or max." (FR-003).
 5. Remaining tokens, with backquotes removed and a leading `#` stripped from the first, are the target text (`target_text` in `arguments.json`; resolved by `scope`).
 

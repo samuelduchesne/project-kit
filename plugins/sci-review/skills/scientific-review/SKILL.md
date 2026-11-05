@@ -26,7 +26,7 @@ Every `panel.py` subcommand logs its arguments to standard error. Exit codes: 0 
 
 ### 2.1 Explicit arguments
 
-The skill accepts the arguments of `/code-review`, in any order:
+The skill accepts these arguments, in any order:
 
 ```text
 /sci-review:scientific-review [low|medium|high|xhigh|max] [<pr#>|<pr-url>|<branch>|<path>...] [--comment] [--fix] [--max-findings <n>|all|default]
@@ -166,9 +166,9 @@ The closing steps run in this order: adjudicate, report, project check, deliver,
 | `reason` | required for `skipped` |
 | `files` | the files changed, for `fixed` |
 
-## 8. Closing sections reproduced from /code-review
+## 8. Closing sections
 
-Reproduced from /code-review, Claude Code 2.1.317. The sections below reproduce the prompt text of `/code-review` (spec 008 research R1, R2) with the adaptations marked in contracts/fix-and-comment.md. You, the orchestrating conversation, execute them after the delivery step, with the host's own tools; no `panel.py` subcommand, runner or panel member performs them. In them, "ReportFindings" is the host's findings-reporting tool.
+Source text: Claude Code 2.1.317. The sections below follow the host's built-in review prompt (spec 008 research R1, R2) with the adaptations marked in contracts/fix-and-comment.md. You, the orchestrating conversation, execute them after the delivery step, with the host's own tools; no `panel.py` subcommand, runner or panel member performs them. In them, "ReportFindings" is the host's findings-reporting tool.
 
 ### Posting to GitHub (--comment)
 
@@ -202,7 +202,7 @@ Constraints on this section (spec 008 FR-016, FR-016a, FR-016e):
 2. It runs only after the findings are reported; the project check of section 7 step 3 runs before it.
 3. Only delivered findings are considered: those left after `--max-findings`, and after the clamp to 32 when they were delivered through ReportFindings.
 4. You make the fixes yourself, in this conversation, with the host's own editing tools. Start no agent, perspective reviewer or other panel member for them.
-5. No clean-working-tree check is made, as in `/code-review`: passing `--fix` is the user's explicit acceptance of the risk of writing to a working tree with uncommitted changes (constitution 1.3.0, Principle III exception).
+5. No clean-working-tree check is made: passing `--fix` is the user's explicit acceptance of the risk of writing to a working tree with uncommitted changes (constitution 1.3.0, Principle III exception).
 6. A pull request target, or a branch that is not checked out, is not in the working tree: its findings fall under the skip rule above, as requiring changes outside the reviewed code.
 
 ### If findings are fixed later

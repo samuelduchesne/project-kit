@@ -57,7 +57,7 @@ Ask for a scientific review in plain language, for example:
 - "Review the whole repository, a quick review with the theorist and the numerical analyst."
 - "Check this pipeline for data leakage."
 
-On Claude the skill is `sci-review:scientific-review`; on Codex it is `scientific-review` from the `sci-review` plugin. On Claude Code it also takes the arguments of `/code-review` (section 6):
+On Claude the skill is `sci-review:scientific-review`; on Codex it is `scientific-review` from the `sci-review` plugin. On Claude Code it also takes explicit arguments (section 6):
 
 ```text
 /sci-review:scientific-review high 42 --comment
@@ -145,7 +145,7 @@ The `sequential` runner plays every role in one conversation, so its perspective
 
 ### 6.1 Explicit arguments
 
-The skill accepts the arguments of `/code-review`, in any order. On Claude Code the host shows the argument hint:
+The skill accepts these arguments, in any order. On Claude Code the host shows the argument hint:
 
 ```text
 [low|medium|high|xhigh|max] [<pr#>|<branch>|<path>] [--comment] [--fix] [--max-findings <n>|all|default]
@@ -159,9 +159,9 @@ The skill accepts the arguments of `/code-review`, in any order. On Claude Code 
 | `--comment` | Posts each delivered finding as an inline comment on a GitHub pull request, or all findings as one note on a GitLab merge request, after the report. Requires `gh` or `glab`. Without a pull request target, the flag is ignored with a note. |
 | `--fix` | Applies the delivered findings to the working tree after the report, runs the relevant checks, and reports each finding again with its outcome (`fixed`, `no_change_needed` or `skipped`, with a reason). Nothing is staged or committed. See section 8. |
 
-An unknown flag, two levels, and `ultra` (the cloud level of `/code-review`) are usage errors, and nothing runs. A token such as `hig`, which begins like a level but is not one, is a usage error unless it names an existing branch or path. A malformed `--max-findings` value is ignored with a one-line note. On hosts without an argument field (Codex, claude.ai, Cowork), the same arguments are accepted when written in the request.
+An unknown flag, two levels, and `ultra` are usage errors, and nothing runs. A token such as `hig`, which begins like a level but is not one, is a usage error unless it names an existing branch or path. A malformed `--max-findings` value is ignored with a one-line note. On hosts without an argument field (Codex, claude.ai, Cowork), the same arguments are accepted when written in the request.
 
-A level and a `--max-findings` choice that the user typed are stored per user, outside every project, in `$XDG_CONFIG_HOME/sci-review/preferences.json` (default `~/.config/sci-review/preferences.json`; `%APPDATA%\sci-review\preferences.json` on Windows), separately from the preferences of `/code-review`. A level the model chooses itself is never stored. `python3 scripts/panel.py prefs --show` prints the stored preferences and `--clear` removes them. Where the file cannot be read or written, the review uses the defaults and says so.
+A level and a `--max-findings` choice that the user typed are stored per user, outside every project, in `$XDG_CONFIG_HOME/sci-review/preferences.json` (default `~/.config/sci-review/preferences.json`; `%APPDATA%\sci-review\preferences.json` on Windows). A level the model chooses itself is never stored. `python3 scripts/panel.py prefs --show` prints the stored preferences and `--clear` removes them. Where the file cannot be read or written, the review uses the defaults and says so.
 
 ### 6.2 Effort levels
 
@@ -213,7 +213,7 @@ When no reviewable scientific code changed, the report contains sections 1 to 3 
 
 ## 8. Read-only guarantee
 
-Without `--fix`, the review never creates, modifies or deletes a file in the reviewed project. With `--fix`, the panel phases remain read-only, and only the closing fix step writes: after the report, the orchestrating conversation applies the delivered findings to the working tree with the host's own editing tools, stages and commits nothing, and reports every finding again with its outcome. No clean working tree is required, as with `/code-review --fix`: passing the flag is the user's acceptance of that risk (constitution 1.3.0, Principle III exception). Resolving a pull request target fetches its head into a temporary ref under `refs/sci-review/`, which is deleted at the end; no target is ever checked out. Every panel message is written to a run directory under the system temporary directory, which is deleted at the end unless the user asks to keep it. In a git repository the skill records `git status --porcelain --ignored` before the review and compares it afterwards, and reports any file that changed, including ignored files such as a bytecode cache. Panel members run Python checks with `python3 -B`, so that they write no `__pycache__` in the project. The review runs no simulation or long computation in the project unless the user requests it.
+Without `--fix`, the review never creates, modifies or deletes a file in the reviewed project. With `--fix`, the panel phases remain read-only, and only the closing fix step writes: after the report, the orchestrating conversation applies the delivered findings to the working tree with the host's own editing tools, stages and commits nothing, and reports every finding again with its outcome. No clean working tree is required: passing the flag is the user's acceptance of that risk (constitution 1.3.0, Principle III exception). Resolving a pull request target fetches its head into a temporary ref under `refs/sci-review/`, which is deleted at the end; no target is ever checked out. Every panel message is written to a run directory under the system temporary directory, which is deleted at the end unless the user asks to keep it. In a git repository the skill records `git status --porcelain --ignored` before the review and compares it afterwards, and reports any file that changed, including ignored files such as a bytecode cache. Panel members run Python checks with `python3 -B`, so that they write no `__pycache__` in the project. The review runs no simulation or long computation in the project unless the user requests it.
 
 ## 9. Requirements
 
@@ -231,4 +231,4 @@ The authoritative contract, version 1, is [`skills/scientific-review/extensions.
 
 sci-review is versioned independently of project-kit. Releases are tagged `sci-review-vX.Y.Z`.
 
-Before each release, re-read the `/code-review` sections reproduced in `SKILL.md` section 8 from the current Claude Code binary, with the method of `specs/008-sci-review-arguments/research.md` section 0, and update them and the cited Claude Code version when they have changed. The text is internal to the host and has no public interface.
+Before each release, re-read the host prompt text reproduced in `SKILL.md` section 8 from the current Claude Code binary, with the method of `specs/008-sci-review-arguments/research.md` section 0, and update them and the cited Claude Code version when they have changed. The text is internal to the host and has no public interface.

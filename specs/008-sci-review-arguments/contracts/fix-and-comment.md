@@ -105,4 +105,4 @@ also be read from a client that does not show the tool call.
 
 ## 7. Version tracking
 
-`SKILL.md` cites "Reproduced from /code-review, Claude Code 2.1.317" above these sections. `tests/test_sci_review_arguments.py` asserts the citation and that the verbatim lines above are present in `SKILL.md`.
+`SKILL.md` cites "Source text: Claude Code 2.1.317" above these sections. `tests/test_sci_review_arguments.py` asserts the citation and that the verbatim lines above are present in `SKILL.md`.

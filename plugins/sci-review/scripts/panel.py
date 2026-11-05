@@ -75,7 +75,7 @@ USAGE = (
     "[--comment] [--fix] [--max-findings <n>|all|default]"
 )
 ULTRA_MESSAGE = (
-    "`ultra` is the cloud review of /code-review and is not available for the scientific review; use `max`."
+    "`ultra` is not an effort level of the scientific review; use `max`."
 )
 MAX_FINDINGS_IGNORED = (
     "`--max-findings` was ignored: type a whole number above zero, `all`, or `default` after it."

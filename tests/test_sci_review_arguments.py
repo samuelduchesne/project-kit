@@ -198,7 +198,7 @@ class TestGrammar(RunMixin):
     def test_ultra_message_is_exact(self) -> None:
         self.assertEqual(
             panel.ULTRA_MESSAGE,
-            "`ultra` is the cloud review of /code-review and is not available for the scientific review; use `max`.",
+            "`ultra` is not an effort level of the scientific review; use `max`.",
         )
 
     def test_near_level_is_recorded_not_rejected(self) -> None:
@@ -1022,7 +1022,7 @@ class TestReproducedSections(unittest.TestCase):
                 self.assertTrue(normalise(line) in self.text, f"SKILL.md lacks: {line}")
 
     def test_citation(self) -> None:
-        self.assertTrue("Reproduced from /code-review, Claude Code 2.1.317" in self.text, "SKILL.md lacks the citation")
+        self.assertTrue("Source text: Claude Code 2.1.317" in self.text, "SKILL.md lacks the citation")
 
     def test_arguments_are_passed_without_shell_expansion(self) -> None:
         raw = SKILL_MD.read_text(encoding="utf-8")
