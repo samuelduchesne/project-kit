@@ -16,7 +16,7 @@ The protocol is defined once, in [protocol.md](protocol.md). The role briefs are
 | Symbol | Meaning |
 |--------|---------|
 | `$SKILL` | The directory of this skill. On Claude it is `${CLAUDE_PLUGIN_ROOT}/skills/scientific-review`. |
-| `$PANEL` | `python3 "$SKILL/../../scripts/panel.py"`, the plugin's deterministic helper (contracts in [protocol.md](protocol.md)). |
+| `$PANEL` | `python3 "$SKILL/../../scripts/panel.py"`, the plugin's deterministic helper (contracts in [protocol.md](protocol.md)). Write the command out in full, with the absolute path, in every shell command: never store it in a shell variable such as `PANEL=...`, because zsh does not split a variable into words, and the shell is not kept between commands. |
 | `$RUN` | The run directory printed by `$PANEL init`, under the system temporary directory and never inside the project. |
 | `$PROJECT` | The root of the reviewed project (the current working directory unless the user names another). |
 
@@ -101,7 +101,7 @@ Select the first available runner, in this order (contracts/invocation.md sectio
 
 | Order | Runner | Condition | File |
 |-------|--------|-----------|------|
-| 1 | `claude-workflow` | The `Workflow` tool is available and `sci-review:scientific-review` is listed as a workflow | [runners/claude-workflow.md](runners/claude-workflow.md) |
+| 1 | `claude-workflow` | The `Workflow` tool is available and the session has a scratchpad directory, into which the panel script is copied and launched | [runners/claude-workflow.md](runners/claude-workflow.md) |
 | 2 | `codex-subagents` | Running in Codex with multi-agent tools enabled | [runners/codex-subagents.md](runners/codex-subagents.md) |
 | 3 | `claude-agents` | The `Agent` tool is available with the `sci-review:scientific-auditor` agent | [runners/claude-agents.md](runners/claude-agents.md) |
 | 4 | `sequential` | Otherwise (claude.ai chat, Cowork, Codex with agents disabled) | [runners/sequential.md](runners/sequential.md) |

@@ -77,8 +77,11 @@ jobs:
             || { echo "::error::skill scientific-review is missing from the installed plugin"; exit 1; }
           echo "$details" | grep -E '^\s*Agents \(1\)\s.*\bscientific-auditor\b' > /dev/null \
             || { echo "::error::agent scientific-auditor is missing from the installed plugin"; exit 1; }
-          ls "$HOME"/.claude/plugins/cache/project-kit/sci-review/*/workflows/scientific-review.js > /dev/null \
-            || { echo "::error::workflow scientific-review is missing from the installed plugin"; exit 1; }
+          ls "$HOME"/.claude/plugins/cache/project-kit/sci-review/*/scripts/scientific-review-panel.js > /dev/null \
+            || { echo "::error::the panel workflow script is missing from the installed plugin"; exit 1; }
+          if ls -d "$HOME"/.claude/plugins/cache/project-kit/sci-review/*/workflows > /dev/null 2>&1; then
+            echo "::error::sci-review registers a workflow, which adds a second slash command"; exit 1
+          fi
           for skill in new-project upgrade-project audit-project changelog-keeper create-release stacked-prs diataxis editorial review-docs; do
             if echo "$details" | grep -Eq "\b${skill}\b"; then
               echo "::error::project-kit skill ${skill} is present when only sci-review is installed"; exit 1

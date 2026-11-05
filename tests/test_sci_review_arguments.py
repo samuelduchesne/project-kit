@@ -1051,6 +1051,17 @@ class TestReproducedSections(unittest.TestCase):
                 self.assertEqual(arguments["raw"], hostile)
                 self.assertEqual(sorted(p.name for p in tmp.iterdir()), ["project"])
 
+    def test_panel_command_is_never_a_shell_variable(self) -> None:
+        # zsh does not split `$PANEL` holding "python3 .../panel.py"; every definition says to write it in full.
+        skill_dir = SKILL_MD.parent
+        for path in [SKILL_MD, *sorted((skill_dir / "runners").glob("*.md"))]:
+            definition = next(
+                (line for line in path.read_text(encoding="utf-8").splitlines() if line.startswith("| `$PANEL` |")), None
+            )
+            with self.subTest(file=path.name):
+                assert definition is not None, f"{path.name} does not define $PANEL"
+                self.assertIn("never store it in a shell variable", definition)
+
     def test_comment_sections(self) -> None:
         self.assert_lines(COMMENT_GITHUB + COMMENT_GITLAB)
 

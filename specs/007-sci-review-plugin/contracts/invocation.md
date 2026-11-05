@@ -28,7 +28,7 @@ The skill selects the first available runner, in this order, and records it in t
 
 | Order | Runner | Condition | Independence |
 |-------|--------|-----------|--------------|
-| 1 | `claude-workflow` | The `Workflow` tool is available and `sci-review:scientific-review` is listed as a workflow | independent agents |
+| 1 | `claude-workflow` | The `Workflow` tool is available and the session has a scratchpad directory, into which the panel script is copied and launched | independent agents |
 | 2 | `codex-subagents` | Running in Codex with multi-agent tools enabled | independent agents |
 | 3 | `claude-agents` | The `Agent` tool is available with the `sci-review:scientific-auditor` agent | independent agents |
 | 4 | `sequential` | Otherwise | not independent; notice required (FR-028) |

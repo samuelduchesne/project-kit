@@ -135,9 +135,9 @@ plugins/sci-review/               the sci-review plugin
   .codex-plugin/plugin.json       Codex manifest
   scripts/panel.py                deterministic panel steps (scope, merge, adjudicate, report)
   scripts/build_workflow.py       embeds the skill files in the workflow script
+  scripts/scientific-review-panel.js  panel Workflow, copied to the scratchpad and launched by the skill (no slash command)
   skills/scientific-review/       skill, protocol, roles, dimensions, runners, schemas, extension contract
   agents/scientific-auditor.md
-  workflows/scientific-review.js
 tests/                            tests for the helper scripts
 .github/                          CI workflow and the manifest consistency check
 specs/                            spec-kit feature specs, plans and tasks

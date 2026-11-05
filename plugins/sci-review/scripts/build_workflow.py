@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate the generated section of workflows/scientific-review.js.
+"""Regenerate the generated section of scripts/scientific-review-panel.js.
 
 Workflow scripts cannot read plugin files at run time, so the protocol, the
 role briefs, the dimension documents and the message schemas are embedded in
@@ -30,7 +30,7 @@ if sys.version_info < (3, 10):
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 SKILL_DIR = PLUGIN_DIR / "skills" / "scientific-review"
-WORKFLOW = PLUGIN_DIR / "workflows" / "scientific-review.js"
+WORKFLOW = PLUGIN_DIR / "scripts" / "scientific-review-panel.js"
 BEGIN = "// BEGIN GENERATED"
 END = "// END GENERATED"
 

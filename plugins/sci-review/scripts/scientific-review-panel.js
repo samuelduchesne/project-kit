@@ -1,5 +1,5 @@
 export const meta = {
-  name: 'scientific-review',
+  name: 'scientific-review-panel',
   description: 'Panel review of code for scientific correctness: independent perspectives, merge, debate and moderator notes; returns every panel message for panel.py',
   whenToUse: 'Launched by the sci-review:scientific-review skill after panel.py has resolved the scope and the panel. Not for style, lint or documentation reviews.',
   phases: [

@@ -24,7 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugins" / "sci-review"
-WORKFLOW = PLUGIN / "workflows" / "scientific-review.js"
+WORKFLOW = PLUGIN / "scripts" / "scientific-review-panel.js"
 BUILD = PLUGIN / "scripts" / "build_workflow.py"
 MESSAGES = ROOT / "tests" / "fixtures" / "sci-review" / "messages"
 GOLDEN = MESSAGES / "golden" / "full"
@@ -60,7 +60,7 @@ class TestDrift(unittest.TestCase):
         brief = plugin / "skills" / "scientific-review" / "roles" / "theorist.md"
         brief.write_text(brief.read_text(encoding="utf-8") + "\nAn added sentence.\n", encoding="utf-8")
         script = plugin / "scripts" / "build_workflow.py"
-        workflow = plugin / "workflows" / "scientific-review.js"
+        workflow = plugin / "scripts" / "scientific-review-panel.js"
         before = workflow.read_text(encoding="utf-8")
 
         check = run([sys.executable, str(script), "--check"])
@@ -85,13 +85,13 @@ class TestDrift(unittest.TestCase):
         self.assertEqual(run([sys.executable, str(script)]).returncode, 0)
         self.assertEqual(run([sys.executable, str(script)]).returncode, 0)
         self.assertEqual(run([sys.executable, str(script), "--check"]).returncode, 0)
-        text = (plugin / "workflows" / "scientific-review.js").read_text(encoding="utf-8")
+        text = (plugin / "scripts" / "scientific-review-panel.js").read_text(encoding="utf-8")
         self.assertEqual(text.count("// BEGIN PURE"), 1)
         self.assertTrue(text.rstrip().endswith("return run"))
 
     def test_missing_markers_exit_3(self) -> None:
         plugin = self.copy_plugin()
-        workflow = plugin / "workflows" / "scientific-review.js"
+        workflow = plugin / "scripts" / "scientific-review-panel.js"
         workflow.write_text(workflow.read_text(encoding="utf-8").replace("// BEGIN GENERATED", ""), encoding="utf-8")
         result = run([sys.executable, str(plugin / "scripts" / "build_workflow.py"), "--check"])
         self.assertEqual(result.returncode, 3)
@@ -145,6 +145,22 @@ process.stdout.write(JSON.stringify(out))
 
 
 @unittest.skipIf(NODE is None, "node is not installed, so the Workflow parity test cannot run")
+class TestNames(unittest.TestCase):
+    def test_plugin_registers_no_workflow(self) -> None:
+        # A registered workflow is a second slash command, `/sci-review:<name>`, which runs the panel alone with no
+        # scope; the skill launches the script by path instead, so the plugin exposes `/sci-review:scientific-review`
+        # only.
+        self.assertFalse((PLUGIN / "workflows").exists())
+        self.assertTrue(WORKFLOW.is_file())
+        runner = (PLUGIN / "skills" / "scientific-review" / "runners" / "claude-workflow.md").read_text(encoding="utf-8")
+        self.assertIn('Workflow({ scriptPath: "$WORKFLOW"', runner)
+        # A plugin path is refused by the Workflow tool (outside the working directory); the copy in the scratchpad
+        # is launched.
+        self.assertIn('cp "$SOURCE" "$WORKFLOW"', runner)
+        self.assertIn("$SCRATCH/scientific-review-panel.js", runner)
+        self.assertIn("scripts/scientific-review-panel.js", runner)
+
+
 class TestParity(unittest.TestCase):
     def test_pure_section_matches_panel(self) -> None:
         pure = section(WORKFLOW.read_text(encoding="utf-8"), "// BEGIN PURE", "// END PURE")

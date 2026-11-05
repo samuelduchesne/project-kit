@@ -128,7 +128,7 @@ A runner executes the panel phases on a given host. The skill selects the first 
 
 | Order | Runner | Condition | Independence |
 |-------|--------|-----------|--------------|
-| 1 | `claude-workflow` | The `Workflow` tool is available and `sci-review:scientific-review` is listed as a workflow | Independent agents |
+| 1 | `claude-workflow` | The `Workflow` tool is available and the session has a scratchpad directory, into which the panel script is copied and launched | Independent agents |
 | 2 | `codex-subagents` | Running in Codex with multi-agent tools enabled | Independent agents |
 | 3 | `claude-agents` | The `Agent` tool is available with the `sci-review:scientific-auditor` agent | Independent agents |
 | 4 | `sequential` | Otherwise (claude.ai chat, Cowork, Codex with agents disabled) | Not independent |

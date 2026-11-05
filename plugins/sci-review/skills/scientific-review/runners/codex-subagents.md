@@ -7,7 +7,7 @@ This runner performs the panel phases of `protocol.md` (independent round, merge
 | Symbol | Meaning |
 |--------|---------|
 | `$SKILL` | Absolute path of the skill directory, the directory that holds `SKILL.md`. |
-| `$PANEL` | `python3 "$SKILL/../../scripts/panel.py"`, the plugin's `scripts/panel.py` resolved from the skill's own directory. |
+| `$PANEL` | `python3 "$SKILL/../../scripts/panel.py"`, the plugin's `scripts/panel.py` resolved from the skill's own directory. Write the command out in full, with the absolute path, in every shell command: never store it in a shell variable such as `PANEL=...`, because zsh does not split a variable into words, and the shell is not kept between commands. |
 | `$RUN` | The run directory printed by `panel.py init`. |
 | `$PROJECT` | The reviewed project, the `project` field of `$RUN/run.json`. |
 | `$SCHEMAS` | `$SKILL/schemas`. The schema of a message named `<name>` is `$SCHEMAS/<name>.schema.json`. |
