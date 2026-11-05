@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "sci-review/schemas/report.schema.json",
   "title": "Review report",
-  "description": "ReviewReport produced by panel.py report. Semantic checks in panel.py: no_trigger_reason is present and non-null when trigger or wrong_output is null; line_end >= line_start; findings are ordered by label then severity.",
+  "description": "ReviewReport produced by panel.py report. Semantic checks in panel.py: no_trigger_reason is present and non-null when trigger or wrong_output is null; line_end >= line_start; findings are ordered by label then severity. findings holds the delivered findings only, at most max_findings of them; withheld counts the rest.",
   "type": "object",
   "required": [
     "scope",
@@ -12,7 +12,14 @@
     "rejected",
     "checked_items",
     "unreviewed",
-    "notices"
+    "notices",
+    "level",
+    "level_source",
+    "max_findings",
+    "withheld",
+    "parts",
+    "incomplete_parts",
+    "notes"
   ],
   "properties": {
     "scope": {
@@ -52,6 +59,44 @@
       }
     },
     "notices": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "level": {
+      "$ref": "#/$defs/Level"
+    },
+    "level_source": {
+      "$ref": "#/$defs/Source"
+    },
+    "max_findings": {
+      "description": "The finding cap applied: a whole number, \"all\", or null for the level's default (no limit).",
+      "type": [
+        "integer",
+        "string",
+        "null"
+      ]
+    },
+    "withheld": {
+      "description": "Adjudicated findings not delivered because of the cap; they remain in adjudication.json.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "parts": {
+      "description": "Number of review parts.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "incomplete_parts": {
+      "description": "Ids of review parts whose independent round did not complete; listed under unreviewed.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "description": "One-line notes about the arguments (from arguments.json).",
       "type": "array",
       "items": {
         "type": "string"
@@ -174,9 +219,48 @@
         },
         "note": {
           "type": "string"
+        },
+        "target": {
+          "description": "The resolved target, or null when none was given.",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "total_lines": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pull_request_ref": {
+          "description": "Temporary git ref of a fetched pull request head, deleted by panel.py clean.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "target": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "target"
+            ]
+          },
+          "then": {
+            "properties": {
+              "target": {
+                "$ref": "#/$defs/Target"
+              }
+            }
+          }
+        }
+      ]
     },
     "Perspective": {
       "type": "object",
@@ -267,6 +351,28 @@
           "items": {
             "$ref": "#/$defs/ModelAssignment"
           }
+        },
+        "level": {
+          "$ref": "#/$defs/Level"
+        },
+        "level_source": {
+          "$ref": "#/$defs/Source"
+        },
+        "overrides": {
+          "description": "Level-profile parameters overridden by explicit options (perspectives, rounds, batches).",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "perspectives",
+              "rounds",
+              "batches"
+            ]
+          }
+        },
+        "parts": {
+          "type": "integer",
+          "minimum": 0
         }
       },
       "additionalProperties": false
@@ -574,6 +680,78 @@
           "$ref": "#/$defs/Dimension"
         },
         "note": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Level": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    "Source": {
+      "type": "string",
+      "enum": [
+        "given",
+        "reused",
+        "default"
+      ]
+    },
+    "Target": {
+      "type": "object",
+      "required": [
+        "kind",
+        "host",
+        "number",
+        "ref",
+        "paths",
+        "text"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "pull-request",
+            "branch",
+            "paths"
+          ]
+        },
+        "host": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "github",
+            "gitlab",
+            null
+          ]
+        },
+        "number": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "text": {
           "type": "string"
         }
       },

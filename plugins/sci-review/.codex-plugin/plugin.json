@@ -1,6 +1,6 @@
 {
   "name": "sci-review",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Review code for scientific correctness with a panel of independent reviewers: mathematical derivations, numerical stability, physical modelling and units, statistical integrity, and algorithmic correctness. Not a style, lint or documentation review.",
   "author": {
     "name": "Samuel Letellier-Duchesne",

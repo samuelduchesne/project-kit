@@ -316,11 +316,90 @@ A live review was run on 2026-11-04 on a scratch repository: one commit on branc
 
 As section 3.3 of `SKILL.md` requires, the review then asked the user which scope to use: stop, review the repository, or name a baseline. It did not fall back to repository mode. The user chose to stop, and the run directory was removed with `panel.py clean`. Verdict: Pass.
 
+### 4.15 Installed plugins on the Claude Workflow runner (T096)
+
+**Setup.** Runs of 2026-11-04 in a Claude Code desktop session with both plugins installed: `sci-review@project-kit` 0.1.0 (identical to `plugins/sci-review/` at this commit, apart from the cache marker `.in_use`) and `idfkit@idfkit` 0.3.0. Every `panel.py` step used the installed copy under `~/.claude/plugins/cache/project-kit/sci-review/0.1.0/`. The two differences from sections 4.11 to 4.13 are the following.
+
+1. **Named workflow.** `sci-review:scientific-review` was listed, and both reviews were launched by name with the arguments of `runners/claude-workflow.md` section 4, not by the script path.
+2. **Extension discovery from the host.** The host skill listing contained one skill whose name ends in `sci-review-extension`: `idfkit:building-energy-sci-review-extension`. Loading it gave its base directory, which is a copy managed by the desktop application rather than the `~/.claude` plugin cache; `extension.json` was found there and passed to `select-extensions`. No path was supplied by hand.
+
+Both reviews used five default perspectives plus any selected domain perspective, with the defender and the moderator, 2 rebuttal rounds and at most 2 batches. Every agent ran as a Workflow subagent; no agent failed, and `panel.py ingest` accepted every message and dropped none.
+
+**Run 1: seeded fixture (quickstart.md section 4).** Fresh build, branch `feature`, 17 files, 526 lines. `select-extensions` recorded the building-energy extension as `not-applicable`. The Workflow ran 34 agents in 269 s and used 3.20 million subagent tokens. The perspectives returned 86 candidates in 17 location clusters and 2 batches; batch 1 stopped after round 1 and batch 2 after round 2. `adjudicate` gave 19 consensus findings, with 0 majority, 0 contested and 0 rejected.
+
+| Criterion | Verdict | Result |
+|-----------|---------|--------|
+| SC-001 recall | Pass | 16 of 16; every dimension and both languages at 100% |
+| SC-002 look-alikes | Pass | 0 of 4 reported |
+| SC-003 FR-014 fields | Pass | 19 of 19 findings complete |
+| SC-004 project unchanged | Pass | Index checksum unchanged; `git status --porcelain --ignored` empty before and after |
+| SC-008 panel against best single perspective | Fail | Four perspectives alone detected 16 of 16 and the numerical analyst 15 of 16, all with 0 false positives |
+| SC-009 false positives rejected in debate | Pass | No independent-round false positive |
+| SC-010 contested construct | Fail | Reported as F10 and labelled consensus, as in section 4.13 |
+| SC-011 independence | Pass | No independent-round transcript contains a finding identifier of another perspective |
+
+**Run 2: building-energy fixture with the extension (quickstart.md section 6, step 1).** Fresh build with the idfkit plugin's `tests/fixtures/sci-review/build.py`: branch `feature`, 7 files, 142 lines. `select-extensions` selected `building-energy-sci-review-extension` ("applies to models/office.idf, src/bem/climate.py, src/bem/climate.ts and 4 more"), and the building physicist joined the panel. The Workflow ran 39 agents in 330 s and used 3.39 million subagent tokens. The perspectives returned 46 candidates in 8 location clusters and 2 batches; batch 1 stopped after round 2 and batch 2 after round 1. `adjudicate` gave 9 consensus findings, with 0 majority, 0 contested and 0 rejected. The run was scored with `score.py report.json --run RUN --manifest <idfkit>/tests/fixtures/sci-review/manifest.json --domain-perspective building-physicist`.
+
+| Criterion | Verdict | Result |
+|-----------|---------|--------|
+| SC-001 recall | Pass | 7 of 7 seeded building-energy defects |
+| SC-012, first half, independent agents | Pass | 7 of 7 list the building physicist among their raisers (at least 90% required) |
+| Domain checks | Pass | The independent building physicist called `load_model`, `validate_model` and `check_model_integrity` once each. The missing construction is F1, raised by all six perspectives and accepted by every member |
+| No simulation | Pass | No `run_simulation` call in any of the 39 agent transcripts |
+| SC-002 look-alikes | Pass after the scorer correction | First scored Fail; see observation 1 and the re-score below |
+| SC-003 FR-014 fields | Pass | 9 of 9 findings complete |
+| SC-004 project unchanged | Pass | Index checksum unchanged; `git status --porcelain --ignored` empty before and after |
+| SC-008 panel against best single perspective | Fail | The experimentalist alone detected 7 of 7 with 0 false positives |
+| SC-009 false positives rejected in debate | Fail by `score.py`; not applicable on inspection | 0 of 4 removed after the scorer correction; the 4 are genuine defects that the manifest does not list (observation 1) |
+| SC-011 independence | Pass | No independent-round transcript of the six perspectives contains a finding identifier of another perspective |
+
+**Observations.**
+
+1. **Line-proximity scoring.** `score.py` matches a finding to a manifest entry when their lines lie within 3 of each other. It therefore reports the look-alike `py-lookalike-kwh-to-kbtu` (`src/bem/units.py:21`, `return kwh * 3.412141633`) as reported by F7 and F1001. Neither finding concerns that conversion. Both cover `calibration_error` at lines 24 to 27: F7 states that `zip` silently truncates and misaligns a bill series with a missing month, and F1001 states that a zero billed month raises `ZeroDivisionError`. Both are concrete failures in reviewed code that the manifest does not list. For the same reason, the six independent-round "false positives" counted for SC-009 are not false positives. Two of them are seeded defects whose candidate lines lie outside the tolerance: `building-physicist-4` at `units.py:14` for the constant at line 6, and `theorist-7` at `office.idf:79` for the reference at line 73. The other four are the two `calibration_error` defects. No look-alike conversion was reported by any finding.
+
+   **Re-score after the scorer correction.** `score.py` was then changed in two ways, each covered by a unit test in `tests/test_sci_review_score.py`. First, a finding reports a look-alike only when its own lines overlap the look-alike's lines; the 3-line tolerance still applies to seeded defects. Second, an independent-round candidate is credited with the seeded defect of the merged finding that absorbed it in `merge/batch-*.json`. The three run directories of sections 4.15 and 4.16 were re-scored without new agent runs. The seeded-fixture verdicts are unchanged. On the building-energy run, SC-002 now passes (0 of 8 look-alikes), and every perspective is credited with 7 of 7 defects, including the building physicist and the theorist. SC-009 still counts 0 of 4 removed. The 4 are the `calibration_error` candidates, which describe genuine defects absent from the idfkit manifest, so the remaining failure is a gap in that manifest, not in the panel or the scorer.
+
+   **Re-score with the corrected idfkit manifest.** idfkit/idfkit-plugin#34 lists the two `calibration_error` defects and adds a `domain` field to every defect entry. The rule is stated in the manifest: a defect is a domain defect when recognising it requires building-energy knowledge. The 7 original seeded defects are domain defects; the 2 `calibration_error` defects are not. `score.py` now measures SC-012 over domain defects only, and SC-001 still counts every defect. The fixture code was not changed: the two defects remain, and the manifest now records them. Re-scoring the same run directory against the manifest of that pull request gives SC-001 Pass (9 of 9), SC-002 Pass (0 of 8), SC-003 Pass (9 of 9), SC-009 Pass (no independent-round false positive) and SC-012 Pass (7 of 7 domain defects raised by the building physicist). SC-008 fails, as on every other run (the computer scientist alone detected 9 of 9).
+2. **Agent type.** The Workflow runs its agents as Workflow subagents, as `runners/claude-workflow.md` specifies. The `sci-review:scientific-auditor` agent type was listed by the Agent tool in this session but is used only by the Claude Agent runner, which these runs did not exercise.
+
+Limit of these runs as evidence: section 6, steps 2 to 4 (extension not installed, the contract-only test extension and its invalid copy), were not re-run with the installed plugins; their records remain those of section 4.11. The Claude Agent runner is recorded in section 4.16.
+
+### 4.16 Installed plugins on the Claude Agent runner (T096)
+
+**Setup.** Run of 2026-11-04 in the same session as section 4.15, on a fresh build of the seeded fixture (branch `feature`, 17 files, 526 lines). The opening steps of `SKILL.md` used the installed `panel.py` with `panel --runner claude-agents`; extension discovery from the host skill listing found the building-energy extension, and `select-extensions` recorded it as `not-applicable`. Every panel agent was launched with the Agent tool as the installed agent type `sci-review:scientific-auditor`, with the prompt templates of `runners/claude-agents.md` section 4 and no other content. The panel had five default perspectives, the defender and the moderator, with 2 rebuttal rounds and at most 2 batches.
+
+**Run.**
+
+- **Agents.** 31 agents: 5 independent, 2 merge, 12 in round 0, 12 in round 1 and 2 notes. Together they used 1.18 million subagent tokens. The run was paused once between round 1 and the notes because the host volume was full; no message was lost, and the run resumed from the files in `$RUN`.
+- **Validation.** Every message passed `panel.py validate` at the first attempt, so no output was returned to its author and no notice was recorded.
+- **Merge.** The perspectives returned 85 candidates, which `panel.py merge` grouped into 17 location clusters in 2 batches. Both moderators confirmed every cluster and split none.
+- **Debate.** Every member accepted every finding in rounds 0 and 1. `panel.py debate-status` stopped both batches after round 1.
+- **Labels.** `adjudicate` gave 17 consensus findings, with 0 majority, 0 contested and 0 rejected.
+
+| Criterion | Verdict | Result |
+|-----------|---------|--------|
+| SC-001 recall | Pass | 16 of 16; every dimension and both languages at 100% |
+| SC-002 look-alikes | Pass | 0 of 4 reported |
+| SC-003 FR-014 fields | Pass | 17 of 17 findings complete |
+| SC-004 project unchanged | Pass | Index checksum unchanged; `git status --porcelain --ignored` empty before and after |
+| SC-008 panel against best single perspective | Fail | Every perspective alone detected 16 of 16 with 0 false positives |
+| SC-009 false positives rejected in debate | Pass | No independent-round false positive |
+| SC-010 contested construct | Fail | Reported as F10 and labelled consensus. The defender considered the documented first-order model as a defence and rejected it because the docstring places hill paths in scope |
+| SC-011 independence | Pass | No independent-round transcript contains a finding identifier of another perspective or a path to another perspective's candidates file |
+
+**Observations.**
+
+1. **Corrections agreed in debate stay out of the finding.** The members agreed on three numerical corrections to merged findings: the correct t interval of F3 is (8.516, 13.484), the refined value of F9 is better than the fine estimate rather than worse, and the standard deviation in F4 is 39.01 rather than 38.9. The moderator recorded each correction in the note's `argument_for`, but the protocol has no step that amends the merged finding, so the report's `wrong_output` fields still carry the uncorrected text. No conclusion depends on these values.
+2. **Severity dissent.** In round 0 the numerical analyst accepted F1 but argued for low severity rather than medium; in round 1 it adopted medium. The moderator recorded the question as F1's `deciding_assumption`, although the label is consensus.
+3. **Runner comparison.** On the same fixture, the Agent runner and the Workflow runner of section 4.15 agree on every verdict. The Agent runner used fewer agents (31 against 34) and about 37% of the subagent tokens (1.18 million against 3.20 million).
+
 ## 5. Open criteria
 
-Every task of tasks.md except T096 is complete. Two success criteria remain unmet on every multi-agent runner, after the fixture changes of section 4.13:
+Every task of tasks.md is complete; T096 is recorded in sections 4.15 and 4.16. Two success criteria remain unmet on every multi-agent runner, after the fixture changes of section 4.13 and the installed-plugin runs of sections 4.15 and 4.16:
 
 | Criterion | Reason | Remedy |
 |-----------|--------|--------|
-| SC-008 | Each default perspective alone detects every seeded defect: 11 of 11 in sections 4.1, 4.6, 4.8 and 4.12, and 16 of 16 in section 4.13, including five defects chosen to need one perspective's expertise. The panel therefore cannot exceed the best single perspective | Amend SC-008 to measure the panel by its debate (false positives rejected, labels) rather than by recall over the best single perspective, or build defects that current agents miss without a specific expertise |
-| SC-010 | Independent agents settle the construct unanimously from its documented regime. They judged it correct when the regime was graded roads (sections 4.6, 4.8 and 4.12), and a defect when the regime includes hill paths (section 4.13) | Amend SC-010 through `/speckit-specify`, for example to require that a divided panel, when one occurs, is labelled contested with both arguments, as the sequential run of section 4.5 and the golden tests show; or use a construct whose validity depends on information outside the code |
+| SC-008 | Each default perspective alone detects every seeded defect, or all but one: 11 of 11 in sections 4.1, 4.6, 4.8 and 4.12, 16 of 16 in section 4.13, 15 or 16 of 16 in section 4.15, and 16 of 16 in section 4.16, including five defects chosen to need one perspective's expertise. The panel therefore cannot exceed the best single perspective | Amend SC-008 to measure the panel by its debate (false positives rejected, labels) rather than by recall over the best single perspective, or build defects that current agents miss without a specific expertise |
+| SC-010 | Independent agents settle the construct unanimously from its documented regime. They judged it correct when the regime was graded roads (sections 4.6, 4.8 and 4.12), and a defect when the regime includes hill paths (sections 4.13 and 4.15) | Amend SC-010 through `/speckit-specify`, for example to require that a divided panel, when one occurs, is labelled contested with both arguments, as the sequential run of section 4.5 and the golden tests show; or use a construct whose validity depends on information outside the code |
+
+The line-proximity defect of `score.py` described in section 4.15, observation 1, is corrected: look-alikes require overlapping lines, and candidates are credited through the merge. The idfkit building-energy manifest omitted two genuine defects of `calibration_error` in `src/bem/units.py`, which every panel reports. idfkit/idfkit-plugin#34 lists them, with `"domain": false`, and `score.py` measures SC-012 over domain defects only. The fixture code was left unchanged so that the evaluation measures the code as written. Until that pull request is merged and released, the idfkit 0.3.0 manifest still omits the two defects.

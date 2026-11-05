@@ -126,6 +126,97 @@ class TestScore(unittest.TestCase):
         self.assertIn("SC-012: FAIL (1/2 reported with building-physicist as a raiser)", text)
         self.assertIn("reported as F2 without building-physicist", text)
 
+    def test_domain_attribution_leaves_out_general_defects(self) -> None:
+        """SC-012 counts only domain defects; SC-001 still counts every defect."""
+        data = json.loads(json.dumps(ENTRY_MANIFEST))
+        data["entries"].append(
+            {
+                "id": "py-general",
+                "file": "src/bem/units.py",
+                "line": 27,
+                "anchor": "W",
+                "description": "d",
+                "language": "python",
+                "kind": "defect",
+                "domain": False,
+            }
+        )
+        manifest = self.write("manifest.json", data)
+        report = self.write(
+            "report.json",
+            {
+                "findings": [
+                    finding("F1", "src/bem/units.py", 6, ["building-physicist"]),
+                    finding("F2", "models/office.idf", 73, ["building-physicist"]),
+                    finding("F3", "src/bem/units.py", 27, ["computer-scientist"]),
+                ]
+            },
+        )
+        text = self.run_score(str(report), "--manifest", str(manifest), "--domain-perspective", "building-physicist")
+        self.assertIn("SC-001: PASS (3/3 detected)", text)
+        self.assertIn("py-general                         not a domain defect; left out", text)
+        self.assertIn("SC-012: PASS (2/2 reported with building-physicist as a raiser)", text)
+
+    def run_score(self, *args: str) -> str:
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = score.main(list(args))
+        self.assertEqual(code, 0)
+        return out.getvalue()
+
+    def test_lookalike_needs_overlap(self) -> None:
+        """A finding about adjacent code, within the tolerance but not on the look-alike's line, is not counted."""
+        manifest = self.write("manifest.json", ENTRY_MANIFEST)
+        adjacent = finding("F7", "src/bem/units.py", 24, ["methodologist"]) | {"line_end": 27}
+        report = self.write("report.json", {"findings": [adjacent]})
+        self.assertIn(
+            "SC-002: PASS (0 false positive(s) at look-alikes)",
+            self.run_score(str(report), "--manifest", str(manifest)),
+        )
+        on_line = finding("F8", "src/bem/units.py", 21, ["theorist"])
+        report = self.write("report.json", {"findings": [on_line]})
+        text = self.run_score(str(report), "--manifest", str(manifest))
+        self.assertIn("SC-002: FAIL (1 false positive(s) at look-alikes)", text)
+        self.assertIn("reported as F8", text)
+
+    def test_candidate_credited_through_merge(self) -> None:
+        """A candidate outside the tolerance is credited with the defect of the merged finding that absorbed it."""
+        manifest = self.write("manifest.json", ENTRY_MANIFEST)
+        report = self.write(
+            "report.json",
+            {
+                "findings": [
+                    finding("F1", "src/bem/units.py", 6, ["theorist", "building-physicist"]),
+                    finding("F2", "models/office.idf", 73, ["theorist"]),
+                ]
+            },
+        )
+        run = self.dir / "run"
+        (run / "candidates").mkdir(parents=True)
+        (run / "merge").mkdir()
+        candidates = {
+            "perspective": "building-physicist",
+            "findings": [
+                {"id": "building-physicist-1", "file": "src/bem/units.py", "line_start": 14, "line_end": 16},
+                {"id": "building-physicist-2", "file": "models/office.idf", "line_start": 73, "line_end": 73},
+                {"id": "building-physicist-3", "file": "src/bem/units.py", "line_start": 40, "line_end": 40},
+            ],
+        }
+        (run / "candidates" / "building-physicist.json").write_text(json.dumps(candidates), encoding="utf-8")
+        merge = {
+            "batch": 1,
+            "findings": [
+                {"id": "F1", "members": ["building-physicist-1"]},
+                {"id": "F2", "members": ["building-physicist-2"]},
+            ],
+        }
+        (run / "merge" / "batch-1.json").write_text(json.dumps(merge), encoding="utf-8")
+        text = self.run_score(str(report), "--manifest", str(manifest), "--run", str(run))
+        self.assertIn("building-physicist       2/2 detected, 1 false positive(s) of 3 finding(s)", text)
+        self.assertIn("building-physicist-3", text)
+        self.assertNotIn("building-physicist-1 ", text)
+        self.assertIn("SC-009: PASS (1/1 false positives removed)", text)
+
 
 if __name__ == "__main__":
     unittest.main()

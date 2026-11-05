@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """Deterministic steps of the sci-review panel protocol.
 
-Implements the subcommands of contracts/panel-cli.md: scope resolution,
-extension selection, panel configuration, message validation, location
-clustering and batching, adjudication of agreement labels, report rendering,
-and run-directory management. Standard library only, Python 3.10 or later.
+Implements the subcommands of contracts/panel-cli.md (feature 007) and of the
+feature 008 contracts: argument parsing and user preferences, scope and target
+resolution, review parts, extension selection, panel configuration by effort
+level, message validation, location clustering and batching, adjudication of
+agreement labels, report rendering, and run-directory management. Standard
+library only, Python 3.10 or later.
 
-The script never writes inside the reviewed project. Every subcommand that
-creates, writes or removes files accepts --dry-run. Exit codes: 0 success,
-1 validation failure, 2 usage error, 3 precondition not met.
+The script never writes inside the reviewed project. It writes only to the run
+directory, to the user's preferences file (outside every project), and to
+temporary git refs under refs/sci-review/ for a fetched pull request head.
+Every subcommand that creates, writes or removes files accepts --dry-run.
+Exit codes: 0 success, 1 validation failure, 2 usage error, 3 precondition not
+met.
 """
 
 from __future__ import annotations
@@ -17,13 +22,15 @@ import argparse
 import dataclasses
 import fnmatch
 import json
+import os
 import re
 import secrets
+import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
@@ -45,7 +52,10 @@ EXIT_PRECONDITION = 3
 CONTRACT_VERSION = 1
 CLUSTER_DISTANCE = 3
 SPLIT_ID_BLOCK = 1000
-DEFAULT_BUDGET = 6000
+PART_LINES = 2000
+LARGE_SCOPE_THRESHOLD = 6000
+REPORT_TOOL_LIMIT = 32
+PREFERENCES_VERSION = 1
 MIN_PERSPECTIVES, MAX_PERSPECTIVES = 2, 7
 MIN_ROUNDS, MAX_ROUNDS, DEFAULT_ROUNDS = 0, 3, 2
 MIN_BATCHES, MAX_BATCHES, DEFAULT_BATCHES = 1, 4, 2
@@ -58,16 +68,40 @@ REDUCED_INDEPENDENCE_NOTICE = (
 )
 NO_REVIEWABLE_CODE = "No reviewable scientific code changed in this scope."
 NOT_REJECTED = "Not rejected."
+WORKTREE_HEAD = "HEAD with uncommitted and untracked changes"
+
+USAGE = (
+    "usage: /sci-review:scientific-review [low|medium|high|xhigh|max] [<pr#>|<pr-url>|<branch>|<path>...] "
+    "[--comment] [--fix] [--max-findings <n>|all|default]"
+)
+ULTRA_MESSAGE = (
+    "`ultra` is not an effort level of the scientific review; use `max`."
+)
+MAX_FINDINGS_IGNORED = (
+    "`--max-findings` was ignored: type a whole number above zero, `all`, or `default` after it."
+)
+USUAL_LIMIT = "Using the usual limit."
+DEFAULT_CAP_HINT = "passing `--max-findings default` goes back to the usual limit."
+REPORT_TOOL_NOTICE = "This review reports at most 32 findings, so the limit is 32 here."
+
+
+def near_level_message(token: str) -> str:
+    return f"`{token}` is not a recognised level: use low, medium, high, xhigh or max."
 
 
 class PanelError(Exception):
-    """An error that maps to an exit code."""
+    """An error that maps to an exit code.
+
+    `payload`, when set, is a typed record printed as JSON on standard output, so that the skill can read
+    a structured reason (for example the candidate kinds of an ambiguous target) from a non-zero exit.
+    """
 
     exit_code = EXIT_INVALID
 
-    def __init__(self, message: str, details: Sequence[str] = ()) -> None:
+    def __init__(self, message: str, details: Sequence[str] = (), payload: Any = None) -> None:
         super().__init__(message)
         self.details = list(details)
+        self.payload = payload
 
 
 class ValidationFailure(PanelError):
@@ -161,6 +195,59 @@ class Language:
     TYPESCRIPT = "typescript"
     OTHER = "other"
     VALUES = (PYTHON, TYPESCRIPT, OTHER)
+
+
+class Level:
+    """Effort levels, in increasing order of cost (contracts/arguments.md section 4)."""
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    XHIGH = "xhigh"
+    MAX = "max"
+    VALUES = (LOW, MEDIUM, HIGH, XHIGH, MAX)
+    DEFAULT = MEDIUM
+    ULTRA = "ultra"
+
+
+class Source:
+    """Where a resolved argument came from (FR-007, FR-014)."""
+
+    GIVEN = "given"
+    REUSED = "reused"
+    DEFAULT = "default"
+    VALUES = (GIVEN, REUSED, DEFAULT)
+
+
+class TargetKind:
+    PULL_REQUEST = "pull-request"
+    BRANCH = "branch"
+    PATHS = "paths"
+    VALUES = (PULL_REQUEST, BRANCH, PATHS)
+
+
+class Host:
+    GITHUB = "github"
+    GITLAB = "gitlab"
+    VALUES = (GITHUB, GITLAB)
+
+
+class PartStatus:
+    PENDING = "pending"
+    REVIEWED = "reviewed"
+    INCOMPLETE = "incomplete"
+    VALUES = (PENDING, REVIEWED, INCOMPLETE)
+
+
+class CapKind:
+    """How `--max-findings` was given on the command line (contracts/arguments.md section 1)."""
+
+    ABSENT = "absent"
+    NUMBER = "number"
+    ALL = "all"
+    DEFAULT = "default"
+    MALFORMED = "malformed"
+    VALUES = (ABSENT, NUMBER, ALL, DEFAULT, MALFORMED)
 
 
 DEFENDER_ID = "defender"
@@ -292,6 +379,38 @@ class Exclusion(Record):
 
 
 @dataclass(frozen=True)
+class Target(Record):
+    """A resolved review target (data-model.md section 2)."""
+
+    kind: str
+    host: str | None
+    number: int | None
+    ref: str | None
+    paths: tuple[str, ...]
+    text: str
+    _enums: ClassVar[dict[str, Sequence[str]]] = {"kind": TargetKind.VALUES}
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.host is not None:
+            _check_enum("Target", "host", self.host, Host.VALUES)
+
+    @property
+    def from_ref(self) -> bool:
+        """True when the reviewed files are read from a git ref, not from the working tree."""
+        return self.kind in (TargetKind.BRANCH, TargetKind.PULL_REQUEST)
+
+    def describe(self) -> str:
+        if self.kind == TargetKind.PULL_REQUEST:
+            sign = "!" if self.host == Host.GITLAB else "#"
+            noun = "merge request" if self.host == Host.GITLAB else "pull request"
+            return f"{noun} {sign}{self.number}"
+        if self.kind == TargetKind.BRANCH:
+            return f"branch {self.ref}"
+        return "paths " + ", ".join(self.paths)
+
+
+@dataclass(frozen=True)
 class ReviewScope(Record):
     mode: str
     base: str | None
@@ -299,7 +418,10 @@ class ReviewScope(Record):
     files: tuple[ScopedFile, ...]
     excluded: tuple[Exclusion, ...]
     note: str
-    _records: ClassVar[dict[str, str]] = {"files": "ScopedFile", "excluded": "Exclusion"}
+    target: Target | None = None
+    total_lines: int = 0
+    pull_request_ref: str | None = None
+    _records: ClassVar[dict[str, str]] = {"files": "ScopedFile", "excluded": "Exclusion", "target": "Target"}
     _enums: ClassVar[dict[str, Sequence[str]]] = {"mode": ScopeMode.VALUES}
 
 
@@ -362,8 +484,16 @@ class Panel(Record):
     runner: str
     independent: bool
     models: tuple[ModelAssignment, ...] = ()
+    level: str = Level.DEFAULT
+    level_source: str = Source.DEFAULT
+    overrides: tuple[str, ...] = ()
+    parts: int = 1
     _records: ClassVar[dict[str, str]] = {"perspectives": "Perspective", "models": "ModelAssignment"}
-    _enums: ClassVar[dict[str, Sequence[str]]] = {"runner": Runner.VALUES}
+    _enums: ClassVar[dict[str, Sequence[str]]] = {
+        "runner": Runner.VALUES,
+        "level": Level.VALUES,
+        "level_source": Source.VALUES,
+    }
 
 
 @dataclass(frozen=True)
@@ -409,7 +539,9 @@ class CandidateMessage(Record):
     findings: tuple[CandidateFinding, ...]
     checked_items: tuple[CheckedItem, ...]
     notes: str
+    part: str | None = None
     _records: ClassVar[dict[str, str]] = {"findings": "CandidateFinding", "checked_items": "CheckedItem"}
+    _optional: ClassVar[tuple[str, ...]] = ("part",)
 
 
 @dataclass(frozen=True)
@@ -569,6 +701,176 @@ class RunInfo(Record):
     run: str
 
 
+def _check_cap(owner: str, name: str, value: Any) -> None:
+    """A finding cap is a whole number of at least 1, `all`, or (where allowed) null."""
+    if value is None or value == CapKind.ALL:
+        return
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValidationFailure(f"{owner}.{name}: {value!r} is not a whole number above zero or 'all'")
+
+
+@dataclass(frozen=True)
+class InvocationArguments(Record):
+    """Content of `$RUN/arguments.json`, produced by `panel.py args` (data-model.md section 1)."""
+
+    level: str
+    level_source: str
+    target_text: str | None
+    near_level: str | None
+    comment: bool
+    fix: bool
+    max_findings: int | str | None
+    max_findings_source: str
+    notes: tuple[str, ...]
+    raw: str
+    _enums: ClassVar[dict[str, Sequence[str]]] = {
+        "level": Level.VALUES,
+        "level_source": Source.VALUES,
+        "max_findings_source": Source.VALUES,
+    }
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        _check_cap("InvocationArguments", "max_findings", self.max_findings)
+
+
+@dataclass(frozen=True)
+class UserPreferences(Record):
+    """Content of the user's preferences file, outside every project (data-model.md section 3)."""
+
+    version: int = PREFERENCES_VERSION
+    last_level: str | None = None
+    last_max_findings: int | str | None = None
+    _optional: ClassVar[tuple[str, ...]] = ("last_level", "last_max_findings")
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if type(self.version) is not int or self.version != PREFERENCES_VERSION:
+            raise ValidationFailure(f"UserPreferences.version: {self.version!r} is not {PREFERENCES_VERSION}")
+        if self.last_level is not None:
+            _check_enum("UserPreferences", "last_level", self.last_level, Level.VALUES)
+        _check_cap("UserPreferences", "last_max_findings", self.last_max_findings)
+
+
+@dataclass(frozen=True)
+class LevelProfile(Record):
+    """The panel configuration of one effort level (data-model.md section 4, research R6).
+
+    `perspectives` is a tuple of perspective ids, or `defaults+extensions`, or `all`; both strings select every
+    available perspective (the five defaults and the selected extensions), up to `max_perspectives`.
+    `default_cap` is null for every level: the report is not capped by default (FR-006).
+    """
+
+    level: str
+    perspectives: tuple[str, ...] | str
+    max_perspectives: int
+    rebuttal_rounds: int
+    max_batches: int
+    default_cap: int | None = None
+    _enums: ClassVar[dict[str, Sequence[str]]] = {"level": Level.VALUES}
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if isinstance(self.perspectives, str) and self.perspectives not in ("defaults+extensions", "all"):
+            raise ValidationFailure(f"LevelProfile.perspectives: {self.perspectives!r} is not a perspective list")
+        checks = (
+            ("max_perspectives", self.max_perspectives, MIN_PERSPECTIVES, MAX_PERSPECTIVES),
+            ("rebuttal_rounds", self.rebuttal_rounds, MIN_ROUNDS, MAX_ROUNDS),
+            ("max_batches", self.max_batches, MIN_BATCHES, MAX_BATCHES),
+        )
+        for name, value, low, high in checks:
+            if not low <= value <= high:
+                raise ValidationFailure(f"LevelProfile.{name}: {value} is outside {low} to {high}")
+
+    def requested(self, available: Sequence[str]) -> list[str]:
+        """The perspective ids this profile selects from the available ones, in order.
+
+        For `defaults+extensions` and `all`, every available perspective is returned; `configure_panel` then
+        applies the limit of seven and records a notice naming those left out, as in feature 007.
+        """
+        if isinstance(self.perspectives, str):
+            return list(available)
+        return [pid for pid in self.perspectives if pid in available][: self.max_perspectives]
+
+
+LEVEL_PROFILES: dict[str, LevelProfile] = {
+    Level.LOW: LevelProfile(Level.LOW, ("theorist", "numerical-analyst", "methodologist"), 3, 1, 1),
+    Level.MEDIUM: LevelProfile(Level.MEDIUM, "defaults+extensions", MAX_PERSPECTIVES, 2, 2),
+    Level.HIGH: LevelProfile(Level.HIGH, "defaults+extensions", MAX_PERSPECTIVES, 2, 3),
+    Level.XHIGH: LevelProfile(Level.XHIGH, "defaults+extensions", MAX_PERSPECTIVES, 3, 4),
+    Level.MAX: LevelProfile(Level.MAX, "all", MAX_PERSPECTIVES, 3, 4),
+}
+
+
+@dataclass(frozen=True)
+class ReviewPart(Record):
+    """One review part of `$RUN/parts.json` (data-model.md section 7)."""
+
+    id: str
+    files: tuple[ScopedFile, ...]
+    lines: int
+    status: str = PartStatus.PENDING
+    _records: ClassVar[dict[str, str]] = {"files": "ScopedFile"}
+    _enums: ClassVar[dict[str, Sequence[str]]] = {"status": PartStatus.VALUES}
+
+
+@dataclass(frozen=True)
+class ReviewParts(Record):
+    """Content of `$RUN/parts.json`."""
+
+    threshold: int
+    total_lines: int
+    confirm_required: bool
+    parts: tuple[ReviewPart, ...]
+    _records: ClassVar[dict[str, str]] = {"parts": "ReviewPart"}
+
+
+@dataclass(frozen=True)
+class TargetProblem(Record):
+    """Why `panel.py scope` could not resolve a target; printed as JSON with exit code 3 (FR-010, FR-012)."""
+
+    text: str
+    ambiguous: tuple[str, ...] | None = None
+    missing: str | None = None
+    _optional: ClassVar[tuple[str, ...]] = ("ambiguous", "missing")
+
+
+@dataclass(frozen=True)
+class CapChoice:
+    """The `--max-findings` choice as typed, before preferences are applied."""
+
+    kind: str
+    value: int | None = None
+
+    def __post_init__(self) -> None:
+        _check_enum("CapChoice", "kind", self.kind, CapKind.VALUES)
+
+
+@dataclass(frozen=True)
+class ParsedArguments:
+    """The tokens of one invocation, before preferences are applied (contracts/arguments.md section 1)."""
+
+    level: str | None
+    near_level: str | None
+    target_tokens: tuple[str, ...]
+    comment: bool
+    fix: bool
+    cap: CapChoice
+
+    @property
+    def target_text(self) -> str | None:
+        return shlex.join(self.target_tokens) if self.target_tokens else None
+
+
+@dataclass(frozen=True)
+class PreferencesLoad:
+    """The preferences read from disk, with the notes to show the user and the notes to log only."""
+
+    preferences: UserPreferences
+    notes: tuple[str, ...]
+    log: tuple[str, ...]
+
+
 @dataclass(frozen=True)
 class Cluster:
     id: str
@@ -624,6 +926,28 @@ class MergePlan:
 
 
 @dataclass(frozen=True)
+class ReportContext:
+    """What the report states about the invocation: level, cap, notes and review parts (data-model.md section 9).
+
+    `parts` holds the review parts with their derived status; it is empty when no parts.json was written (a
+    run of feature 007), in which case the scope counts as one part.
+    """
+
+    level: str = Level.DEFAULT
+    level_source: str = Source.DEFAULT
+    max_findings: int | str | None = None
+    notes: tuple[str, ...] = ()
+    parts: tuple[ReviewPart, ...] = ()
+
+    @property
+    def cap(self) -> int | None:
+        """The number of findings delivered at most, or None for no limit."""
+        if self.max_findings is None:
+            return LEVEL_PROFILES[self.level].default_cap
+        return None if self.max_findings == CapKind.ALL else int(self.max_findings)
+
+
+@dataclass(frozen=True)
 class ReviewReport:
     scope: ReviewScope
     panel: Panel
@@ -633,6 +957,13 @@ class ReviewReport:
     checked_items: tuple[CheckedItem, ...]
     unreviewed: tuple[Exclusion, ...]
     notices: tuple[str, ...]
+    level: str = Level.DEFAULT
+    level_source: str = Source.DEFAULT
+    max_findings: int | str | None = None
+    withheld: int = 0
+    parts: int = 1
+    incomplete_parts: tuple[str, ...] = ()
+    notes: tuple[str, ...] = ()
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -644,6 +975,13 @@ class ReviewReport:
             "checked_items": [c.to_json() for c in self.checked_items],
             "unreviewed": [u.to_json() for u in self.unreviewed],
             "notices": list(self.notices),
+            "level": self.level,
+            "level_source": self.level_source,
+            "max_findings": self.max_findings,
+            "withheld": self.withheld,
+            "parts": self.parts,
+            "incomplete_parts": list(self.incomplete_parts),
+            "notes": list(self.notes),
         }
 
 
@@ -882,13 +1220,31 @@ def cmd_init(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+TEMPORARY_REF_PREFIX = "refs/sci-review/"
+
+
+def temporary_refs(project: Path) -> list[str]:
+    """The temporary refs of fetched pull request heads (research R5); deleted by `clean`."""
+    if not is_git_repo(project):
+        return []
+    output = git(project, "for-each-ref", "--format=%(refname)", TEMPORARY_REF_PREFIX, check=False)
+    return [line for line in output.splitlines() if line.startswith(TEMPORARY_REF_PREFIX)]
+
+
 def cmd_clean(args: argparse.Namespace) -> int:
-    run_dir, _info = load_run(args.run)
+    run_dir, info = load_run(args.run)
     if not run_dir.name.startswith(RUN_PREFIX) or not is_inside(run_dir, Path(tempfile.gettempdir())):
         raise PreconditionFailure(f"refusing to remove {run_dir}: not a sci-review run directory under the temp dir")
+    project = Path(info.project)
+    refs = temporary_refs(project) if project.is_dir() else []
     if args.dry_run:
+        for ref in refs:
+            print(f"[dry-run] would delete the git ref {ref}")
         print(f"[dry-run] would remove {run_dir}")
         return EXIT_OK
+    for ref in refs:
+        git(project, "update-ref", "-d", ref)
+        print(f"deleted {ref}")
     shutil.rmtree(run_dir)
     print(f"removed {run_dir}")
     return EXIT_OK
@@ -900,6 +1256,293 @@ def cmd_notice(args: argparse.Namespace) -> int:
     if args.text not in notices:
         notices.append(args.text)
     write_json(run_dir / "notices.json", notices, args.dry_run)
+    return EXIT_OK
+
+
+# ---------------------------------------------------------------------------
+# args and prefs (feature 008, contracts/arguments.md sections 1 to 3)
+# ---------------------------------------------------------------------------
+
+LEVEL_PREFIXES = tuple(level[:3] for level in Level.VALUES)
+REQUEST_PUNCTUATION = ",.;:!?\"'()[]{}"
+ACCEPTED_FLAGS = "--comment, --fix and --max-findings <n>|all|default"
+ACCEPTED_LEVELS = "low, medium, high, xhigh or max"
+
+
+def _split_tokens(text: str, request_text: bool) -> list[str]:
+    """Split the argument text as a shell would; backquotes are removed (research R3 step 3)."""
+    text = text.replace("`", "")
+    try:
+        tokens = shlex.split(text)
+    except ValueError:
+        tokens = text.split()
+    if request_text:
+        # In a written request, a token may carry the punctuation of the sentence: "review, high, --fix."
+        tokens = [token.strip(REQUEST_PUNCTUATION) for token in tokens]
+    return [token for token in tokens if token]
+
+
+def parse_cap(value: str | None) -> CapChoice:
+    """Read a `--max-findings` value: a whole number above zero, `all` or `default`; anything else is malformed."""
+    if value is None:
+        return CapChoice(CapKind.MALFORMED)
+    lowered = value.strip().lower()
+    if lowered == CapKind.ALL:
+        return CapChoice(CapKind.ALL)
+    if lowered == CapKind.DEFAULT:
+        return CapChoice(CapKind.DEFAULT)
+    if lowered.isdigit() and lowered.isascii() and int(lowered) >= 1:
+        return CapChoice(CapKind.NUMBER, int(lowered))
+    return CapChoice(CapKind.MALFORMED)
+
+
+def _is_near_level(token: str) -> bool:
+    lowered = token.lower()
+    return lowered not in Level.VALUES and any(lowered.startswith(prefix) for prefix in LEVEL_PREFIXES)
+
+
+def parse_arguments(text: str, request_text: bool = False) -> ParsedArguments:
+    """Tokenise one invocation's arguments (contracts/arguments.md section 1, research R3).
+
+    With `request_text`, the text is a written request on a host without an argument field (research R9): only
+    the grammar's tokens (level, flags and the cap) are taken, and the remaining words are left to the
+    natural-language reading of feature 007, so no target and no near-level token are recorded, and several distinct
+    level words give no level rather than an error.
+    Raises UsageFailure for an unknown flag and, outside a written request, for `ultra` and more than one level.
+    """
+    tokens = _split_tokens(text, request_text)
+    comment = fix = False
+    cap = CapChoice(CapKind.ABSENT)
+    rest: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        lowered = token.lower()
+        if lowered == "--comment":
+            comment = True
+        elif lowered == "--fix":
+            fix = True
+        elif lowered == "--max-findings" or lowered.startswith("--max-findings="):
+            if "=" in token:
+                value: str | None = token.split("=", 1)[1]
+            elif (
+                index + 1 < len(tokens)
+                and not tokens[index + 1].startswith("--")
+                and tokens[index + 1].lower() not in (*Level.VALUES, Level.ULTRA)
+            ):
+                index += 1
+                value = tokens[index]
+            else:
+                value = None
+            cap = parse_cap(value)  # the last --max-findings wins
+        else:
+            rest.append(token)
+        index += 1
+
+    unknown = [t for t in rest if t.startswith("--") and len(t) > 2]
+    if unknown:
+        raise UsageFailure(
+            f"unknown flag `{unknown[0]}`: the accepted flags are {ACCEPTED_FLAGS}.",
+            [USAGE],
+        )
+    if not request_text and any(t.lower() == Level.ULTRA for t in rest):  # in a request, an ordinary word
+        raise UsageFailure(ULTRA_MESSAGE, [USAGE])
+    levels = [t.lower() for t in rest if t.lower() in Level.VALUES]
+    if request_text:
+        # In a written request, level words also occur as ordinary words ("the low and high bands"): a single
+        # distinct level word is taken as the level, and several are left to the reading of section 2.2.
+        distinct = list(dict.fromkeys(levels))
+        return ParsedArguments(distinct[0] if len(distinct) == 1 else None, None, (), comment, fix, cap)
+    if len(levels) > 1:
+        raise UsageFailure(
+            f"more than one effort level was given ({', '.join(levels)}): give one of {ACCEPTED_LEVELS}.",
+            [USAGE],
+        )
+    level = levels[0] if levels else None
+    others = [t for t in rest if t.lower() not in Level.VALUES and t != "--"]
+    if others and others[0].startswith("#") and len(others[0]) > 1:
+        others[0] = others[0][1:]
+    near_level = next((t for t in others if _is_near_level(t)), None)
+    return ParsedArguments(level, near_level, tuple(others), comment, fix, cap)
+
+
+def preferences_path(env: Any = None, platform: str | None = None) -> Path:
+    """The preferences file (research R4): XDG on POSIX, %APPDATA% on Windows; never inside a project."""
+    env = os.environ if env is None else env
+    platform = sys.platform if platform is None else platform
+    if platform.startswith("win") and env.get("APPDATA"):
+        return Path(env["APPDATA"]) / "sci-review" / "preferences.json"
+    if env.get("XDG_CONFIG_HOME"):
+        return Path(env["XDG_CONFIG_HOME"]) / "sci-review" / "preferences.json"
+    return Path.home() / ".config" / "sci-review" / "preferences.json"
+
+
+def load_preferences(path: Path) -> PreferencesLoad:
+    """Read the preferences; a missing, unreadable or invalid file is treated as empty, with a note (FR-018)."""
+    empty = UserPreferences()
+    try:
+        content = path.read_bytes()
+    except FileNotFoundError:
+        return PreferencesLoad(empty, (), (f"No preferences file at {path}; nothing is reused.",))
+    except OSError as exc:
+        reason = exc.strerror or type(exc).__name__
+        note = f"Preferences could not be read ({reason}: {path}); the defaults are used for omitted arguments."
+        return PreferencesLoad(empty, (note,), (note,))
+    try:
+        # A file that is not UTF-8 (UnicodeDecodeError) or not JSON (JSONDecodeError) raises a ValueError.
+        preferences = UserPreferences.from_json(json.loads(content.decode("utf-8")))
+    except (ValueError, ValidationFailure, TypeError) as exc:
+        note = f"The preferences file {path} is not valid and was ignored ({exc}); the defaults are used."
+        return PreferencesLoad(empty, (note,), (note,))
+    return PreferencesLoad(preferences, (), ())
+
+
+def save_preferences(path: Path, preferences: UserPreferences, dry_run: bool) -> None:
+    """Write the preferences atomically (a temporary file in the same directory, then a rename).
+
+    Raises OSError when the directory cannot be created or written; the caller turns it into a note.
+    """
+    text = dumps(preferences.to_json())
+    if dry_run:
+        print(f"[dry-run] would write {path}:")
+        print(text, end="")
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle = tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", dir=path.parent, prefix=".preferences-", suffix=".tmp", delete=False
+    )
+    try:
+        with handle:
+            handle.write(text)
+        os.replace(handle.name, path)
+    except OSError:
+        Path(handle.name).unlink(missing_ok=True)
+        raise
+
+
+@dataclass(frozen=True)
+class ResolvedInvocation:
+    """The arguments of one invocation and, when they must be stored, the updated preferences."""
+
+    arguments: InvocationArguments
+    store: UserPreferences | None
+
+
+def resolve_invocation(parsed: ParsedArguments, loaded: PreferencesLoad, raw: str, persist: bool) -> ResolvedInvocation:
+    """Combine the typed arguments with the stored preferences (FR-007, FR-013, FR-014, FR-003a)."""
+    stored = loaded.preferences
+    notes = list(loaded.notes)
+    updated = stored
+
+    if parsed.level is not None:
+        level, level_source = parsed.level, Source.GIVEN
+        if persist:
+            updated = dataclasses.replace(updated, last_level=parsed.level)
+    elif stored.last_level is not None:
+        level, level_source = stored.last_level, Source.REUSED
+        notes.append(f"Using the effort level `{level}` from your last review; type a level to choose another.")
+    else:
+        level, level_source = Level.DEFAULT, Source.DEFAULT
+
+    cap = parsed.cap
+    max_findings: int | str | None
+    if cap.kind in (CapKind.NUMBER, CapKind.ALL):
+        max_findings = cap.value if cap.kind == CapKind.NUMBER else CapKind.ALL
+        cap_source = Source.GIVEN
+        if persist:
+            updated = dataclasses.replace(updated, last_max_findings=max_findings)
+    elif cap.kind == CapKind.DEFAULT:
+        max_findings, cap_source = None, Source.DEFAULT
+        if persist:
+            updated = dataclasses.replace(updated, last_max_findings=None)
+    else:
+        if cap.kind == CapKind.MALFORMED:
+            notes.append(
+                MAX_FINDINGS_IGNORED if stored.last_max_findings is not None else f"{MAX_FINDINGS_IGNORED} {USUAL_LIMIT}"
+            )
+        if stored.last_max_findings is not None:
+            max_findings, cap_source = stored.last_max_findings, Source.REUSED
+            shown = "every finding" if max_findings == CapKind.ALL else f"at most {max_findings} findings"
+            notes.append(f"Reporting {shown}, as in your last review; {DEFAULT_CAP_HINT}")
+        else:
+            max_findings, cap_source = None, Source.DEFAULT
+
+    arguments = InvocationArguments(
+        level=level,
+        level_source=level_source,
+        target_text=parsed.target_text,
+        near_level=parsed.near_level,
+        comment=parsed.comment,
+        fix=parsed.fix,
+        max_findings=max_findings,
+        max_findings_source=cap_source,
+        notes=tuple(notes),
+        raw=raw,
+    )
+    return ResolvedInvocation(arguments, updated if updated != stored else None)
+
+
+def resolve_preferences_path(explicit: str | None, project: Path | None) -> tuple[Path | None, str | None]:
+    """The preferences path to use, or None with a note when it would lie inside the reviewed project."""
+    path = Path(explicit).expanduser() if explicit else preferences_path()
+    if project is not None and is_inside(path, project):
+        return None, (
+            f"Preferences were not read or stored: the preferences file {path} lies inside the reviewed project."
+        )
+    return path, None
+
+
+def cmd_args(args: argparse.Namespace) -> int:
+    run_dir, info = load_run(args.run)
+    if args.argv_stdin or args.text_stdin:
+        # A here-document ends with a newline that is not part of the arguments.
+        raw = sys.stdin.read().removesuffix("\n")
+    else:
+        raw = args.argv if args.argv is not None else args.text
+    parsed = parse_arguments(raw, request_text=args.argv is None and not args.argv_stdin)
+    path, refusal = resolve_preferences_path(args.prefs, Path(info.project))
+    if path is None:
+        loaded = PreferencesLoad(UserPreferences(), (refusal or "",), ())
+    else:
+        loaded = load_preferences(path)
+    for line in loaded.log:
+        print(f"preferences: {line}", file=sys.stderr)
+    resolved = resolve_invocation(parsed, loaded, raw, args.persist)
+    arguments = resolved.arguments
+    if resolved.store is not None and path is not None:
+        try:
+            save_preferences(path, resolved.store, args.dry_run)
+        except OSError as exc:
+            reason = exc.strerror or type(exc).__name__
+            note = f"Preferences could not be stored ({reason}: {path}); this choice applies to this review only."
+            arguments = dataclasses.replace(arguments, notes=(*arguments.notes, note))
+    write_json(run_dir / "arguments.json", arguments.to_json(), args.dry_run)
+    if not args.dry_run:
+        print(dumps(arguments.to_json()), end="")
+    return EXIT_OK
+
+
+def load_arguments(run_dir: Path) -> InvocationArguments | None:
+    path = run_dir / "arguments.json"
+    return InvocationArguments.from_json(read_json(path)) if path.is_file() else None
+
+
+def cmd_prefs(args: argparse.Namespace) -> int:
+    path = Path(args.prefs).expanduser() if args.prefs else preferences_path()
+    if args.clear:
+        if args.dry_run:
+            print(f"[dry-run] would remove {path}")
+            return EXIT_OK
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as exc:
+            raise PreconditionFailure(f"could not remove {path}: {exc.strerror or exc}") from exc
+        print(f"cleared {path}")
+        return EXIT_OK
+    loaded = load_preferences(path)
+    for line in dict.fromkeys((*loaded.log, *loaded.notes)):
+        print(f"preferences: {line}", file=sys.stderr)
+    print(dumps({"path": str(path), "preferences": loaded.preferences.to_json()}), end="")
     return EXIT_OK
 
 
@@ -1084,9 +1727,7 @@ def line_count(path: Path) -> int:
         data = path.read_bytes()
     except OSError:
         return 0
-    if not data:
-        return 0
-    return data.count(b"\n") + (0 if data.endswith(b"\n") else 1)
+    return count_lines(data)
 
 
 def is_binary(path: Path) -> bool:
@@ -1097,21 +1738,23 @@ def is_binary(path: Path) -> bool:
         return False
 
 
-def generated_paths(project: Path, paths: Sequence[str], in_git: bool) -> dict[str, str]:
-    """Return paths marked linguist-generated or linguist-vendored, with the reason."""
+def generated_paths(project: Path, paths: Sequence[str], in_git: bool, source: str | None = None) -> dict[str, str]:
+    """Return paths marked linguist-generated or linguist-vendored, with the reason.
+
+    With `source`, the attributes are read from the .gitattributes files of that git ref (a branch or pull request
+    target that is not checked out); a git older than 2.40, which lacks `check-attr --source`, falls back to the
+    working tree's attributes.
+    """
     if not in_git or not paths:
         return {}
     marked: dict[str, str] = {}
-    output = git(
-        project,
-        "check-attr",
-        "-z",
-        "--stdin",
-        "linguist-generated",
-        "linguist-vendored",
-        check=False,
-        stdin="\0".join(paths) + "\0",
-    )
+    command = ["check-attr", "-z", "--stdin", "linguist-generated", "linguist-vendored"]
+    stdin = "\0".join(paths) + "\0"
+    output = ""
+    if source is not None:
+        output = git(project, "check-attr", f"--source={source}", *command[1:], check=False, stdin=stdin)
+    if not output:
+        output = git(project, *command, check=False, stdin=stdin)
     fields = output.split("\0")
     for index in range(0, len(fields) - 2, 3):
         path, attribute, value = fields[index : index + 3]
@@ -1146,114 +1789,686 @@ def walk_files(project: Path, roots: Sequence[Path]) -> list[str]:
     return sorted(set(files))
 
 
+@dataclass(frozen=True)
+class ScopeListing:
+    """The candidate files of a scope before exclusions, and where their content is read from."""
+
+    mode: str
+    base: str | None
+    head: str | None
+    description: str
+    candidates: dict[str, list[tuple[int, int]]]
+    named: frozenset[str] = frozenset()
+    outside: tuple[str, ...] = ()
+    ref: str | None = None
+
+
+def count_lines(data: bytes | None) -> int:
+    if not data:
+        return 0
+    return data.count(b"\n") + (0 if data.endswith(b"\n") else 1)
+
+
+def file_reader(project: Path, ref: str | None) -> Callable[[str], bytes | None]:
+    """Read a scoped file from the working tree, or from a git ref when the target is not checked out."""
+
+    def read(path: str) -> bytes | None:
+        if ref is None:
+            try:
+                return (project / path).read_bytes()
+            except OSError:
+                return None
+        result = subprocess.run(
+            ["git", "-c", "core.quotePath=false", "show", f"{ref}:{path}"],
+            cwd=project,
+            capture_output=True,
+            check=False,
+        )
+        return result.stdout if result.returncode == 0 else None
+
+    return read
+
+
+def scope_reader(project: Path, scope: ReviewScope) -> Callable[[str], bytes | None]:
+    ref = scope.head if scope.target is not None and scope.target.from_ref else None
+    return file_reader(project, ref)
+
+
+def scoped_lines(scoped: ScopedFile, read: Callable[[str], bytes | None], data: bytes | None = None) -> int:
+    """Lines reviewed in a scoped file: its changed ranges, or the whole file when it has none.
+
+    `data`, when given, is the file's content already read, so that it is not read a second time.
+    """
+    if scoped.line_ranges:
+        return sum(end - start + 1 for start, end in scoped.line_ranges)
+    return count_lines(data if data is not None else read(scoped.path))
+
+
+GITHUB_PULL_URL = re.compile(r"^https?://[^/\s]+/[^/\s]+/[^/\s]+/pull/(\d+)(?:[/?#].*)?$")
+GITLAB_MERGE_URL = re.compile(r"^https?://\S+?/-/merge_requests/(\d+)(?:[/?#].*)?$")
+
+
+@dataclass(frozen=True)
+class TokenMatch:
+    """What one target token names in the project: a branch, a path, or a path outside the project."""
+
+    token: str
+    branch: str | None
+    path: str | None
+    outside: bool
+
+
+def find_branch(project: Path, token: str) -> str | None:
+    """The full ref of a local or remote branch named `token`, or None."""
+    if token.startswith("-") or not token:
+        return None
+    for ref in (f"refs/heads/{token}", f"refs/remotes/{token}", f"refs/remotes/origin/{token}"):
+        if ref_exists(project, ref):
+            return ref
+    return None
+
+
+def match_token(project: Path, token: str, in_git: bool) -> TokenMatch:
+    root = project.resolve()
+    candidate = (project / token).resolve()
+    inside = is_inside(candidate, root)
+    path = None
+    if inside and candidate.exists():
+        relative = candidate.relative_to(root).as_posix()
+        path = relative if relative != "." else "."
+    return TokenMatch(token, find_branch(project, token) if in_git else None, path, not inside)
+
+
+def origin_host(project: Path, in_git: bool) -> str:
+    """GitLab when the `origin` remote is a GitLab host, otherwise GitHub (research R2)."""
+    if not in_git:
+        return Host.GITHUB
+    url = git(project, "remote", "get-url", "origin", check=False).strip().lower()
+    return Host.GITLAB if "gitlab" in url else Host.GITHUB
+
+
+def pull_request_of(token: str, project: Path, in_git: bool) -> Target | None:
+    """A pull or merge request named by `token`, or None (contracts/targets-and-parts.md section 1)."""
+    match = GITHUB_PULL_URL.match(token)
+    if match:
+        return Target(TargetKind.PULL_REQUEST, Host.GITHUB, int(match.group(1)), None, (), token)
+    match = GITLAB_MERGE_URL.match(token)
+    if match:
+        return Target(TargetKind.PULL_REQUEST, Host.GITLAB, int(match.group(1)), None, (), token)
+    if token.startswith("!") and token[1:].isdigit() and token[1:].isascii() and int(token[1:]) >= 1:
+        return Target(TargetKind.PULL_REQUEST, Host.GITLAB, int(token[1:]), None, (), token)
+    digits = token[1:] if token.startswith("#") else token
+    if digits.isdigit() and digits.isascii() and int(digits) >= 1:
+        return Target(TargetKind.PULL_REQUEST, origin_host(project, in_git), int(digits), None, (), token)
+    return None
+
+
+def classify_target(text: str, project_root: Path, near_level: str | None = None) -> Target | TargetProblem:
+    """Resolve the target text into a Target, or a TargetProblem listing the kinds it matches (FR-010).
+
+    Each token is resolved separately. A near-level token (`hig`) that is neither an existing branch nor an
+    existing path is a usage error whatever the other tokens are (FR-003). A path outside the project root is a
+    usage error. Several tokens must all be paths.
+    """
+    tokens = _split_tokens(text, False)
+    if not tokens:
+        raise UsageFailure("the target is empty", [USAGE])
+    in_git = is_git_repo(project_root)
+    matches = [match_token(project_root, token, in_git) for token in tokens]
+    if near_level is not None:
+        for match in matches:
+            if match.token == near_level and match.branch is None and match.path is None:
+                raise UsageFailure(near_level_message(near_level), [USAGE])
+    if len(matches) == 1:
+        match = matches[0]
+        pull = pull_request_of(match.token, project_root, in_git)
+        kinds = [
+            kind
+            for kind, present in (
+                (TargetKind.PULL_REQUEST, pull is not None),
+                (TargetKind.BRANCH, match.branch is not None),
+                (TargetKind.PATHS, match.path is not None),
+            )
+            if present
+        ]
+        if len(kinds) > 1:
+            return TargetProblem(text=text, ambiguous=tuple(kinds))
+        if pull is not None:
+            return pull
+        if match.branch is not None:
+            return Target(TargetKind.BRANCH, None, None, match.token, (), text)
+        if match.path is not None:
+            return Target(TargetKind.PATHS, None, None, None, (match.path,), text)
+        if match.outside:
+            raise UsageFailure(f"path `{match.token}` lies outside the project root {project_root}", [USAGE])
+        raise UsageFailure(
+            f"target `{match.token}` is not a pull request, an existing branch or an existing path in the project",
+            [USAGE],
+        )
+    paths: list[str] = []
+    for match in matches:
+        if match.outside and match.branch is None:
+            raise UsageFailure(f"path `{match.token}` lies outside the project root {project_root}", [USAGE])
+        if match.branch is not None and match.path is not None:
+            return TargetProblem(text=text, ambiguous=(TargetKind.BRANCH, TargetKind.PATHS))
+        if match.path is None:
+            raise UsageFailure(
+                f"`{match.token}` is not an existing path in the project; several targets must all be paths",
+                [USAGE],
+            )
+        paths.append(match.path)
+    return Target(TargetKind.PATHS, None, None, None, tuple(dict.fromkeys(paths)), text)
+
+
+# An HTTP status is matched only with its context ("HTTP 401", "401 Unauthorized"): a bare 401 may be the number of
+# the request in a not-found message.
+HOSTING_AUTH = re.compile(
+    r"\b(?:o?auth(?:entication|enticate|enticated|orization|orize|orized)?|unauthori[sz]ed|forbidden)\b"
+    r"|\blog ?in\b|\blogged in\b|credentials|\bhttp 40[13]\b|\b40[13] (?:unauthori[sz]ed|forbidden)\b"
+)
+HOSTING_NETWORK = re.compile(
+    r"could not resolve host|\bnetwork\b|\bconnect(?:ion)?\b|timed out|timeout|dial tcp|unreachable"
+)
+
+
+def _hosting_failure(stderr: str) -> str | None:
+    """`auth` or `network` when the hosting client failed for that reason; None for any other failure.
+
+    A request that does not exist ("Could not resolve to a PullRequest", "404 Not Found") is neither.
+    """
+    lowered = stderr.lower()
+    if HOSTING_AUTH.search(lowered):
+        return "auth"
+    if HOSTING_NETWORK.search(lowered):
+        return "network"
+    return None
+
+
+REQUEST_URL_REPOSITORY = re.compile(r"^https?://([^/\s]+)/(.+?)/(?:-/merge_requests|pull)/\d+(?:[/?#].*)?$")
+REMOTE_URL = re.compile(r"^[a-z][a-z0-9+.-]*://(?:[^@/]+@)?([^/:]+)(?::\d+)?/(.+)$")
+SCP_REMOTE = re.compile(r"^(?:[^@/]+@)?([^:/]+):(.+)$")
+
+
+def _repository_identity(host: str, path: str) -> tuple[str, str]:
+    path = path.strip("/")
+    path = path[: -len(".git")] if path.endswith(".git") else path
+    return host.lower(), path.lower()
+
+
+def remote_repository(url: str) -> tuple[str, str] | None:
+    """(host, owner/repository path) of a git remote URL, in https, ssh or scp-like form; None otherwise."""
+    match = REMOTE_URL.match(url) or SCP_REMOTE.match(url)
+    return _repository_identity(match.group(1), match.group(2)) if match else None
+
+
+def request_remote(project: Path, request_url: str) -> str:
+    """The remote to fetch a pull or merge request from, given the request's URL.
+
+    The URL names the repository the hosting client read, which may differ from `origin` (the upstream of a fork,
+    for example). A configured remote of that repository is preferred: first one with the same host and path, then
+    one with the same path under another host name (an ssh host alias); otherwise the repository's https URL.
+    Without a request URL, `origin` is used.
+    """
+    match = REQUEST_URL_REPOSITORY.match(request_url)
+    if match is None:
+        return "origin"
+    requested = _repository_identity(match.group(1), match.group(2))
+    same_path = None
+    for name in git(project, "remote", check=False).split():
+        identity = remote_repository(git(project, "remote", "get-url", name, check=False).strip())
+        if identity == requested:
+            return name
+        if identity is not None and identity[1] == requested[1] and same_path is None:
+            same_path = name
+    return same_path or f"https://{match.group(1)}/{match.group(2)}.git"
+
+
+def _run_tool(project: Path, argv: Sequence[str]) -> subprocess.CompletedProcess[str]:
+    print(" ".join(argv), file=sys.stderr)
+    return subprocess.run(list(argv), cwd=project, capture_output=True, text=True, encoding="utf-8", check=False)
+
+
+@dataclass(frozen=True)
+class PullRequestRefs:
+    base: str
+    head_ref: str
+
+
+def pull_request_ref(target: Target) -> str:
+    return f"refs/sci-review/pr-{target.number}"
+
+
+def fetch_pull_request(project: Path, target: Target) -> PullRequestRefs:
+    """Read a pull request's base and fetch its head into refs/sci-review/pr-<n>, without checkout (R5).
+
+    Exits 3 with {"missing": "gh" | "glab" | "auth" | "network"} when the request cannot be read (FR-012).
+    """
+    tool = "glab" if target.host == Host.GITLAB else "gh"
+
+    def missing(what: str, detail: str) -> PreconditionFailure:
+        return PreconditionFailure(
+            f"the {target.describe()} cannot be read ({what}): {detail}",
+            payload=TargetProblem(text=target.text, missing=what),
+        )
+
+    if shutil.which(tool) is None:
+        raise missing(tool, f"{tool} is not installed")
+    url = REQUEST_URL_REPOSITORY.match(target.text)
+    if tool == "gh":
+        reference = target.text if url else str(target.number)
+        result = _run_tool(
+            project, ["gh", "pr", "view", reference, "--json", "baseRefOid,headRefOid,baseRefName,url"]
+        )
+    else:
+        repository = ["--repo", f"https://{url.group(1)}/{url.group(2)}"] if url else []
+        result = _run_tool(project, ["glab", "mr", "view", str(target.number), *repository, "-F", "json"])
+    if result.returncode != 0:
+        reason = _hosting_failure(result.stderr)
+        if reason is not None:
+            raise missing(reason, result.stderr.strip())
+        raise PreconditionFailure(f"{tool} could not read the {target.describe()}: {result.stderr.strip()}")
+    try:
+        data = json.loads(result.stdout)
+        if tool == "gh":
+            base_oid, base_name = str(data["baseRefOid"]), str(data.get("baseRefName") or "")
+            head_oid, request_url = str(data.get("headRefOid") or ""), str(data.get("url") or "")
+        else:
+            base_oid, base_name = str(data["diff_refs"]["base_sha"]), str(data.get("target_branch") or "")
+            head_oid = str(data.get("sha") or data["diff_refs"].get("head_sha") or "")
+            request_url = str(data.get("web_url") or "")
+    except (json.JSONDecodeError, KeyError, TypeError, AttributeError) as exc:
+        raise PreconditionFailure(f"{tool} returned no base commit for the {target.describe()} ({exc})") from exc
+    # The request is fetched from the repository the hosting client read (its URL), which is not always `origin`:
+    # with `gh repo set-default` on a fork, a number names a request of the upstream.
+    remote = request_remote(project, request_url or target.text)
+    head_ref = pull_request_ref(target)
+    source = f"merge-requests/{target.number}/head" if tool == "glab" else f"pull/{target.number}/head"
+    fetch = _run_tool(project, ["git", "fetch", "--no-tags", remote, f"+{source}:{head_ref}"])
+    if fetch.returncode != 0:
+        raise missing(_hosting_failure(fetch.stderr) or "network", fetch.stderr.strip())
+    fetched = git(project, "rev-parse", "--verify", "--quiet", f"{head_ref}^{{commit}}", check=False).strip()
+    if head_oid and fetched != head_oid:
+        raise PreconditionFailure(
+            f"the head fetched from {remote} for the {target.describe()} ({fetched[:12] or 'none'}) is not the head "
+            f"{tool} reports ({head_oid[:12]}); the request may have changed meanwhile: run the review again"
+        )
+    if not ref_exists(project, base_oid):
+        for what in (base_name, base_oid):
+            if what and not ref_exists(project, base_oid):
+                _run_tool(project, ["git", "fetch", "--no-tags", remote, what])
+    if not ref_exists(project, base_oid):
+        raise missing("network", f"the base commit {base_oid[:12]} could not be fetched")
+    # For a merged request, the base commit reported by the host is the base at the time of merge.
+    base = git(project, "merge-base", base_oid, head_ref).strip()
+    return PullRequestRefs(base=base, head_ref=head_ref)
+
+
+def worktree_branch_listing(project: Path, baseline: str | None) -> ScopeListing:
+    resolved = resolve_base(project, baseline)
+    base = resolved.base
+    diff = git(project, "diff", "--unified=0", "--no-color", "--no-ext-diff", "--no-prefix", "--find-renames", base)
+    candidates = parse_diff(diff)
+    for path in git_paths(project, "ls-files", "--others", "--exclude-standard"):
+        count = line_count(project / path)
+        candidates[path] = [(1, count)] if count else []
+    description = f"Changes since {resolved.description} ({base[:12]}), including uncommitted and untracked files"
+    return ScopeListing(resolved.mode, base, WORKTREE_HEAD, description, candidates)
+
+
+def ref_listing(project: Path, mode: str, base: str, ref: str, description: str) -> ScopeListing:
+    """The changes from `base` to a git ref that is not checked out; nothing is read from the working tree."""
+    diff = git(project, "diff", "--unified=0", "--no-color", "--no-ext-diff", "--no-prefix", "--find-renames", base, ref)
+    return ScopeListing(mode, base, ref, f"{description} ({base[:12]}...{ref})", parse_diff(diff), ref=ref)
+
+
+def branch_target_listing(project: Path, ref: str, baseline: str | None) -> ScopeListing:
+    """A branch that is not checked out, against its base (FR-011: no checkout)."""
+    full = find_branch(project, ref) or ref
+    if baseline:
+        if not ref_exists(project, baseline):
+            raise PreconditionFailure(f"baseline {baseline!r} does not resolve to a commit")
+        base = git(project, "merge-base", baseline, full).strip()
+        return ref_listing(project, ScopeMode.EXPLICIT, base, full, f"Branch {ref} since merge-base with {baseline}")
+    default = default_branch(project)
+    if default is None:
+        raise PreconditionFailure(
+            "no base branch could be determined (no remote default branch and no main or master branch); "
+            "name a baseline with --baseline REF, or review with --mode repository or --mode paths"
+        )
+    ahead = git(project, "rev-list", "--count", f"{default}..{full}", check=False).strip()
+    if ahead in ("", "0"):
+        raise PreconditionFailure(
+            f"the branch {ref} has not diverged from the default branch {default}, so no branch base can be "
+            "determined; name a baseline with --baseline REF, or review with --mode repository or --mode paths"
+        )
+    base = git(project, "merge-base", default, full).strip()
+    return ref_listing(project, ScopeMode.BRANCH, base, full, f"Branch {ref} since merge-base with {default}")
+
+
+def listing_of_files(project: Path, in_git: bool, mode: str, paths: Sequence[str]) -> ScopeListing:
+    """Repository mode, or paths mode over the named paths."""
+    roots: list[Path] = []
+    named: set[str] = set()
+    if mode == ScopeMode.PATHS:
+        if not paths:
+            raise UsageFailure("--mode paths requires at least one --path")
+        for raw in paths:
+            resolved_path = (project / raw).resolve()
+            if not is_inside(resolved_path, project) or not resolved_path.exists():
+                raise UsageFailure(f"path {raw!r} does not exist inside the project")
+            roots.append(resolved_path)
+            if resolved_path.is_file():
+                named.add(resolved_path.relative_to(project.resolve()).as_posix())
+    head: str | None = None
+    if in_git:
+        tracked = git_paths(project, "ls-files")
+        untracked = git_paths(project, "ls-files", "--others", "--exclude-standard")
+        every = sorted(set(tracked) | set(untracked))
+        head = git(project, "rev-parse", "HEAD", check=False).strip() or None
+    else:
+        every = walk_files(project, [project])
+    outside: list[str] = []
+    if mode == ScopeMode.PATHS:
+        prefixes = [root.relative_to(project.resolve()).as_posix() for root in roots]
+        selected = [p for p in every if any(p == x or p.startswith(x.rstrip("/") + "/") or x == "." for x in prefixes)]
+        chosen = set(selected)
+        outside = [p for p in every if p not in chosen]
+        every = selected
+        description = f"Files under {', '.join(prefixes)}"
+    else:
+        description = "All files of the repository"
+    candidates = {path: [] for path in every if (project / path).is_file()}
+    return ScopeListing(mode, None, head, description, candidates, frozenset(named), tuple(outside))
+
+
+def finalise_scope(
+    project: Path, in_git: bool, listing: ScopeListing, target: Target | None, pr_ref: str | None
+) -> ReviewScope:
+    """Apply the exclusions (generated, vendored, binary, deleted) and count the lines; no file is excluded for
+    the size of the scope (FR-020)."""
+    read = file_reader(project, listing.ref)
+    marked = generated_paths(project, sorted(listing.candidates), in_git, source=listing.ref)
+    excluded: list[Exclusion] = [Exclusion(path=p, reason="outside paths") for p in listing.outside]
+    files: list[ScopedFile] = []
+    total = 0
+    for path in sorted(listing.candidates):
+        reason = None if path in listing.named else exclusion_reason(path, marked)
+        data: bytes | None = None
+        if listing.ref is None:
+            if reason is None and is_binary(project / path):
+                reason = "binary file"
+            if reason is None and listing.mode in (ScopeMode.BRANCH, ScopeMode.EXPLICIT) and not (
+                project / path
+            ).is_file():
+                reason = "deleted"
+        else:
+            data = read(path)
+            if reason is None and data is None:
+                reason = "deleted"
+            if reason is None and data is not None and b"\0" in data[:8192]:
+                reason = "binary file"
+        if reason is not None:
+            excluded.append(Exclusion(path=path, reason=reason))
+            continue
+        scoped = ScopedFile(path=path, language=language_of(path), line_ranges=tuple(listing.candidates[path]))
+        files.append(scoped)
+        total += scoped_lines(scoped, read, data)
+    note = f"{listing.description}: {len(files)} files, {total} lines."
+    return ReviewScope(
+        mode=listing.mode,
+        base=listing.base,
+        head=listing.head,
+        files=tuple(files),
+        excluded=tuple(excluded),
+        note=note,
+        target=target,
+        total_lines=total,
+        pull_request_ref=pr_ref,
+    )
+
+
 def cmd_scope(args: argparse.Namespace) -> int:
     run_dir, info = load_run(args.run)
     project = Path(info.project)
     in_git = is_git_repo(project)
-    named: set[str] = set()
-    base: str | None = None
-    head: str | None = None
-    mode = args.mode
-    candidates: dict[str, list[tuple[int, int]]] = {}
-    outside: list[str] = []
+    invocation = load_arguments(run_dir)
+    text = args.target if args.target is not None else (invocation.target_text if invocation else None)
+    near_level = invocation.near_level if invocation else None
+    target: Target | None = None
+    if text and text.strip():
+        resolved = classify_target(text, project, near_level=near_level)
+        if isinstance(resolved, TargetProblem):
+            raise PreconditionFailure(
+                f"the target {text!r} matches more than one kind ({', '.join(resolved.ambiguous or ())}); "
+                "ask the user which was meant",
+                payload=resolved,
+            )
+        target = resolved
+        if args.mode is not None:
+            print(f"notice: --mode {args.mode} is ignored because a target was given", file=sys.stderr)
+    if args.baseline and (
+        (target is None and args.mode not in (None, ScopeMode.BRANCH))
+        or (target is not None and target.kind != TargetKind.BRANCH)
+    ):
+        raise UsageFailure("--baseline is accepted only with --mode branch or a branch target")
 
-    if args.mode == ScopeMode.BRANCH:
+    mode = args.mode or ScopeMode.BRANCH
+    pr_ref: str | None = None
+    if target is not None and target.kind == TargetKind.BRANCH:
+        current = git(project, "rev-parse", "--abbrev-ref", "HEAD", check=False).strip()
+        if target.ref == current:
+            # The checked-out branch: review it as feature 007 does, with its uncommitted changes.
+            target = None
+            mode = ScopeMode.BRANCH
+    if target is None and mode == ScopeMode.BRANCH:
         if not in_git:
             raise PreconditionFailure(
                 f"{project} is not a git repository, so a branch review is not possible; "
                 "review with --mode repository or --mode paths instead"
             )
-        resolved = resolve_base(project, args.baseline)
-        mode, base = resolved.mode, resolved.base
-        head = "HEAD with uncommitted and untracked changes"
-        diff = git(project, "diff", "--unified=0", "--no-color", "--no-ext-diff", "--no-prefix", "--find-renames", base)
-        candidates = parse_diff(diff)
-        for path in git_paths(project, "ls-files", "--others", "--exclude-standard"):
-            count = line_count(project / path)
-            candidates[path] = [(1, count)] if count else []
-        description = f"Changes since {resolved.description} ({base[:12]}), including uncommitted and untracked files"
-    elif args.mode in (ScopeMode.REPOSITORY, ScopeMode.PATHS):
-        if args.baseline:
-            raise UsageFailure("--baseline is accepted only with --mode branch")
-        roots: list[Path] = []
-        if args.mode == ScopeMode.PATHS:
-            if not args.path:
-                raise UsageFailure("--mode paths requires at least one --path")
-            for raw in args.path:
-                resolved_path = (project / raw).resolve()
-                if not is_inside(resolved_path, project) or not resolved_path.exists():
-                    raise UsageFailure(f"path {raw!r} does not exist inside the project")
-                roots.append(resolved_path)
-                if resolved_path.is_file():
-                    named.add(resolved_path.relative_to(project).as_posix())
-        if in_git:
-            tracked = git_paths(project, "ls-files")
-            untracked = git_paths(project, "ls-files", "--others", "--exclude-standard")
-            every = sorted(set(tracked) | set(untracked))
-            head = git(project, "rev-parse", "HEAD", check=False).strip() or None
-        else:
-            every = walk_files(project, [project])
-        if args.mode == ScopeMode.PATHS:
-            prefixes = [root.relative_to(project).as_posix() for root in roots]
-            selected = [
-                p for p in every if any(p == x or p.startswith(x.rstrip("/") + "/") or x == "." for x in prefixes)
-            ]
-            chosen = set(selected)
-            outside = [p for p in every if p not in chosen]
-            every = selected
-            description = f"Files under {', '.join(prefixes)}"
-        else:
-            description = "All files of the repository"
-        candidates = {path: [] for path in every if (project / path).is_file()}
+        listing = worktree_branch_listing(project, args.baseline)
+    elif target is None:
+        listing = listing_of_files(project, in_git, mode, args.path or [])
+    elif target.kind == TargetKind.PATHS:
+        listing = listing_of_files(project, in_git, ScopeMode.PATHS, target.paths)
+    elif target.kind == TargetKind.BRANCH:
+        assert target.ref is not None
+        listing = branch_target_listing(project, target.ref, args.baseline)
     else:
-        raise UsageFailure(f"unknown mode {args.mode!r}")
-
-    marked = generated_paths(project, sorted(candidates), in_git)
-    excluded: list[Exclusion] = [Exclusion(path=p, reason="outside paths") for p in outside]
-    kept: list[ScopedFile] = []
-    for path in sorted(candidates):
-        reason = None if path in named else exclusion_reason(path, marked)
-        if reason is None and is_binary(project / path):
-            reason = "binary file"
-        if reason is None and args.mode == ScopeMode.BRANCH and not (project / path).is_file():
-            reason = "deleted"
-        if reason is not None:
-            excluded.append(Exclusion(path=path, reason=reason))
-            continue
-        kept.append(ScopedFile(path=path, language=language_of(path), line_ranges=tuple(candidates[path])))
-
-    budget = args.budget if args.budget is not None else DEFAULT_BUDGET
-    if budget < 1:
-        raise UsageFailure("--budget must be a positive number of lines")
-    files: list[ScopedFile] = []
-    total = 0
-    for scoped in kept:
-        size = (
-            sum(end - start + 1 for start, end in scoped.line_ranges)
-            if scoped.line_ranges
-            else line_count(project / scoped.path)
-        )
-        if files and total + size > budget:
-            excluded.append(Exclusion(path=scoped.path, reason="over budget"))
-            continue
-        files.append(scoped)
-        total += size
-    over = sum(1 for e in excluded if e.reason == "over budget")
-    note = f"{description}: {len(files)} files, {total} lines."
-    if over:
-        note = (
-            f"{description}: {len(files)} files, {total} lines; "
-            f"{over} files over the {budget}-line budget were not reviewed."
-        )
-    scope = ReviewScope(mode=mode, base=base, head=head, files=tuple(files), excluded=tuple(excluded), note=note)
+        if not in_git:
+            raise PreconditionFailure(f"{project} is not a git repository, so a pull request cannot be reviewed")
+        if args.dry_run:
+            print(f"[dry-run] would fetch the {target.describe()} into {pull_request_ref(target)}")
+            return EXIT_OK
+        refs = fetch_pull_request(project, target)
+        pr_ref = refs.head_ref
+        listing = ref_listing(project, ScopeMode.BRANCH, refs.base, refs.head_ref, f"The {target.describe()}")
+    scope = finalise_scope(project, in_git, listing, target, pr_ref)
     write_json(run_dir / "scope.json", scope.to_json(), args.dry_run)
     if not args.dry_run:
-        print(note)
+        print(scope.note)
     return EXIT_OK
 
 
 def load_scope(run_dir: Path) -> ReviewScope:
     return ReviewScope.from_json(read_json(run_dir / "scope.json"))
+
+
+# ---------------------------------------------------------------------------
+# parts (feature 008, contracts/targets-and-parts.md section 2, research R7)
+# ---------------------------------------------------------------------------
+
+PYTHON_BOUNDARY = re.compile(r"^(?:@|def\s|async\s+def\s|class\s)")
+SCRIPT_BOUNDARY = re.compile(r"^(?:export\s|function\s|async\s+function\s|class\s)")
+NOTEBOOK_BOUNDARY = re.compile(r'^\s*"cell_type"\s*:')
+SCRIPT_SUFFIXES = frozenset({".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"})
+
+
+def definition_boundaries(path: str, lines: Sequence[str]) -> list[int]:
+    """Line numbers (1-based) where a top-level definition starts: a part may be cut just before them.
+
+    Python: `def`, `async def`, `class` and their decorators; TypeScript and JavaScript: `export`, `function`,
+    `class`; notebooks: each cell. A line directly under a decorator is not a boundary, so that stacked
+    decorators stay with their definition.
+    """
+    suffix = Path(path).suffix.lower()
+    if suffix == ".ipynb":
+        pattern = NOTEBOOK_BOUNDARY
+    elif suffix in PYTHON_SUFFIXES:
+        pattern = PYTHON_BOUNDARY
+    elif suffix in SCRIPT_SUFFIXES:
+        pattern = SCRIPT_BOUNDARY
+    else:
+        return []
+    boundaries: list[int] = []
+    previous = ""
+    for number, line in enumerate(lines, start=1):
+        if pattern.match(line) and not (suffix != ".ipynb" and previous.startswith("@")):
+            boundaries.append(number)
+        if line.strip():
+            previous = line
+    return boundaries
+
+
+def split_range(start: int, end: int, boundaries: Sequence[int]) -> list[tuple[int, int]]:
+    """Cut a line range into segments of at most PART_LINES lines at definition boundaries.
+
+    A range with no boundary inside it is cut into fixed windows; a single definition larger than a part stays
+    whole (it is indivisible).
+    """
+    if end - start + 1 <= PART_LINES:
+        return [(start, end)]
+    cuts = [b for b in boundaries if start < b <= end]
+    if not cuts:
+        return [(s, min(s + PART_LINES - 1, end)) for s in range(start, end + 1, PART_LINES)]
+    pieces: list[tuple[int, int]] = []
+    edges = [start, *cuts, end + 1]
+    for left, right in zip(edges, edges[1:]):
+        pieces.append((left, right - 1))
+    segments: list[tuple[int, int]] = []
+    for left, right in pieces:
+        if segments and right - segments[-1][0] + 1 <= PART_LINES:
+            segments[-1] = (segments[-1][0], right)
+        else:
+            segments.append((left, right))
+    return segments
+
+
+@dataclass(frozen=True)
+class FileSegments:
+    """A scoped file, its reviewed lines, and the segments it may be cut into."""
+
+    scoped: ScopedFile
+    lines: int
+    segments: tuple[tuple[int, int], ...]
+
+
+def file_segments(scoped: ScopedFile, read: Callable[[str], bytes | None]) -> FileSegments:
+    # The content is read once, and only when it is needed: for a whole file's size, or to find the cut points.
+    data = None if scoped.line_ranges else read(scoped.path)
+    lines = scoped_lines(scoped, read, data)
+    if lines <= PART_LINES:
+        ranges = scoped.line_ranges or ((1, max(lines, 1)),)
+        return FileSegments(scoped, lines, tuple(ranges))
+    if data is None:
+        data = read(scoped.path)
+    text = (data or b"").decode("utf-8", errors="replace").splitlines()
+    boundaries = definition_boundaries(scoped.path, text)
+    ranges = scoped.line_ranges or ((1, lines),)
+    segments = [segment for start, end in ranges for segment in split_range(start, end, boundaries)]
+    return FileSegments(scoped, lines, tuple(segments))
+
+
+class _PartBuilder:
+    """Accumulates files and line ranges into parts of at most PART_LINES lines."""
+
+    def __init__(self) -> None:
+        self.parts: list[ReviewPart] = []
+        self.files: dict[str, ScopedFile] = {}
+        self.lines = 0
+
+    @property
+    def room(self) -> int:
+        return PART_LINES - self.lines
+
+    def close(self) -> None:
+        if self.files:
+            self.parts.append(
+                ReviewPart(id=f"p{len(self.parts) + 1}", files=tuple(self.files.values()), lines=self.lines)
+            )
+        self.files, self.lines = {}, 0
+
+    def add_whole(self, item: FileSegments) -> None:
+        self.files[item.scoped.path] = item.scoped
+        self.lines += item.lines
+
+    def add_segment(self, item: FileSegments, segment: tuple[int, int]) -> None:
+        size = segment[1] - segment[0] + 1
+        if self.files and size > self.room:
+            self.close()
+        current = self.files.get(item.scoped.path)
+        ranges = list(current.line_ranges) if current else []
+        if ranges and ranges[-1][1] + 1 >= segment[0]:
+            ranges[-1] = (ranges[-1][0], max(ranges[-1][1], segment[1]))
+        else:
+            ranges.append(segment)
+        self.files[item.scoped.path] = dataclasses.replace(item.scoped, line_ranges=tuple(ranges))
+        self.lines += size
+
+
+def divide_into_parts(scope: ReviewScope, project: Path) -> ReviewParts:
+    """Divide the scope into review parts that together cover every reviewed line (FR-021, research R7).
+
+    Files are grouped by directory, directories in path order; a directory that fits in one part is kept
+    together; parts are filled up to PART_LINES lines; a file larger than a part is cut at top-level
+    definition boundaries, else into fixed windows. In branch mode the changed lines are counted.
+    """
+    read = scope_reader(project, scope)
+    items = [file_segments(scoped, read) for scoped in scope.files]
+    groups: dict[str, list[FileSegments]] = {}
+    for item in sorted(items, key=lambda i: (Path(i.scoped.path).parent.as_posix(), i.scoped.path)):
+        groups.setdefault(Path(item.scoped.path).parent.as_posix(), []).append(item)
+    builder = _PartBuilder()
+    for directory in sorted(groups):
+        group = groups[directory]
+        size = sum(item.lines for item in group)
+        if builder.files and size <= PART_LINES and size > builder.room:
+            builder.close()
+        for item in group:
+            if item.lines <= builder.room:
+                builder.add_whole(item)
+            elif item.lines <= PART_LINES:
+                builder.close()
+                builder.add_whole(item)
+            else:
+                for segment in item.segments:
+                    builder.add_segment(item, segment)
+    builder.close()
+    total = sum(item.lines for item in items)
+    return ReviewParts(
+        threshold=LARGE_SCOPE_THRESHOLD,
+        total_lines=total,
+        confirm_required=total > LARGE_SCOPE_THRESHOLD,
+        parts=tuple(builder.parts),
+    )
+
+
+def cmd_parts(args: argparse.Namespace) -> int:
+    run_dir, info = load_run(args.run)
+    scope = load_scope(run_dir)
+    parts = divide_into_parts(scope, Path(info.project))
+    write_json(run_dir / "parts.json", parts.to_json(), args.dry_run)
+    state = load_panel_state(run_dir)
+    if state.panel is not None:
+        panel = dataclasses.replace(state.panel, parts=len(parts.parts))
+        write_json(run_dir / "panel.json", dataclasses.replace(state, panel=panel).to_json(), args.dry_run)
+    if not args.dry_run:
+        confirm = "confirmation required" if parts.confirm_required else "no confirmation required"
+        print(
+            f"{parts.total_lines} lines in {len(scope.files)} files, {len(parts.parts)} parts; {confirm} "
+            f"(threshold {parts.threshold} lines)."
+        )
+    return EXIT_OK
 
 
 # ---------------------------------------------------------------------------
@@ -1516,6 +2731,71 @@ def configure_panel(
     return panel, notices
 
 
+@dataclass(frozen=True)
+class LevelChoice:
+    """The level a panel is configured at, and where it came from."""
+
+    level: str
+    source: str
+
+
+def choose_level(explicit: str | None, arguments: InvocationArguments | None) -> LevelChoice:
+    """`--level`, else the level of arguments.json, else `medium` (contracts/arguments.md section 4)."""
+    if explicit is not None:
+        same = arguments is not None and arguments.level == explicit
+        return LevelChoice(explicit, arguments.level_source if same and arguments else Source.GIVEN)
+    if arguments is not None:
+        return LevelChoice(arguments.level, arguments.level_source)
+    return LevelChoice(Level.DEFAULT, Source.DEFAULT)
+
+
+def configure_level_panel(
+    available: Sequence[Perspective],
+    choice: LevelChoice,
+    perspectives: Sequence[str] | None,
+    rounds: int | None,
+    batches: int | None,
+    runner: str,
+    models: Sequence[ModelAssignment] = (),
+    parts: int = 1,
+) -> tuple[Panel, list[str]]:
+    """Apply the level profile, then the explicit options as overrides (FR-009, spec edge case).
+
+    An option counts as an override only when it differs from the profile's value, so that a runner fallback
+    that repeats the recorded panel records no override.
+    """
+    profile = LEVEL_PROFILES[choice.level]
+    ids = [p.id for p in available]
+    profile_ids = profile.requested(ids)
+    overrides: list[str] = []
+    requested = profile_ids
+    if perspectives:
+        if list(dict.fromkeys(perspectives)) != profile_ids:
+            overrides.append("perspectives")
+        requested = list(perspectives)
+    if rounds is not None and rounds != profile.rebuttal_rounds:
+        overrides.append("rounds")
+    if batches is not None and batches != profile.max_batches:
+        overrides.append("batches")
+    panel, notices = configure_panel(
+        available,
+        requested,
+        profile.rebuttal_rounds if rounds is None else rounds,
+        profile.max_batches if batches is None else batches,
+        runner,
+        models,
+    )
+    panel = dataclasses.replace(
+        panel, level=choice.level, level_source=choice.source, overrides=tuple(overrides), parts=parts
+    )
+    return panel, notices
+
+
+def load_parts(run_dir: Path) -> ReviewParts | None:
+    path = run_dir / "parts.json"
+    return ReviewParts.from_json(read_json(path)) if path.is_file() else None
+
+
 def cmd_panel(args: argparse.Namespace) -> int:
     run_dir, _info = load_run(args.run)
     state = load_panel_state(run_dir)
@@ -1528,7 +2808,18 @@ def cmd_panel(args: argparse.Namespace) -> int:
         if not role or not model:
             raise UsageFailure(f"--models expects ROLE=MODEL, got {item!r}")
         models.append(ModelAssignment(role=role, model=model))
-    panel, notices = configure_panel(available, requested or None, args.rounds, args.batches, args.runner, models)
+    choice = choose_level(args.level, load_arguments(run_dir))
+    parts = load_parts(run_dir)
+    panel, notices = configure_level_panel(
+        available,
+        choice,
+        requested or None,
+        args.rounds,
+        args.batches,
+        args.runner,
+        models,
+        parts=len(parts.parts) if parts is not None else 1,
+    )
     state = dataclasses.replace(state, panel=panel, notices=tuple(notices))
     write_json(run_dir / "panel.json", state.to_json(), args.dry_run)
     if not args.dry_run:
@@ -1642,11 +2933,25 @@ def stop_round(rounds: Sequence[Sequence[Position]], rebuttal_rounds: int) -> in
 
 
 def load_candidates(run_dir: Path) -> list[CandidateMessage]:
+    """Every candidate-findings message, of every review part (`candidates/<perspective>--<part>.json`).
+
+    Candidate ids must be unique across files: in a review of several parts each reviewer numbers its findings
+    `<perspective>-<part>-<n>` (protocol.md section 3), so a repeated id is a protocol violation.
+    """
     messages = []
+    seen: dict[str, Path] = {}
+    duplicates: list[str] = []
     for path in sorted((run_dir / "candidates").glob("*.json")):
         data = read_json(path)
         require_valid("candidate-findings", data, str(path))
-        messages.append(CandidateMessage.from_json(data))
+        message = CandidateMessage.from_json(data)
+        for finding in message.findings:
+            if finding.id in seen:
+                duplicates.append(f"candidate id {finding.id} appears in {seen[finding.id].name} and {path.name}")
+            seen.setdefault(finding.id, path)
+        messages.append(message)
+    if duplicates:
+        raise ValidationFailure("candidate finding ids are not unique across the candidate files", duplicates)
     return messages
 
 
@@ -1692,17 +2997,21 @@ def cmd_debate_status(args: argparse.Namespace) -> int:
 
 
 SAFE_PATH_ID = re.compile(r"^[a-z0-9-]+$")
+PART_ID = re.compile(r"^p[1-9][0-9]*$")
 
 
 def _safe_component(value: Any, kind: str) -> str | None:
     """A path component built from a Workflow result value, or None when the value is unsafe (FR-006).
 
-    `kind` is "id" for perspective and member ids, which must match ^[a-z0-9-]+$, "batch" for a batch
+    `kind` is "id" for perspective and member ids, which must match ^[a-z0-9-]+$, "part" for a review part id,
+    which must match ^p[1-9][0-9]*$, "batch" for a batch
     number, which must be a positive integer, and "round" for a round number, which must be a
     non-negative integer. Booleans are refused although Python counts them as integers.
     """
     if kind == "id":
         return value if isinstance(value, str) and SAFE_PATH_ID.fullmatch(value) else None
+    if kind == "part":
+        return value if isinstance(value, str) and PART_ID.fullmatch(value) else None
     if isinstance(value, bool) or not isinstance(value, int):
         return None
     if kind == "batch" and value < 1:
@@ -1749,13 +3058,17 @@ def cmd_ingest(args: argparse.Namespace) -> int:
 
     for message in result.get("candidates", []):
         perspective = field(message, "perspective", "unknown")
-        accept(
-            "candidate-findings",
-            message,
-            [(perspective, "id")],
-            "candidates/{}.json",
-            f"{perspective} candidates",
-        )
+        part = field(message, "part", None)
+        if part is None:
+            accept("candidate-findings", message, [(perspective, "id")], "candidates/{}.json", f"{perspective} candidates")
+        else:
+            accept(
+                "candidate-findings",
+                message,
+                [(perspective, "id"), (part, "part")],
+                "candidates/{}--{}.json",
+                f"{perspective} candidates (part {part})",
+            )
     for message in result.get("merge", []):
         batch = field(message, "batch", 0)
         accept("merge-ruling", message, [(batch, "batch")], "merge/batch-{}.json", f"moderator merge (batch {batch})")
@@ -2040,15 +3353,51 @@ def cmd_adjudicate(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 
+def derive_part_status(run_dir: Path, parts: ReviewParts | None, panel: Panel) -> tuple[ReviewPart, ...]:
+    """Each part's status, identically on every runner (data-model.md section 7; no runner writes it).
+
+    A part is `reviewed` when the candidate file `candidates/<perspective>--<part>.json` of every panel
+    perspective exists and validates, and `incomplete` otherwise. In a scope of one part, a feature 007 file
+    `candidates/<perspective>.json` is accepted for that part.
+    """
+    if parts is None:
+        return ()
+    derived = []
+    for part in parts.parts:
+        missing = []
+        for perspective in panel.perspectives:
+            names = [f"{perspective.id}--{part.id}.json"]
+            if len(parts.parts) == 1:
+                names.append(f"{perspective.id}.json")
+            valid = False
+            for name in names:
+                path = run_dir / "candidates" / name
+                if not path.is_file():
+                    continue
+                try:
+                    valid = not validate_message("candidate-findings", read_json(path))
+                except PanelError:
+                    valid = False
+                if valid:
+                    break
+            if not valid:
+                missing.append(perspective.id)
+        status = PartStatus.INCOMPLETE if missing else PartStatus.REVIEWED
+        derived.append(dataclasses.replace(part, status=status))
+    return tuple(derived)
+
+
 def build_report(
     scope: ReviewScope,
     state: PanelState,
     adjudication: Adjudication | None,
     candidates: Sequence[CandidateMessage],
     run_notices: Sequence[str],
+    context: ReportContext | None = None,
 ) -> ReviewReport:
     panel = state.panel
     assert panel is not None
+    context = context or ReportContext(level=panel.level, level_source=panel.level_source)
     notices: list[str] = []
     if not panel.independent:
         notices.append(REDUCED_INDEPENDENCE_NOTICE)
@@ -2074,15 +3423,38 @@ def build_report(
         rejected = list(adjudication.rejected)
     checked = [item for message in candidates for item in message.checked_items]
     checked.sort(key=lambda c: (c.file, c.line_start, c.line_end, c.dimension))
+    ordered = order_findings(findings)
+    cap = context.cap
+    delivered = ordered if cap is None else ordered[:cap]
+    unreviewed = list(scope.excluded)
+    incomplete = [part for part in context.parts if part.status == PartStatus.INCOMPLETE]
+    for part in incomplete:
+        for scoped in part.files:
+            lines = ", ".join(f"{a}-{b}" for a, b in scoped.line_ranges) or "all lines"
+            unreviewed.append(
+                Exclusion(
+                    path=scoped.path,
+                    reason=f"review part {part.id} not completed (lines {lines}): a perspective's candidate "
+                    "findings for this part are missing or invalid",
+                )
+            )
+    notices.extend(context.notes)
     return ReviewReport(
         scope=scope,
         panel=panel,
         extensions=state.extensions,
-        findings=tuple(order_findings(findings)),
+        findings=tuple(delivered),
         rejected=tuple(rejected),
         checked_items=tuple(checked),
-        unreviewed=scope.excluded,
+        unreviewed=tuple(unreviewed),
         notices=tuple(dict.fromkeys(notices)),
+        level=context.level,
+        level_source=context.level_source,
+        max_findings=context.max_findings,
+        withheld=len(ordered) - len(delivered),
+        parts=len(context.parts) if context.parts else panel.parts,
+        incomplete_parts=tuple(part.id for part in incomplete),
+        notes=context.notes,
     )
 
 
@@ -2130,18 +3502,38 @@ def _table(headers: Sequence[str], rows: Sequence[Sequence[Any]]) -> list[str]:
     return lines
 
 
+def finding_cap_sentence(report: ReviewReport) -> str:
+    """The cap applied and the number of findings it withheld (FR-014)."""
+    if report.max_findings is None:
+        cap = "none (the usual limit)"
+    elif report.max_findings == CapKind.ALL:
+        cap = "all"
+    else:
+        cap = str(report.max_findings)
+    withheld = "1 finding was" if report.withheld == 1 else f"{report.withheld} findings were"
+    return f"Finding cap: {cap}; {withheld} withheld by it."
+
+
 def render_markdown(report: ReviewReport) -> str:
     panel = report.panel
     lines = ["# Scientific review", "", "## Scope", "", report.scope.note, ""]
+    if report.scope.target is not None:
+        lines += [f"Target: the {report.scope.target.describe()}.", ""]
     lines.append(
         f"Runner: `{panel.runner}`. The perspectives were "
         + ("independent agents." if panel.independent else "not independent agents.")
     )
-    lines += ["", "## Panel", ""]
+    parts = f"Review parts: {report.parts}."
+    if report.incomplete_parts:
+        parts += f" Not completed: {', '.join(report.incomplete_parts)} (listed under Not reviewed)."
+    lines += ["", parts]
+    lines += ["", "## Panel", "", f"Effort level: {report.level} ({report.level_source}).", ""]
     for perspective in panel.perspectives:
         lines.append(f"- {perspective.name} (`{perspective.id}`, source `{perspective.source}`)")
     lines.append("- Defender and moderator")
     lines += ["", f"Rebuttal rounds: {panel.rebuttal_rounds}. Debate batches: at most {panel.max_batches}."]
+    if panel.overrides:
+        lines.append(f"Overridden from the {report.level} profile: {', '.join(panel.overrides)}.")
     if panel.models:
         lines.append("Models: " + ", ".join(f"{m.role}: {m.model}" for m in panel.models) + ".")
     lines += ["", "## Extensions", ""]
@@ -2159,7 +3551,7 @@ def render_markdown(report: ReviewReport) -> str:
         lines += ["", NO_REVIEWABLE_CODE, ""]
         return "\n".join(lines)
 
-    lines += ["", "## Findings", ""]
+    lines += ["", "## Findings", "", finding_cap_sentence(report), ""]
     headers = ["Location", "Dimension", "Severity", "Summary", "Trigger", "Wrong output", "Fix", "Raised by", "Label"]
     for label in AgreementLabel.VALUES:
         lines += [f"### {label.capitalize()}", ""]
@@ -2224,15 +3616,48 @@ def cmd_report(args: argparse.Namespace) -> int:
     if adjudication is None and scope.files:
         raise PreconditionFailure("adjudication.json does not exist; run `panel.py adjudicate` first")
     candidates = load_candidates(run_dir) if (run_dir / "candidates").is_dir() else []
-    report = build_report(scope, state, adjudication, candidates, load_notices(run_dir))
+    arguments = load_arguments(run_dir)
+    assert state.panel is not None
+    context = ReportContext(
+        level=state.panel.level,
+        level_source=state.panel.level_source,
+        max_findings=arguments.max_findings if arguments else None,
+        notes=arguments.notes if arguments else (),
+        parts=derive_part_status(run_dir, load_parts(run_dir), state.panel),
+    )
+    report = build_report(scope, state, adjudication, candidates, load_notices(run_dir), context)
     data = report.to_json()
     require_valid("report", data, "the report")
     write_json(run_dir / "report.json", data, args.dry_run)
     if args.format == "markdown":
         print(render_markdown(report), end="")
     else:
-        print(dumps({**data, "report_findings": [r.to_json() for r in report_findings(report.findings)]}), end="")
+        delivery = tool_delivery(report)
+        print(dumps({**data, **delivery.to_json()}), end="")
     return EXIT_OK
+
+
+@dataclass(frozen=True)
+class ToolDelivery:
+    """The findings passed to the findings-reporting tool, clamped to its maximum of 32 (research R3 step 5)."""
+
+    report_findings: tuple[ReportFinding, ...]
+    report_tool_withheld: int
+    report_tool_notice: str | None
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "report_findings": [r.to_json() for r in self.report_findings],
+            "report_tool_withheld": self.report_tool_withheld,
+            "report_tool_notice": self.report_tool_notice,
+        }
+
+
+def tool_delivery(report: ReviewReport) -> ToolDelivery:
+    mapped = report_findings(report.findings)
+    clamped = mapped[:REPORT_TOOL_LIMIT]
+    withheld = len(mapped) - len(clamped)
+    return ToolDelivery(tuple(clamped), withheld, REPORT_TOOL_NOTICE if withheld else None)
 
 
 # ---------------------------------------------------------------------------
@@ -2267,16 +3692,44 @@ def build_parser() -> argparse.ArgumentParser:
     init = add("init", cmd_init, "create a run directory under the system temp dir", run=False)
     init.add_argument("--project", required=True, help="the reviewed project")
 
+    arguments = add("args", cmd_args, "parse the invocation arguments into arguments.json")
+    given = arguments.add_mutually_exclusive_group(required=True)
+    given.add_argument("--argv", help="the command arguments as typed ($ARGUMENTS on Claude Code)")
+    given.add_argument("--text", help="the request text, on hosts without an argument field")
+    given.add_argument(
+        "--argv-stdin", action="store_true", help="read the command arguments from standard input (a here-document)"
+    )
+    given.add_argument("--text-stdin", action="store_true", help="read the request text from standard input")
+    arguments.add_argument("--persist", action="store_true", help="store a typed level and --max-findings choice")
+    arguments.add_argument("--prefs", help="preferences file (default: the user's configuration directory)")
+
+    prefs = add("prefs", cmd_prefs, "show or clear the stored preferences", run=False)
+    prefs_action = prefs.add_mutually_exclusive_group()
+    prefs_action.add_argument("--show", action="store_true", help="print the stored preferences (the default)")
+    prefs_action.add_argument("--clear", action="store_true", help="remove the stored preferences")
+    prefs.add_argument("--prefs", help="preferences file (default: the user's configuration directory)")
+
     scope = add("scope", cmd_scope, "resolve the review scope into scope.json")
-    scope.add_argument("--mode", required=True, choices=(ScopeMode.BRANCH, ScopeMode.REPOSITORY, ScopeMode.PATHS))
+    scope.add_argument(
+        "--mode",
+        choices=(ScopeMode.BRANCH, ScopeMode.REPOSITORY, ScopeMode.PATHS),
+        help="branch (default), repository or paths; ignored when a target is given",
+    )
+    scope.add_argument(
+        "--target", help="pull request, branch or paths, as typed (default: target_text of arguments.json)"
+    )
     scope.add_argument("--baseline", help="git ref or range (branch mode only; recorded as explicit)")
     scope.add_argument("--path", action="append", help="path to review (paths mode; repeatable)")
-    scope.add_argument("--budget", type=int, help=f"maximum lines to review (default {DEFAULT_BUDGET})")
+
+    add("parts", cmd_parts, "divide the scope into review parts in parts.json")
 
     select = add("select-extensions", cmd_select_extensions, "select domain extensions for the scope")
     select.add_argument("--declaration", action="append", help="path of an extension.json (repeatable)")
 
     panel = add("panel", cmd_panel, "configure the panel into panel.json")
+    panel.add_argument(
+        "--level", choices=Level.VALUES, help="effort level (default: the level of arguments.json, else medium)"
+    )
     panel.add_argument("--perspectives", action="append", help="perspective ids, comma-separated or repeated")
     panel.add_argument("--rounds", type=int, help=f"rebuttal rounds ({MIN_ROUNDS} to {MAX_ROUNDS})")
     panel.add_argument("--batches", type=int, help=f"maximum debate batches ({MIN_BATCHES} to {MAX_BATCHES})")
@@ -2316,6 +3769,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         return int(args.handler(args))
     except PanelError as exc:
+        if exc.payload is not None:
+            print(dumps(exc.payload.to_json()), end="")
         print(f"error: {exc}", file=sys.stderr)
         for detail in exc.details:
             print(f"  {detail}", file=sys.stderr)

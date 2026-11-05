@@ -1,7 +1,9 @@
 <!--
 Sync Impact Report
-- Version change: 1.1.1 -> 1.2.0 (MINOR)
-- Modified sections: preamble (repository scope widened to a marketplace of plugins); Scope and Constraints (plugin location, sci-review scope, applicability of Principle I); Development Workflow (per-plugin release tags)
+- Version change: 1.2.0 -> 1.3.0 (MINOR)
+- Reason: feature 008 (code-review-style arguments for sci-review) adds `--fix`, which must behave as `/code-review --fix`: it applies the review's findings to the working tree without a further confirmation and without requiring a clean working tree.
+- Version class: MINOR, because the amendment adds a bounded exception to Principle III and neither removes nor redefines the principle; the clarification of Principle IV (pin rule) is PATCH-level and is carried by the same amendment.
+- Modified sections: Principle III (exception for an explicit `--fix` request); Principle IV (pin rule applies to tools the plugin installs); Scope and Constraints (`sci-review` read-only except under `--fix`)
 - Added sections: none
 - Removed sections: none
 - Templates requiring updates: none (plan, spec and tasks templates reference principles by name only)
@@ -35,6 +37,7 @@ Rationale: the same inputs must always produce the same project; the model's val
 - Commands that modify an existing project (upgrade, link, fix) MUST show the user a diff or a list of planned changes and get confirmation before writing.
 - Existing files MUST NOT be overwritten without confirmation. Audits are read-only by default.
 - Work MUST start from a clean git working tree, or the user MUST explicitly accept the risk, so every change can be reverted.
+- Exception: a review command MAY apply its own findings to the working tree without a further confirmation when the user passed an explicit flag requesting it (`--fix`), provided nothing is staged or committed and every change is reported. Passing the flag is the user's explicit acceptance of the risk of writing to a working tree that has uncommitted changes; the command does not require a clean working tree.
 
 Rationale: these commands run on real projects with uncommitted work and local customizations.
 
@@ -42,7 +45,7 @@ Rationale: these commands run on real projects with uncommitted work and local c
 
 - Skills MUST work in claude.ai chat, Cowork and Claude Code, provided the environment has a shell with the required CLIs; a skill MUST check for those tools and say clearly what is missing instead of failing partway.
 - Components that only run in some environments (hooks, agents) MUST be optional: no core workflow may depend on them.
-- Tool versions the plugin installs or calls (spec-kit, cruft, cookiecutter) MUST be pinned, and the pins updated deliberately.
+- Tool versions the plugin installs or calls (spec-kit, cruft, cookiecutter) MUST be pinned, and the pins updated deliberately. The pin rule applies to tools the plugin installs. User-installed clients that the plugin detects and calls (`git`, `gh`, `glab`) are checked for presence and, where a command requires it, a minimum version; they are not pinned.
 
 Rationale: the plugin is installed per account and syncs to every surface, and colleagues will use it in environments the author doesn't control.
 
@@ -53,7 +56,7 @@ Rationale: the plugin is installed per account and syncs to every surface, and c
 - Publishing is limited to a release the user has explicitly confirmed. Package registry uploads MUST be left to the project's own CI unless the user asks otherwise.
 - Deferred to v2: automated evals for each skill.
 - The repository keeps spec-kit's development files (`.specify/`, root `.claude/skills/speckit-*`) separate from the plugins. Each plugin lives under `plugins/<name>/`.
-- `sci-review` scope: scientific-correctness review of code (mathematical derivations, numerical stability, physical modelling and units, statistical integrity, algorithmic correctness), read-only on the reviewed project, on Claude and on Codex. Style, lint and documentation reviews are out of its scope.
+- `sci-review` scope: scientific-correctness review of code (mathematical derivations, numerical stability, physical modelling and units, statistical integrity, algorithmic correctness), read-only on the reviewed project, except when the user passes `--fix`, which applies the delivered findings to the working tree after the report, on Claude and on Codex. Style, lint and documentation reviews are out of its scope.
 - Principle I does not apply to `sci-review`, which generates no project files. Principles II to IV apply to it in full.
 - License: MIT.
 
@@ -70,4 +73,4 @@ Rationale: the plugin is installed per account and syncs to every surface, and c
 - This constitution overrides other practices in this repository. Specs and plans MUST include a check against each principle and justify any exception in writing.
 - Amendments are made by pull request, state their reason, and bump the version: MAJOR for removing or redefining a principle, MINOR for adding one, PATCH for clarifications.
 
-**Version**: 1.2.0 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-11-04
+**Version**: 1.3.0 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-11-04

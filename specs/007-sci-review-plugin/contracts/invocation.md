@@ -8,6 +8,8 @@
 
 ## 2. Arguments (read from the request, all optional)
 
+> Feature 008 adds explicit arguments (an effort level, a pull request, branch or paths target, `--comment`, `--fix` and `--max-findings`), specified in [008 contracts/arguments.md](../../008-sci-review-arguments/contracts/arguments.md) and [008 contracts/targets-and-parts.md](../../008-sci-review-arguments/contracts/targets-and-parts.md). The natural-language arguments below remain valid where no explicit argument covers them; the defaults of `rebuttal_rounds`, `max_batches` and `perspectives` are those of the `medium` level.
+
 | Argument | Type | Default | Limits |
 |----------|------|---------|--------|
 | `mode` | `branch` \| `repository` \| `paths` | `branch` | |
@@ -26,7 +28,7 @@ The skill selects the first available runner, in this order, and records it in t
 
 | Order | Runner | Condition | Independence |
 |-------|--------|-----------|--------------|
-| 1 | `claude-workflow` | The `Workflow` tool is available and `sci-review:scientific-review` is listed as a workflow | independent agents |
+| 1 | `claude-workflow` | The `Workflow` tool is available and the session has a scratchpad directory, into which the panel script is copied and launched | independent agents |
 | 2 | `codex-subagents` | Running in Codex with multi-agent tools enabled | independent agents |
 | 3 | `claude-agents` | The `Agent` tool is available with the `sci-review:scientific-auditor` agent | independent agents |
 | 4 | `sequential` | Otherwise | not independent; notice required (FR-028) |

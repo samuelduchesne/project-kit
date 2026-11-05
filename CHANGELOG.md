@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `sci-review` 0.2.0 accepts explicit arguments: `/sci-review:scientific-review [low|medium|high|xhigh|max] [<pr#>|<branch>|<path>] [--comment] [--fix] [--max-findings <n>|all|default]`, in any order, with an argument hint. On hosts without an argument field, the same arguments are accepted when written in the request.
+- Five `sci-review` effort levels, from `low` (three perspectives, one rebuttal round, one debate batch) to `max` (up to seven perspectives, three rounds, four batches). `medium` is the configuration of 0.1.0, so a review without arguments is unchanged. The model uses `max` only when the user or an instruction file asks for it.
+- `sci-review` targets: a pull request (GitHub number, `#number` or URL; GitLab `!number` or URL), a branch reviewed without being checked out, or one or more paths. A target that matches several kinds is not guessed; a pull request that cannot be read (no `gh` or `glab`, no authentication, no network) is reported with an offer of a branch or paths review.
+- `--max-findings` limits the delivered `sci-review` findings in report order and states the number withheld; the level and the cap that a user types are stored per user outside every project (`panel.py prefs` shows or clears them).
+- `--comment` posts the delivered `sci-review` findings on a GitHub pull request (one inline comment per finding) or a GitLab merge request (one note), and `--fix` applies them to the working tree after the report, runs the relevant checks and reports each finding again with its outcome.
+- `sci-review` review parts: scopes are divided into parts of at most 2,000 lines, each reviewed in full by every perspective and merged before the debate; above 6,000 lines the skill states the size and asks for confirmation before any reviewer runs. The report lists any part that did not complete as not reviewed.
+
+### Changed
+
+- The project constitution is amended to version 1.3.0: Principle III allows a review command to apply its own findings to the working tree without a further confirmation when the user passes `--fix`, provided nothing is staged or committed and every change is reported; Principle IV states that the pin rule applies to the tools the plugin installs, not to user-installed clients such as `git`, `gh` and `glab`.
+- `sci-review` is no longer read-only under `--fix`: the panel phases remain read-only, and only the closing fix step, requested explicitly, writes to the working tree.
+
+### Removed
+
+- The 6,000-line review budget of `sci-review`, its `--budget` option and the `over budget` exclusion: no file is excluded for the size of the scope.
+
+### Fixed
+
+- `sci-review`: `/sci-review:scientific-review` now opens the skill. The panel Workflow had the same name, so the command ran the Workflow alone, with no scope. The Workflow script is now `scripts/scientific-review-panel.js`, no longer registered, so the plugin has a single slash command; the skill copies it into the session's scratchpad and launches the copy, because the Workflow tool refuses a script path inside an installed plugin. When the copy itself is refused, as it is in a non-interactive session in `acceptEdits` mode, the review falls back to the next runner and records it.
+
 ## [0.5.2] - 2026-11-04
 
 ### Changed

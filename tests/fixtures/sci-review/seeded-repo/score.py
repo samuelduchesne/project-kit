@@ -5,11 +5,19 @@ Usage:
                      [--verify-fixes REPO]
     python3 score.py --verify-fixes REPO
 
-A finding matches a manifest entry when its file equals the entry's file and the
-entry's line lies within ``match_tolerance`` (three) lines of the finding range,
-that is in [line_start - 3, line_end + 3]. Look-alikes and the contested
-construct carry a range [line, line_end]; a finding matches them when the two
-ranges, widened by the tolerance, overlap.
+A finding matches a seeded defect when its file equals the defect's file and the
+defect's line lies within ``match_tolerance`` (three) lines of the finding range,
+that is in [line_start - 3, line_end + 3]. The contested construct carries a
+range [line, line_end]; a finding matches it when the two ranges, widened by the
+tolerance, overlap. A finding reports a look-alike only when its own range
+overlaps the look-alike's range with no tolerance, so that a finding about
+adjacent code is not counted against the look-alike.
+
+An independent-round candidate is credited with the seeded defect of the merged
+finding that absorbed it, as recorded in ``merge/batch-*.json``: the moderator
+confirmed that every member of a merged finding describes the same defect, so a
+candidate whose own lines lie outside the tolerance is neither a miss nor a
+false positive when its merged finding matches the defect.
 
 Criteria printed, each with a final PASS, FAIL or SKIP line:
 
@@ -24,8 +32,11 @@ Criteria printed, each with a final PASS, FAIL or SKIP line:
             positives
     SC-009  (--run) at least half of the independent-round false positives are
             rejected in debate or never reported
-    SC-012  (--domain-perspective ID) at least 90% of the seeded defects are
-            reported by a finding that lists ID among its raisers
+    SC-012  (--domain-perspective ID) at least 90% of the seeded domain defects
+            are reported by a finding that lists ID among its raisers; a defect
+            entry with ``"domain": false`` (one that needs no domain knowledge
+            to recognise) is left out, and an entry without the field counts
+            as a domain defect
 
 Two manifest formats are read: this fixture's (``defects``, ``lookalikes`` and
 ``contested`` lists) and the entry format of the idfkit building-energy fixture
@@ -92,6 +103,7 @@ class Defect:
     severity: str | None
     description: str
     reproduce: str | None
+    domain: bool = True
 
 
 @dataclass(frozen=True)
@@ -159,6 +171,7 @@ class Candidate:
     id: str
     perspective: str
     location: Location | None
+    merged_into: str | None = None
 
 
 @dataclass
@@ -210,6 +223,7 @@ def defect_entry(raw: dict[str, Any]) -> Defect:
         severity=raw.get("severity"),
         description=raw["description"],
         reproduce=raw.get("reproduce"),
+        domain=bool(raw.get("domain", True)),
     )
 
 
@@ -292,6 +306,7 @@ def load_report(path: Path) -> Report:
 
 
 def load_candidates(run: Path) -> tuple[Candidate, ...]:
+    owner = load_merge_members(run)
     candidates: list[Candidate] = []
     for path in sorted((run / "candidates").glob("*.json")):
         data = read_json(path)
@@ -300,7 +315,8 @@ def load_candidates(run: Path) -> tuple[Candidate, ...]:
         perspective = str(data.get("perspective", path.stem))
         for raw in data["findings"]:
             if isinstance(raw, dict):
-                candidates.append(Candidate(str(raw.get("id", "")), perspective, location_of(raw)))
+                cid = str(raw.get("id", ""))
+                candidates.append(Candidate(cid, perspective, location_of(raw), owner.get(cid)))
     return tuple(candidates)
 
 
@@ -350,6 +366,18 @@ def is_false_positive(location: Location | None, manifest: Manifest) -> bool:
     return not any(matches_range(location, c, manifest.tolerance) for c in manifest.contested)
 
 
+def candidate_locations(candidate: Candidate, report: Report) -> list[Location | None]:
+    """The candidate's own location and that of the reported finding that absorbed it, if any."""
+    merged = [
+        f.location for f in report.findings if candidate.merged_into is not None and f.id == candidate.merged_into
+    ]
+    return [candidate.location, *merged]
+
+
+def candidate_is_false_positive(candidate: Candidate, report: Report, manifest: Manifest) -> bool:
+    return all(is_false_positive(location, manifest) for location in candidate_locations(candidate, report))
+
+
 def percent(numerator: int, denominator: int) -> str:
     return f"{100.0 * numerator / denominator:.0f}%" if denominator else "n/a"
 
@@ -390,11 +418,12 @@ def score_lookalikes(report: Report, manifest: Manifest) -> Verdict:
     print("SC-002 Findings at designated look-alikes")
     count = 0
     for entry in manifest.lookalikes:
-        # A finding that matches a seeded defect is a detection, even when the tolerance makes it touch a look-alike.
+        # A look-alike is reported only by a finding whose own lines overlap it; a finding that also matches a
+        # seeded defect is a detection, not a report of the look-alike.
         ids = [
             f.id
             for f in report.findings
-            if matches_range(f.location, entry, manifest.tolerance) and is_false_positive(f.location, manifest)
+            if matches_range(f.location, entry, 0) and is_false_positive(f.location, manifest)
         ]
         count += len(ids)
         status = f"reported as {', '.join(ids)}" if ids else "not reported"
@@ -480,8 +509,8 @@ def score_perspectives(report: Report, manifest: Manifest, candidates: Sequence[
     for candidate in candidates:
         score = scores.setdefault(candidate.perspective, PerspectiveScore(candidate.perspective))
         score.findings += 1
-        score.detected |= detected_defects([candidate.location], manifest)
-        if is_false_positive(candidate.location, manifest):
+        score.detected |= detected_defects(candidate_locations(candidate, report), manifest)
+        if candidate_is_false_positive(candidate, report, manifest):
             score.false_positives += 1
     if not scores:
         print("  no candidate files found")
@@ -509,7 +538,7 @@ def score_debate_rejections(report: Report, manifest: Manifest, run: Path, candi
     print("SC-009 Independent-round false positives rejected in debate")
     owner = load_merge_members(run)
     reported_ids = {f.id for f in report.findings}
-    false_positives = [c for c in candidates if is_false_positive(c.location, manifest)]
+    false_positives = [c for c in candidates if candidate_is_false_positive(c, report, manifest)]
     if not false_positives:
         print("  no independent-round false positives")
         return Verdict("SC-009", "PASS", "no independent-round false positives")
@@ -532,9 +561,13 @@ def score_debate_rejections(report: Report, manifest: Manifest, run: Path, candi
 
 
 def score_domain_attribution(report: Report, manifest: Manifest, perspective: str) -> Verdict:
-    print(f"SC-012 Seeded defects reported with {perspective} among the raisers")
+    print(f"SC-012 Seeded domain defects reported with {perspective} among the raisers")
     attributed = 0
+    domain_defects = [d for d in manifest.defects if d.domain]
     for defect in manifest.defects:
+        if not defect.domain:
+            print(f"  {defect.id:<34} not a domain defect; left out")
+    for defect in domain_defects:
         matched = [f for f in report.findings if matches_line(f.location, defect.file, defect.line, manifest.tolerance)]
         with_domain = [f.id for f in matched if perspective in f.raised_by]
         attributed += int(bool(with_domain))
@@ -545,7 +578,7 @@ def score_domain_attribution(report: Report, manifest: Manifest, perspective: st
         else:
             status = "missed"
         print(f"  {defect.id:<34} {status}")
-    total = len(manifest.defects)
+    total = len(domain_defects)
     print(f"  attributed: {attributed}/{total} ({percent(attributed, total)})")
     ok = total > 0 and attributed / total >= SC012_THRESHOLD
     return Verdict("SC-012", "PASS" if ok else "FAIL", f"{attributed}/{total} reported with {perspective} as a raiser")
