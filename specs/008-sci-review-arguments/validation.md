@@ -7,7 +7,7 @@ Validation record for tasks T066 to T068 of [tasks.md](./tasks.md), against the 
 | Task | Status | Remaining |
 |------|--------|-----------|
 | T066 (SC-009, seeded recall) | Done (section 3) | None. Recall 16 of 16, equal to the baseline. |
-| T067 (manual scenarios 1 to 11) | Partly done | Steps before the panel verified for scenarios 1 to 5, 7, 8, 10 and 11 (section 2); scenarios 1 and 2 run live (section 4). The live parts of scenarios 3 to 5, 7, 8, 10 and 11, and scenarios 6 and 9 entirely, are not yet run. |
+| T067 (manual scenarios 1 to 11) | Done | Steps before the panel verified (section 2); scenarios 1 and 2 run live interactively (sections 4.1 to 4.4); scenarios 3 to 11 run live in headless sessions (section 5). Open observations are listed in section 5.4. |
 | T068 (cross-host) | Open | Requires a Codex session and a claude.ai session with the plugin installed. |
 
 ## 2. Steps before the panel (2026-11-05)
@@ -121,3 +121,71 @@ In the session of section 4.3, `/sci-review:scientific-review` with no arguments
 
 Result: pass for FR-007 (the level is reused and the user is told).
 
+
+## 5. Live scenarios 3 to 11, headless (T067, 2026-11-05)
+
+### 5.1 Method
+
+Each scenario ran in a new non-interactive Claude Code session:
+
+```text
+CLAUDE_CONFIG_DIR=~/.claude claude -p "<command>" \
+  --plugin-dir <worktree>/plugins/sci-review \
+  --permission-mode acceptEdits \
+  --allowedTools "Bash Read Grep Glob Agent Workflow Skill ReportFindings Edit Write" \
+  --output-format stream-json --verbose
+```
+
+The conditions were as follows:
+
+- Claude Code was version 2.1.318, and the installed `sci-review@project-kit` (0.1.0) was disabled.
+- Each scenario had a new empty `XDG_CONFIG_HOME`.
+- Where a scenario needed an answer from the user, the session was continued with `--resume <session-id> -p "<answer>"`.
+- `git status --porcelain --ignored`, the current branch and `git for-each-ref refs/sci-review/` were recorded before and after every session.
+
+The following fixtures were used:
+
+- **`seeded`.** The fixture of feature 007, with `feature` checked out. A branch `review-other` was added from `main` with one seeded defect: `src/sci/thermal/conduction.py`, in which `heat_flux` multiplies by the wall thickness instead of dividing by it.
+- **`fix`.** A clone of `seeded` with `review-other` checked out, used for scenario 9.
+- **`large-scope`.** A copy of `tests/fixtures/sci-review/large-scope/`, committed as a single `init` commit on `main`.
+- **`pr6`.** The private repository `samuelduchesne/sci-review-scenario6-throwaway`, created for scenario 6. Pull request 1 adds the `review-other` defect against `main`.
+
+Two scenario pairs were combined to reduce the number of panel runs:
+
+- 3a with 7, as `low --max-findings 2 --comment` on `feature`;
+- 4 with 8, as `low review-other --max-findings zero`.
+
+Every panel scenario except 11 used the level `low`. Scenarios 3b, 3c and 5 need no panel, and the reuse and clearing of the cap (3b, 3c) were already verified in section 2.
+
+The total cost of the sessions in this section, as reported by Claude Code, was about USD 36.
+
+### 5.2 Results
+
+| # | Command | Observed | SC-005 |
+|---|---------|----------|--------|
+| 3a, 7 | `low --max-findings 2 --comment` on `feature` | Workflow runner; 18 consensus findings, 2 delivered with `ReportFindings`, and the report stated that 16 were withheld by the cap. The session said that `--comment` was ignored because the target is not a pull request, and posted nothing. | Unchanged; branch `feature`; no ref under `refs/sci-review/` |
+| 4, 8 | `low review-other --max-findings zero`, with `feature` checked out | One line said: "`--max-findings zero` was ignored (a whole number above zero, `all`, or `default` is required); the usual limit (none) applies." The scope was branch `review-other` (one file, 16 lines). One consensus finding was reported: the seeded defect at `conduction.py:11`. | Unchanged; branch stayed `feature`; no ref |
+| 5a | `hig` | Rejected by `scope`, exit 2: "`hig` is not a recognised level: use low, medium, high, xhigh or max." The run directory was cleaned and no reviewer started. | Unchanged |
+| 5b | `--post` | Rejected by `args`, exit 2: "unknown flag `--post`: the accepted flags are --comment, --fix and --max-findings <n>\|all\|default." No preferences were stored. | Unchanged |
+| 5c | `ultra` | Rejected by `args`, exit 2: "`ultra` is the cloud review of /code-review and is not available for the scientific review; use `max`." | Unchanged |
+| 6 | `low 1 --comment` in `pr6` | The pull-request head was fetched into a temporary ref. One consensus finding (`conduction.py:11`) was delivered with `ReportFindings`. Because the GitHub inline-comment tool was absent, the session posted one inline comment on line 11 through `gh api` ([discussion_r4483365513](https://github.com/samuelduchesne/sci-review-scenario6-throwaway/pull/1#discussion_r4483365513)). The comment opens with the agreement label, severity and dimension. No finding was unanchorable. | Unchanged; branch `main`; temporary ref deleted |
+| 9 | `low --fix` in `fix`, on `review-other` | One consensus finding was reported. The session changed `* thickness` to `/ thickness` on line 11, found no test suite, and ran the corrected function on the finding's trigger, which returned 8.0 W/m2 and 80.0 W as expected. The finding was then re-reported with `outcome: fixed`. Nothing was staged (`git diff --cached` was empty) and no reviewer agent was started for the fix. No finding was skipped. | `M src/sci/thermal/conduction.py` only, as expected for `--fix` |
+| 10 | `low` in `large-scope`, then "Review the whole repository." | The first turn stopped at precondition 3 (no base: `main` is the only branch and has one commit) and asked for a mode, as SKILL.md section 3 requires. After the answer, the session ran repository mode: 17,782 lines, 25 files, 9 parts, and 37 agents on the Workflow runner. All parts completed and none was listed as over budget (no occurrence of "over budget" in either transcript). The single delivered finding was the seeded defect in `units/conversions.py`, the last file in path order (observation 3 in section 5.4). | Unchanged; branch `main` |
+| 11 | (none) in `large-scope`, then "Review the whole repository.", then "no" | After the mode answer, the session said: "This scope has 17,782 lines in 25 files and will be reviewed in 9 parts. Continue?" After "no", it cleaned the run directory, started no reviewer, and offered named paths (`numerics solver`, `low thermal units`). | Unchanged; branch `main` |
+
+### 5.3 Result
+
+Scenarios 3 to 11 pass, subject to the observations below.
+
+### 5.4 Observations
+
+1. **Copying the Workflow script was refused in every headless session.** The copy prescribed by `runners/claude-workflow.md` was refused in sessions 3a/7, 6 and 9. The permission layer reported it as an edit of a sensitive file. The likely cause is the source path, which lies under `<repo>/.claude/worktrees/`; an installed plugin would not be under that directory. This was not verified. The three sessions recovered in different ways:
+   - 3a/7 read the script and wrote an identical copy with `Write`;
+   - 6 copied it with a shell redirection;
+   - 9 switched to the `claude-agents` runner, as the runner selection of SKILL.md section 4 allows, and recorded the switch.
+
+   The panel ran in every case. It should be checked whether the copy is refused for a plugin installed from the marketplace.
+2. **In scenario 10, the confirmation was folded into the mode question.** When it asked for a mode, the session described the whole-repository option as about 9 parts over the 6,000-line limit and stated: "Choosing this option counts as your confirmation." It therefore did not ask the "Continue?" question of SKILL.md section 5 step 4 separately. The user had the line count and the part count before any reviewer ran, so the intent of FR-022 holds. However, the exact wording was shown only in scenario 11.
+3. **The finding of scenario 10 was anchored five lines above the seeded line.** The finding names the correct file, function and inverted factor (3.412141633 instead of 0.29307107). Its line is 642, the definition of `WATTS_PER_BTU_PER_HOUR`, whereas the manifest gives line 647, the `return` statement. With the 3-line tolerance of `score.py`, a start line of 642 alone would not match. The run directory had been cleaned, so the finding's full line range could not be checked. The defect was found; the anchoring is outside the scoring tolerance.
+4. **`gh` needs a token in headless sessions.** The first run of scenario 6 stopped before any reviewer ran, because `gh` inside the session could not read the keyring. The session correctly reported the `auth` precondition of SKILL.md section 3 and offered alternatives. The re-run with `GH_TOKEN` set in the environment is the one recorded above.
+5. **Scenario 6 left a throwaway repository.** `samuelduchesne/sci-review-scenario6-throwaway` is private and can be deleted.
