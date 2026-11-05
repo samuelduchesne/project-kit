@@ -27,11 +27,12 @@ Tokenisation (research R3):
 ## 2. `panel.py args`
 
 ```text
-panel.py args --run RUN (--argv TEXT | --text TEXT) [--persist] [--prefs PATH] [--dry-run]
+panel.py args --run RUN (--argv TEXT | --text TEXT | --argv-stdin | --text-stdin) [--persist] [--prefs PATH] [--dry-run]
 ```
 
 - `--argv`: the command arguments (`$ARGUMENTS` on Claude Code).
 - `--text`: the request text on hosts without an argument field (R9); only the grammar's tokens are taken from it, and the rest is left to the natural-language reading of feature 007.
+- `--argv-stdin`, `--text-stdin`: the same, read from standard input, with one trailing newline removed. The skill uses these forms, with a quoted here-document, so that no shell parses the user's text.
 - `--persist`: store a typed level and `--max-findings` choice. `SKILL.md` passes it only when the user typed the arguments (research R4).
 - `--prefs`: preferences path, for tests; default per research R4.
 

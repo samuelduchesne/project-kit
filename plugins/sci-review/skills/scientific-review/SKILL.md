@@ -42,11 +42,18 @@ The skill accepts the arguments of `/code-review`, in any order:
 
 `$PANEL args` parses them deterministically into `$RUN/arguments.json`:
 
-- When the command came with arguments (`$ARGUMENTS` is not empty on Claude Code), run `$PANEL args --run $RUN --argv="$ARGUMENTS"`.
-- Otherwise, and on hosts without an argument field (Codex, claude.ai, Cowork), run `$PANEL args --run $RUN --text "<the user's request>"`. Only the grammar's tokens (a level word, the flags and the `--max-findings` value) are taken from the request; the rest is read as in section 2.2.
+- When the command came with arguments (`$ARGUMENTS` is not empty on Claude Code), run the command below. The arguments reach `panel.py` on its standard input, through a quoted here-document that is not inside a command substitution, so that no shell (bash 3.2 and zsh included) expands, splits or parses them: backquotes, `$`, quotes and parentheses in the arguments arrive unchanged and are never executed.
+
+  ```bash
+  $PANEL args --run $RUN --argv-stdin <<'SCI_REVIEW_ARGS'
+  $ARGUMENTS
+  SCI_REVIEW_ARGS
+  ```
+
+- Otherwise, and on hosts without an argument field (Codex, claude.ai, Cowork), run the same command with `--text-stdin` in place of `--argv-stdin` and the user's request in place of `$ARGUMENTS`, in the same quoted here-document. Only the grammar's tokens (a level word, the flags and the `--max-findings` value) are taken from the request; the rest is read as in section 2.2.
 - Add `--persist` only when the user typed the arguments or wrote them in the request, so that a typed level and `--max-findings` choice are stored for later reviews. Never pass it when you start the review on your own initiative.
 
-On exit 2 (an unknown flag, two levels, `ultra`), show the message to the user, which names the accepted values, run nothing else, and clean the run directory. A malformed `--max-findings` value is not an error: it is ignored with a note. As the review begins, tell the user each entry of `notes` in `arguments.json` in one short line.
+On exit 2 (an unknown flag, `ultra`, or two levels among typed arguments; several level words in a written request are not an error and give no level), show the message to the user, which names the accepted values, run nothing else, and clean the run directory. A malformed `--max-findings` value is not an error: it is ignored with a note. As the review begins, tell the user each entry of `notes` in `arguments.json` in one short line.
 
 Preferences are stored outside every project, in `$XDG_CONFIG_HOME/sci-review/preferences.json` (default `~/.config/sci-review/`; `%APPDATA%\sci-review\` on Windows). `$PANEL prefs --show` prints them and `$PANEL prefs --clear` removes them. Where they cannot be read or written, the review uses the defaults and the notes say so; it never fails for this reason.
 
@@ -110,7 +117,7 @@ Rules:
 Run these in the orchestrating conversation.
 
 1. **Run directory.** `$PANEL init --project "$PROJECT"`; keep the printed path as `$RUN`.
-2. **Arguments.** `$PANEL args --run $RUN (--argv="$ARGUMENTS" | --text "<request>") [--persist]`, as in section 2.1. Tell the user the notes in one short line each.
+2. **Arguments.** `$PANEL args --run $RUN (--argv-stdin | --text-stdin) [--persist]`, with the arguments or the request in a quoted here-document on standard input, as in section 2.1. Tell the user the notes in one short line each.
 3. **Scope.** `$PANEL scope --run $RUN`. It resolves the `target_text` of `arguments.json` (or `--target TEXT`) and writes the resolved target to `scope.json`. With no target, add the mode read from the wording:
    - branch (default): `$PANEL scope --run $RUN [--mode branch] [--baseline REF]`;
    - repository: `$PANEL scope --run $RUN --mode repository`;

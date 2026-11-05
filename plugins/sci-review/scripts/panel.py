@@ -745,6 +745,8 @@ class UserPreferences(Record):
 
     def __post_init__(self) -> None:
         super().__post_init__()
+        if type(self.version) is not int or self.version != PREFERENCES_VERSION:
+            raise ValidationFailure(f"UserPreferences.version: {self.version!r} is not {PREFERENCES_VERSION}")
         if self.last_level is not None:
             _check_enum("UserPreferences", "last_level", self.last_level, Level.VALUES)
         _check_cap("UserPreferences", "last_max_findings", self.last_max_findings)
@@ -1304,8 +1306,9 @@ def parse_arguments(text: str, request_text: bool = False) -> ParsedArguments:
 
     With `request_text`, the text is a written request on a host without an argument field (research R9): only
     the grammar's tokens (level, flags and the cap) are taken, and the remaining words are left to the
-    natural-language reading of feature 007, so no target and no near-level token are recorded.
-    Raises UsageFailure for an unknown flag, more than one level, and `ultra`.
+    natural-language reading of feature 007, so no target and no near-level token are recorded, and several distinct
+    level words give no level rather than an error.
+    Raises UsageFailure for an unknown flag and, outside a written request, for `ultra` and more than one level.
     """
     tokens = _split_tokens(text, request_text)
     comment = fix = False
@@ -1342,17 +1345,20 @@ def parse_arguments(text: str, request_text: bool = False) -> ParsedArguments:
             f"unknown flag `{unknown[0]}`: the accepted flags are {ACCEPTED_FLAGS}.",
             [USAGE],
         )
-    if any(t.lower() == Level.ULTRA for t in rest):
+    if not request_text and any(t.lower() == Level.ULTRA for t in rest):  # in a request, an ordinary word
         raise UsageFailure(ULTRA_MESSAGE, [USAGE])
     levels = [t.lower() for t in rest if t.lower() in Level.VALUES]
+    if request_text:
+        # In a written request, level words also occur as ordinary words ("the low and high bands"): a single
+        # distinct level word is taken as the level, and several are left to the reading of section 2.2.
+        distinct = list(dict.fromkeys(levels))
+        return ParsedArguments(distinct[0] if len(distinct) == 1 else None, None, (), comment, fix, cap)
     if len(levels) > 1:
         raise UsageFailure(
             f"more than one effort level was given ({', '.join(levels)}): give one of {ACCEPTED_LEVELS}.",
             [USAGE],
         )
     level = levels[0] if levels else None
-    if request_text:
-        return ParsedArguments(level, None, (), comment, fix, cap)
     others = [t for t in rest if t.lower() not in Level.VALUES and t != "--"]
     if others and others[0].startswith("#") and len(others[0]) > 1:
         others[0] = others[0][1:]
@@ -1375,7 +1381,7 @@ def load_preferences(path: Path) -> PreferencesLoad:
     """Read the preferences; a missing, unreadable or invalid file is treated as empty, with a note (FR-018)."""
     empty = UserPreferences()
     try:
-        text = path.read_text(encoding="utf-8")
+        content = path.read_bytes()
     except FileNotFoundError:
         return PreferencesLoad(empty, (), (f"No preferences file at {path}; nothing is reused.",))
     except OSError as exc:
@@ -1383,9 +1389,9 @@ def load_preferences(path: Path) -> PreferencesLoad:
         note = f"Preferences could not be read ({reason}: {path}); the defaults are used for omitted arguments."
         return PreferencesLoad(empty, (note,), (note,))
     try:
-        data = json.loads(text)
-        preferences = UserPreferences.from_json(data)
-    except (json.JSONDecodeError, ValidationFailure, TypeError) as exc:
+        # A file that is not UTF-8 (UnicodeDecodeError) or not JSON (JSONDecodeError) raises a ValueError.
+        preferences = UserPreferences.from_json(json.loads(content.decode("utf-8")))
+    except (ValueError, ValidationFailure, TypeError) as exc:
         note = f"The preferences file {path} is not valid and was ignored ({exc}); the defaults are used."
         return PreferencesLoad(empty, (note,), (note,))
     return PreferencesLoad(preferences, (), ())
@@ -1488,8 +1494,12 @@ def resolve_preferences_path(explicit: str | None, project: Path | None) -> tupl
 
 def cmd_args(args: argparse.Namespace) -> int:
     run_dir, info = load_run(args.run)
-    raw = args.argv if args.argv is not None else args.text
-    parsed = parse_arguments(raw, request_text=args.argv is None)
+    if args.argv_stdin or args.text_stdin:
+        # A here-document ends with a newline that is not part of the arguments.
+        raw = sys.stdin.read().removesuffix("\n")
+    else:
+        raw = args.argv if args.argv is not None else args.text
+    parsed = parse_arguments(raw, request_text=args.argv is None and not args.argv_stdin)
     path, refusal = resolve_preferences_path(args.prefs, Path(info.project))
     if path is None:
         loaded = PreferencesLoad(UserPreferences(), (refusal or "",), ())
@@ -1717,9 +1727,7 @@ def line_count(path: Path) -> int:
         data = path.read_bytes()
     except OSError:
         return 0
-    if not data:
-        return 0
-    return data.count(b"\n") + (0 if data.endswith(b"\n") else 1)
+    return count_lines(data)
 
 
 def is_binary(path: Path) -> bool:
@@ -1730,21 +1738,23 @@ def is_binary(path: Path) -> bool:
         return False
 
 
-def generated_paths(project: Path, paths: Sequence[str], in_git: bool) -> dict[str, str]:
-    """Return paths marked linguist-generated or linguist-vendored, with the reason."""
+def generated_paths(project: Path, paths: Sequence[str], in_git: bool, source: str | None = None) -> dict[str, str]:
+    """Return paths marked linguist-generated or linguist-vendored, with the reason.
+
+    With `source`, the attributes are read from the .gitattributes files of that git ref (a branch or pull request
+    target that is not checked out); a git older than 2.40, which lacks `check-attr --source`, falls back to the
+    working tree's attributes.
+    """
     if not in_git or not paths:
         return {}
     marked: dict[str, str] = {}
-    output = git(
-        project,
-        "check-attr",
-        "-z",
-        "--stdin",
-        "linguist-generated",
-        "linguist-vendored",
-        check=False,
-        stdin="\0".join(paths) + "\0",
-    )
+    command = ["check-attr", "-z", "--stdin", "linguist-generated", "linguist-vendored"]
+    stdin = "\0".join(paths) + "\0"
+    output = ""
+    if source is not None:
+        output = git(project, "check-attr", f"--source={source}", *command[1:], check=False, stdin=stdin)
+    if not output:
+        output = git(project, *command, check=False, stdin=stdin)
     fields = output.split("\0")
     for index in range(0, len(fields) - 2, 3):
         path, attribute, value = fields[index : index + 3]
@@ -1824,11 +1834,14 @@ def scope_reader(project: Path, scope: ReviewScope) -> Callable[[str], bytes | N
     return file_reader(project, ref)
 
 
-def scoped_lines(scoped: ScopedFile, read: Callable[[str], bytes | None]) -> int:
-    """Lines reviewed in a scoped file: its changed ranges, or the whole file when it has none."""
+def scoped_lines(scoped: ScopedFile, read: Callable[[str], bytes | None], data: bytes | None = None) -> int:
+    """Lines reviewed in a scoped file: its changed ranges, or the whole file when it has none.
+
+    `data`, when given, is the file's content already read, so that it is not read a second time.
+    """
     if scoped.line_ranges:
         return sum(end - start + 1 for start, end in scoped.line_ranges)
-    return count_lines(read(scoped.path))
+    return count_lines(data if data is not None else read(scoped.path))
 
 
 GITHUB_PULL_URL = re.compile(r"^https?://[^/\s]+/[^/\s]+/[^/\s]+/pull/(\d+)(?:[/?#].*)?$")
@@ -1882,7 +1895,7 @@ def pull_request_of(token: str, project: Path, in_git: bool) -> Target | None:
     match = GITLAB_MERGE_URL.match(token)
     if match:
         return Target(TargetKind.PULL_REQUEST, Host.GITLAB, int(match.group(1)), None, (), token)
-    if token.startswith("!") and token[1:].isdigit() and token[1:].isascii():
+    if token.startswith("!") and token[1:].isdigit() and token[1:].isascii() and int(token[1:]) >= 1:
         return Target(TargetKind.PULL_REQUEST, Host.GITLAB, int(token[1:]), None, (), token)
     digits = token[1:] if token.startswith("#") else token
     if digits.isdigit() and digits.isascii() and int(digits) >= 1:
@@ -1947,16 +1960,67 @@ def classify_target(text: str, project_root: Path, near_level: str | None = None
     return Target(TargetKind.PATHS, None, None, None, tuple(dict.fromkeys(paths)), text)
 
 
+# An HTTP status is matched only with its context ("HTTP 401", "401 Unauthorized"): a bare 401 may be the number of
+# the request in a not-found message.
+HOSTING_AUTH = re.compile(
+    r"\b(?:o?auth(?:entication|enticate|enticated|orization|orize|orized)?|unauthori[sz]ed|forbidden)\b"
+    r"|\blog ?in\b|\blogged in\b|credentials|\bhttp 40[13]\b|\b40[13] (?:unauthori[sz]ed|forbidden)\b"
+)
+HOSTING_NETWORK = re.compile(
+    r"could not resolve host|\bnetwork\b|\bconnect(?:ion)?\b|timed out|timeout|dial tcp|unreachable"
+)
+
+
 def _hosting_failure(stderr: str) -> str | None:
+    """`auth` or `network` when the hosting client failed for that reason; None for any other failure.
+
+    A request that does not exist ("Could not resolve to a PullRequest", "404 Not Found") is neither.
+    """
     lowered = stderr.lower()
-    if any(word in lowered for word in ("auth", "log in", "login", "logged in", "credentials", "401", "403")):
+    if HOSTING_AUTH.search(lowered):
         return "auth"
-    if any(
-        word in lowered
-        for word in ("could not resolve", "network", "connect", "timed out", "timeout", "dial tcp", "unreachable")
-    ):
+    if HOSTING_NETWORK.search(lowered):
         return "network"
     return None
+
+
+REQUEST_URL_REPOSITORY = re.compile(r"^https?://([^/\s]+)/(.+?)/(?:-/merge_requests|pull)/\d+(?:[/?#].*)?$")
+REMOTE_URL = re.compile(r"^[a-z][a-z0-9+.-]*://(?:[^@/]+@)?([^/:]+)(?::\d+)?/(.+)$")
+SCP_REMOTE = re.compile(r"^(?:[^@/]+@)?([^:/]+):(.+)$")
+
+
+def _repository_identity(host: str, path: str) -> tuple[str, str]:
+    path = path.strip("/")
+    path = path[: -len(".git")] if path.endswith(".git") else path
+    return host.lower(), path.lower()
+
+
+def remote_repository(url: str) -> tuple[str, str] | None:
+    """(host, owner/repository path) of a git remote URL, in https, ssh or scp-like form; None otherwise."""
+    match = REMOTE_URL.match(url) or SCP_REMOTE.match(url)
+    return _repository_identity(match.group(1), match.group(2)) if match else None
+
+
+def request_remote(project: Path, request_url: str) -> str:
+    """The remote to fetch a pull or merge request from, given the request's URL.
+
+    The URL names the repository the hosting client read, which may differ from `origin` (the upstream of a fork,
+    for example). A configured remote of that repository is preferred: first one with the same host and path, then
+    one with the same path under another host name (an ssh host alias); otherwise the repository's https URL.
+    Without a request URL, `origin` is used.
+    """
+    match = REQUEST_URL_REPOSITORY.match(request_url)
+    if match is None:
+        return "origin"
+    requested = _repository_identity(match.group(1), match.group(2))
+    same_path = None
+    for name in git(project, "remote", check=False).split():
+        identity = remote_repository(git(project, "remote", "get-url", name, check=False).strip())
+        if identity == requested:
+            return name
+        if identity is not None and identity[1] == requested[1] and same_path is None:
+            same_path = name
+    return same_path or f"https://{match.group(1)}/{match.group(2)}.git"
 
 
 def _run_tool(project: Path, argv: Sequence[str]) -> subprocess.CompletedProcess[str]:
@@ -1989,11 +2053,15 @@ def fetch_pull_request(project: Path, target: Target) -> PullRequestRefs:
 
     if shutil.which(tool) is None:
         raise missing(tool, f"{tool} is not installed")
-    reference = target.text if target.text.startswith("http") else str(target.number)
+    url = REQUEST_URL_REPOSITORY.match(target.text)
     if tool == "gh":
-        result = _run_tool(project, ["gh", "pr", "view", reference, "--json", "baseRefOid,headRefOid,baseRefName"])
+        reference = target.text if url else str(target.number)
+        result = _run_tool(
+            project, ["gh", "pr", "view", reference, "--json", "baseRefOid,headRefOid,baseRefName,url"]
+        )
     else:
-        result = _run_tool(project, ["glab", "mr", "view", str(target.number), "-F", "json"])
+        repository = ["--repo", f"https://{url.group(1)}/{url.group(2)}"] if url else []
+        result = _run_tool(project, ["glab", "mr", "view", str(target.number), *repository, "-F", "json"])
     if result.returncode != 0:
         reason = _hosting_failure(result.stderr)
         if reason is not None:
@@ -2003,19 +2071,31 @@ def fetch_pull_request(project: Path, target: Target) -> PullRequestRefs:
         data = json.loads(result.stdout)
         if tool == "gh":
             base_oid, base_name = str(data["baseRefOid"]), str(data.get("baseRefName") or "")
+            head_oid, request_url = str(data.get("headRefOid") or ""), str(data.get("url") or "")
         else:
             base_oid, base_name = str(data["diff_refs"]["base_sha"]), str(data.get("target_branch") or "")
-    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            head_oid = str(data.get("sha") or data["diff_refs"].get("head_sha") or "")
+            request_url = str(data.get("web_url") or "")
+    except (json.JSONDecodeError, KeyError, TypeError, AttributeError) as exc:
         raise PreconditionFailure(f"{tool} returned no base commit for the {target.describe()} ({exc})") from exc
+    # The request is fetched from the repository the hosting client read (its URL), which is not always `origin`:
+    # with `gh repo set-default` on a fork, a number names a request of the upstream.
+    remote = request_remote(project, request_url or target.text)
     head_ref = pull_request_ref(target)
     source = f"merge-requests/{target.number}/head" if tool == "glab" else f"pull/{target.number}/head"
-    fetch = _run_tool(project, ["git", "fetch", "--no-tags", "origin", f"+{source}:{head_ref}"])
+    fetch = _run_tool(project, ["git", "fetch", "--no-tags", remote, f"+{source}:{head_ref}"])
     if fetch.returncode != 0:
         raise missing(_hosting_failure(fetch.stderr) or "network", fetch.stderr.strip())
+    fetched = git(project, "rev-parse", "--verify", "--quiet", f"{head_ref}^{{commit}}", check=False).strip()
+    if head_oid and fetched != head_oid:
+        raise PreconditionFailure(
+            f"the head fetched from {remote} for the {target.describe()} ({fetched[:12] or 'none'}) is not the head "
+            f"{tool} reports ({head_oid[:12]}); the request may have changed meanwhile: run the review again"
+        )
     if not ref_exists(project, base_oid):
         for what in (base_name, base_oid):
             if what and not ref_exists(project, base_oid):
-                _run_tool(project, ["git", "fetch", "--no-tags", "origin", what])
+                _run_tool(project, ["git", "fetch", "--no-tags", remote, what])
     if not ref_exists(project, base_oid):
         raise missing("network", f"the base commit {base_oid[:12]} could not be fetched")
     # For a merged request, the base commit reported by the host is the base at the time of merge.
@@ -2107,12 +2187,13 @@ def finalise_scope(
     """Apply the exclusions (generated, vendored, binary, deleted) and count the lines; no file is excluded for
     the size of the scope (FR-020)."""
     read = file_reader(project, listing.ref)
-    marked = generated_paths(project, sorted(listing.candidates), in_git)
+    marked = generated_paths(project, sorted(listing.candidates), in_git, source=listing.ref)
     excluded: list[Exclusion] = [Exclusion(path=p, reason="outside paths") for p in listing.outside]
     files: list[ScopedFile] = []
     total = 0
     for path in sorted(listing.candidates):
         reason = None if path in listing.named else exclusion_reason(path, marked)
+        data: bytes | None = None
         if listing.ref is None:
             if reason is None and is_binary(project / path):
                 reason = "binary file"
@@ -2131,7 +2212,7 @@ def finalise_scope(
             continue
         scoped = ScopedFile(path=path, language=language_of(path), line_ranges=tuple(listing.candidates[path]))
         files.append(scoped)
-        total += scoped_lines(scoped, read)
+        total += scoped_lines(scoped, read, data)
     note = f"{listing.description}: {len(files)} files, {total} lines."
     return ReviewScope(
         mode=listing.mode,
@@ -2283,11 +2364,14 @@ class FileSegments:
 
 
 def file_segments(scoped: ScopedFile, read: Callable[[str], bytes | None]) -> FileSegments:
-    data = read(scoped.path)
-    lines = scoped_lines(scoped, read)
+    # The content is read once, and only when it is needed: for a whole file's size, or to find the cut points.
+    data = None if scoped.line_ranges else read(scoped.path)
+    lines = scoped_lines(scoped, read, data)
     if lines <= PART_LINES:
         ranges = scoped.line_ranges or ((1, max(lines, 1)),)
         return FileSegments(scoped, lines, tuple(ranges))
+    if data is None:
+        data = read(scoped.path)
     text = (data or b"").decode("utf-8", errors="replace").splitlines()
     boundaries = definition_boundaries(scoped.path, text)
     ranges = scoped.line_ranges or ((1, lines),)
@@ -3612,6 +3696,10 @@ def build_parser() -> argparse.ArgumentParser:
     given = arguments.add_mutually_exclusive_group(required=True)
     given.add_argument("--argv", help="the command arguments as typed ($ARGUMENTS on Claude Code)")
     given.add_argument("--text", help="the request text, on hosts without an argument field")
+    given.add_argument(
+        "--argv-stdin", action="store_true", help="read the command arguments from standard input (a here-document)"
+    )
+    given.add_argument("--text-stdin", action="store_true", help="read the request text from standard input")
     arguments.add_argument("--persist", action="store_true", help="store a typed level and --max-findings choice")
     arguments.add_argument("--prefs", help="preferences file (default: the user's configuration directory)")
 

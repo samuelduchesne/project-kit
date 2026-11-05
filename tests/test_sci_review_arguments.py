@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
@@ -59,6 +60,11 @@ def run_panel(*argv: str) -> Result:
 
 def git(cwd: Path, *argv: str) -> str:
     return subprocess.run([*GIT, *argv], cwd=cwd, check=True, capture_output=True, text=True).stdout
+
+
+def git_version() -> tuple[int, ...]:
+    words = subprocess.run(["git", "--version"], check=True, capture_output=True, text=True).stdout.split()
+    return tuple(int(n) for n in re.findall(r"\d+", words[2])[:2]) if len(words) > 2 else (0,)
 
 
 def normalise(text: str) -> str:
@@ -223,6 +229,30 @@ class TestGrammar(RunMixin):
         self.assertIsNone(parsed.target_text)
         self.assertIsNone(parsed.near_level)
 
+    def test_request_text_with_several_level_words_takes_no_level(self) -> None:
+        parsed = panel.parse_arguments("Review the filter that separates the low and high bands.", request_text=True)
+        self.assertIsNone(parsed.level)
+        parsed = panel.parse_arguments("high effort please, keep it high", request_text=True)
+        self.assertEqual(parsed.level, "high")
+        with self.assertRaises(panel.UsageFailure):
+            panel.parse_arguments("low high")
+        parsed = panel.parse_arguments("give this an ultra careful scientific review", request_text=True)
+        self.assertIsNone(parsed.level)
+
+    def test_arguments_read_from_standard_input(self) -> None:
+        run_dir = self.init_run()
+        with mock.patch("sys.stdin", io.StringIO("high --fix it's\n")):
+            result = run_panel("args", "--run", str(run_dir), "--argv-stdin", "--prefs", str(self.prefs))
+        self.assertEqual(result.code, 0, result.err)
+        arguments = self.arguments(run_dir)
+        self.assertEqual((arguments["level"], arguments["fix"], arguments["raw"]), ("high", True, "high --fix it's"))
+        run_dir = self.init_run()
+        with mock.patch("sys.stdin", io.StringIO("Review the low and high bands, --max-findings 3.\n")):
+            result = run_panel("args", "--run", str(run_dir), "--text-stdin", "--prefs", str(self.prefs))
+        self.assertEqual(result.code, 0, result.err)
+        arguments = self.arguments(run_dir)
+        self.assertEqual((arguments["level_source"], arguments["max_findings"]), ("default", 3))
+
     def test_text_option_writes_arguments(self) -> None:
         run_dir = self.init_run()
         result = run_panel(
@@ -259,6 +289,24 @@ class TestPreferences(RunMixin):
         loaded = panel.load_preferences(self.prefs)
         self.assertEqual(loaded.preferences, panel.UserPreferences())
         self.assertTrue(loaded.notes)
+
+    def test_file_of_another_version_is_empty_with_a_note(self) -> None:
+        self.prefs.parent.mkdir(parents=True)
+        for content in ('{"version": 2, "last_level": "high"}', '{"version": "1"}', '{"version": true}'):
+            with self.subTest(content=content):
+                self.prefs.write_text(content)
+                loaded = panel.load_preferences(self.prefs)
+                self.assertEqual(loaded.preferences, panel.UserPreferences())
+                self.assertIn("version", loaded.notes[0])
+
+    def test_file_that_is_not_utf8_is_empty_with_a_note(self) -> None:
+        self.prefs.parent.mkdir(parents=True)
+        self.prefs.write_bytes(b'{"version": 1, "last_level": "\xff"}')
+        loaded = panel.load_preferences(self.prefs)
+        self.assertEqual(loaded.preferences, panel.UserPreferences())
+        self.assertTrue(loaded.notes)
+        run_dir = self.init_run()
+        self.assertEqual(self.args(run_dir, "high").code, 0)
 
     @unittest.skipIf(os.name == "nt" or os.geteuid() == 0, "permissions are not enforced")
     def test_unreadable_and_unwritable_directory_yield_notes(self) -> None:
@@ -518,6 +566,27 @@ class TestTargets(RunMixin):
         self.assertEqual(self.arguments(run_dir)["target_text"], "feature/other")
         self.assertEqual(self.scope_json(run_dir)["target"]["text"], "feature/other")
 
+    @unittest.skipUnless(git_version() >= (2, 40), "git check-attr --source needs git 2.40 or later")
+    def test_branch_target_uses_its_own_gitattributes(self) -> None:
+        worktree = self.project.parent / "generated-worktree"
+        git(self.project, "worktree", "add", "-q", "-b", "with-generated", str(worktree), "main")
+        (worktree / ".gitattributes").write_text("src/table.py linguist-generated\n")
+        (worktree / "src" / "table.py").write_text("TABLE = [1, 2, 3]\n")
+        (worktree / "src" / "rate.py").write_text("def rate(x):\n    return x / 2\n")
+        git(worktree, "add", "-A")
+        git(worktree, "commit", "-q", "-m", "generated table")
+        git(self.project, "worktree", "remove", "--force", str(worktree))
+        run_dir = self.init_run()
+        result = self.scope(run_dir, "--target", "with-generated")
+        self.assertEqual(result.code, 0, result.err)
+        scope = self.scope_json(run_dir)
+        self.assertIn("src/rate.py", [f["path"] for f in scope["files"]])
+        self.assertIn({"path": "src/table.py", "reason": "generated (linguist attribute)"}, scope["excluded"])
+
+    def test_merge_request_zero_is_not_a_target(self) -> None:
+        self.assertIsNone(panel.pull_request_of("!0", self.project, True))
+        self.assertEqual(panel.pull_request_of("!7", self.project, True).number, 7)
+
     def test_pull_request_without_gh_exits_3(self) -> None:
         bindir = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, bindir, True)
@@ -566,6 +635,116 @@ class TestTargets(RunMixin):
         self.assertEqual(result.code, 0, result.err)
         self.assertEqual(git(self.project, "for-each-ref", "refs/sci-review/").strip(), "")
         self.assertTrue(git(self.project, "rev-parse", "--verify", "main").strip())
+
+
+class TestHosting(unittest.TestCase):
+    def test_failure_reasons(self) -> None:
+        cases = {
+            "GraphQL: Could not resolve to a PullRequest with the number of 9999. (repository.pullRequest)": None,
+            "HTTP 404: Not Found": None,
+            "failed to look up the author of the commit": None,
+            "To get started with GitHub CLI, please run:  gh auth login": "auth",
+            "HTTP 401: Bad credentials": "auth",
+            "GraphQL: Could not resolve to a PullRequest with the number of 401. (repository.pullRequest)": None,
+            "GET https://gitlab.com/api/v4/projects/1/merge_requests/403: 404 Not Found": None,
+            "ERROR: 401 Unauthorized": "auth",
+            "error: Unauthorized": "auth",
+            "oauth token expired": "auth",
+            "HTTP 403: Resource not accessible by integration": "auth",
+            "fatal: unable to access 'https://github.com/o/r/': Could not resolve host: github.com": "network",
+            "dial tcp 140.82.112.3:443: i/o timeout": "network",
+        }
+        for stderr, expected in cases.items():
+            with self.subTest(stderr=stderr):
+                self.assertEqual(panel._hosting_failure(stderr), expected)
+
+    def test_remote_repository_forms(self) -> None:
+        expected = ("github.com", "owner/repo")
+        for url in (
+            "https://github.com/owner/repo.git",
+            "https://user@github.com/Owner/Repo",
+            "git@github.com:owner/repo.git",
+            "ssh://git@github.com:22/owner/repo.git",
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(panel.remote_repository(url), expected)
+
+    def test_request_url_of_another_repository_is_fetched_from_it(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            git(project, "init", "-q")
+            git(project, "remote", "add", "origin", "git@github.com:me/repo.git")
+            git(project, "remote", "add", "work", "git@github-work:me/private.git")
+            self.assertEqual(panel.request_remote(project, "12"), "origin")
+            self.assertEqual(panel.request_remote(project, "https://github.com/me/repo/pull/12"), "origin")
+            # An ssh host alias names the same repository under another host name.
+            self.assertEqual(panel.request_remote(project, "https://github.com/me/private/pull/3"), "work")
+            self.assertEqual(
+                panel.request_remote(project, "https://github.com/upstream/repo/pull/12"),
+                "https://github.com/upstream/repo.git",
+            )
+            git(project, "remote", "add", "upstream", "https://github.com/Upstream/Repo.git")
+            self.assertEqual(panel.request_remote(project, "https://github.com/upstream/repo/pull/12"), "upstream")
+            self.assertEqual(
+                panel.request_remote(project, "https://gitlab.com/group/sub/proj/-/merge_requests/3"),
+                "https://gitlab.com/group/sub/proj.git",
+            )
+
+    def fake_hosted_request(self, tmp: Path, head: str | None = None) -> tuple[Path, str, str]:
+        """A hosted repository with pull request 5, a project without remotes, and a fake `gh` on PATH.
+
+        The request's URL is rewritten to the hosted repository (url.<path>.insteadOf), so nothing leaves the
+        machine. Returns the project, the base commit and the head commit.
+        """
+        source, hosted, project, bin_dir = tmp / "source", tmp / "hosted.git", tmp / "project", tmp / "bin"
+        for directory in (source, project, bin_dir):
+            directory.mkdir()
+        git(source, "init", "-q")
+        (source / "a.py").write_text("x = 1\n")
+        git(source, "add", "-A")
+        git(source, "commit", "-q", "-m", "base")
+        base = git(source, "rev-parse", "HEAD").strip()
+        (source / "a.py").write_text("x = 2\n")
+        git(source, "commit", "-q", "-am", "head")
+        pr_head = git(source, "rev-parse", "HEAD").strip()
+        git(tmp, "init", "-q", "--bare", str(hosted))
+        git(source, "push", "-q", str(hosted), f"{base}:refs/heads/main", f"{pr_head}:refs/pull/5/head")
+        git(project, "init", "-q")
+        git(project, "config", f"url.{hosted}.insteadOf", "https://github.com/me/repo.git")
+        reported = {
+            "baseRefOid": base,
+            "headRefOid": head or pr_head,
+            "baseRefName": "main",
+            "url": "https://github.com/me/repo/pull/5",
+        }
+        (tmp / "gh.json").write_text(json.dumps(reported))
+        gh = bin_dir / "gh"
+        gh.write_text(f"#!/bin/sh\ncat '{tmp / 'gh.json'}'\n")
+        gh.chmod(0o755)
+        return project, base, pr_head
+
+    def fetch(self, project: Path, bin_dir: Path) -> panel.PullRequestRefs:
+        path = f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+        with mock.patch.dict(os.environ, {"PATH": path}), contextlib.redirect_stderr(io.StringIO()):
+            target = panel.pull_request_of("5", project, True)
+            assert target is not None
+            return panel.fetch_pull_request(project, target)
+
+    def test_request_is_fetched_from_the_repository_the_client_read(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            tmp = Path(name).resolve()
+            project, base, pr_head = self.fake_hosted_request(tmp)
+            refs = self.fetch(project, tmp / "bin")
+            self.assertEqual(refs.base, base)
+            self.assertEqual(git(project, "rev-parse", refs.head_ref).strip(), pr_head)
+
+    def test_fetched_head_that_differs_from_the_reported_head_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            tmp = Path(name).resolve()
+            project, _base, _head = self.fake_hosted_request(tmp, head="0" * 40)
+            with self.assertRaises(panel.PreconditionFailure) as raised:
+                self.fetch(project, tmp / "bin")
+            self.assertIn("is not the head gh reports", str(raised.exception))
 
 
 # ---------------------------------------------------------------------------
@@ -840,6 +1019,37 @@ class TestReproducedSections(unittest.TestCase):
 
     def test_citation(self) -> None:
         self.assertTrue("Reproduced from /code-review, Claude Code 2.1.317" in self.text, "SKILL.md lacks the citation")
+
+    def test_arguments_are_passed_without_shell_expansion(self) -> None:
+        raw = SKILL_MD.read_text(encoding="utf-8")
+        self.assertNotIn('--argv="$ARGUMENTS"', raw)
+        self.assertNotIn("$(cat <<", raw)
+        block = re.search(r"```bash\n(\s*\$PANEL args .*?\n)\s*```", raw, re.DOTALL)
+        assert block is not None, "SKILL.md lacks the args command block"
+        self.assertIn("--argv-stdin <<'SCI_REVIEW_ARGS'", block.group(1))
+        # The block, with $ARGUMENTS replaced by hostile text, passes that text to panel.py unchanged in every shell
+        # present, bash 3.2 (macOS /bin/bash) included: an unbalanced `)` or quote once ran commands there.
+        hostile = 'high `touch pwned` $(touch pwned2) a)$(touch pwned3) it\'s "my dir --fix'
+        shells = [shell for shell in ("/bin/bash", "bash", "zsh", "/bin/sh", "dash") if shutil.which(shell)]
+        panel_py = ROOT / "plugins" / "sci-review" / "scripts" / "panel.py"
+        for shell in shells:
+            with self.subTest(shell=shell), tempfile.TemporaryDirectory() as name:
+                tmp = Path(name).resolve()
+                (tmp / "project").mkdir()
+                run_dir = Path(run_panel("init", "--project", str(tmp / "project")).out.strip())
+                self.addCleanup(shutil.rmtree, run_dir, True)
+                script = (
+                    textwrap.dedent(block.group(1))
+                    .replace("$PANEL", f"'{sys.executable}' '{panel_py}'")
+                    .replace("$RUN", f"'{run_dir}'")
+                    .replace("$ARGUMENTS", hostile)
+                )
+                env = {**os.environ, "XDG_CONFIG_HOME": str(tmp / "config")}
+                result = subprocess.run([shell, "-c", script], cwd=tmp, capture_output=True, text=True, env=env)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                arguments = json.loads((run_dir / "arguments.json").read_text(encoding="utf-8"))
+                self.assertEqual(arguments["raw"], hostile)
+                self.assertEqual(sorted(p.name for p in tmp.iterdir()), ["project"])
 
     def test_comment_sections(self) -> None:
         self.assert_lines(COMMENT_GITHUB + COMMENT_GITLAB)
