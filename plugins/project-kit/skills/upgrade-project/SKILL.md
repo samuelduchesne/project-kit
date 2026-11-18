@@ -10,8 +10,10 @@ Update a project generated from [project-kit-cookiecutter](https://github.com/sa
 All predictable steps go through one script. Run it exactly like this (call it `UP` below), from any folder:
 
 ```bash
-uv run --no-project "${CLAUDE_PLUGIN_ROOT}/scripts/upgrade_project.py" <command> --project <project folder> [options]
+uv run --no-project "<skill folder>/../../scripts/upgrade_project.py" <command> --project <project folder> [options]
 ```
+
+`<skill folder>` is the folder that holds this SKILL.md: on Claude it is `${CLAUDE_PLUGIN_ROOT}/skills/upgrade-project`, on Codex the folder Codex loaded this skill from. Write the absolute path out in every command; don't store it in a shell variable, because the shell is not kept between commands.
 
 Each command prints one JSON object (`status` is `ok`, `invalid`, `environment`, `project` or `failed`, with `messages` on failure). Read the JSON; don't show it raw.
 
@@ -26,7 +28,7 @@ Each command prints one JSON object (`status` is `ok`, `invalid`, `environment`,
 
 ### 1. Status
 
-If you cannot run shell commands, say this workflow needs Claude Code or Cowork on the user's computer, with git and uv, and stop.
+If you cannot run shell commands, say this workflow needs Claude Code, Cowork or Codex on the user's computer, with git and uv, and stop.
 
 Run `UP status`. On `environment`, relay the messages (missing tool, template unreachable, linked to a template other than project-kit-cookiecutter, or linked to the retired template, which needs `.cruft.json` removed and the project linked again) and stop. On `project`, relay the messages (the folder doesn't exist, or its `.cruft.json` is not a usable link record) and stop. Otherwise tell the user: the language, whether the project is linked, and the git state. If `git.repository` is false, say upgrades need a git repository and stop. If `git.clean` is false, ask them to commit or stash first.
 

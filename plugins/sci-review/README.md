@@ -36,7 +36,7 @@ In claude.ai and the Claude desktop app, add the marketplace `samuelduchesne/pro
 
 ### 1.2 Codex
 
-The repository ships a Codex marketplace at `.agents/plugins/marketplace.json`, which lists `sci-review` only. Add it with:
+The repository ships a Codex marketplace at `.agents/plugins/marketplace.json`, which lists `sci-review` and `project-kit`. Add it with:
 
 ```bash
 codex plugin marketplace add samuelduchesne/project-kit
