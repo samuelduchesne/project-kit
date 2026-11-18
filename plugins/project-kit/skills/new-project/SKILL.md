@@ -10,8 +10,10 @@ Create a new Python or Node project from [project-kit-cookiecutter](https://gith
 All predictable steps go through one script. Run it exactly like this (call it `NP` below):
 
 ```bash
-uv run --no-project "${CLAUDE_PLUGIN_ROOT}/scripts/new_project.py" <command> --language <python|node> [options]
+uv run --no-project "<skill folder>/../../scripts/new_project.py" <command> --language <python|node> [options]
 ```
+
+`<skill folder>` is the folder that holds this SKILL.md: on Claude it is `${CLAUDE_PLUGIN_ROOT}/skills/new-project`, on Codex the folder Codex loaded this skill from. Write the absolute path out in every command; don't store it in a shell variable, because the shell is not kept between commands.
 
 Pass the same `--language` to every command.
 
@@ -33,7 +35,7 @@ This workflow creates **Python** (`--language python`) and **Node** (`--language
 
 ### 2. Environment
 
-Run `NP check`. If you cannot run shell commands at all (for example in a chat without a local environment), say this workflow needs Claude Code or Cowork on the user's computer, and stop.
+Run `NP check`. If you cannot run shell commands at all (for example in a chat without a local environment), say this workflow needs Claude Code, Cowork or Codex on the user's computer, and stop.
 
 If `status` is `environment`, tell the user each message (missing git or uv with the install hint, template unreachable, or no Node template at that template version), and stop.
 

@@ -4,12 +4,12 @@ This repository is a plugin marketplace, `project-kit`, that publishes two plugi
 
 | Plugin | Purpose | Hosts | Documentation |
 |--------|---------|-------|---------------|
-| `project-kit` | Create, upgrade and audit projects from the project-kit-cookiecutter templates, and maintain their changelogs, releases, pull requests and documentation | Claude | This page |
+| `project-kit` | Create, upgrade and audit projects from the project-kit-cookiecutter templates, and maintain their changelogs, releases, pull requests and documentation | Claude and Codex | This page |
 | `sci-review` | Review code for scientific correctness with a panel of independent reviewers | Claude and Codex | [sci-review](#sci-review) and [plugins/sci-review/README.md](plugins/sci-review/README.md) |
 
-project-kit is a Claude plugin for setting up and maintaining software projects to a consistent standard. It drives the [project-kit-cookiecutter](https://github.com/samuelduchesne/project-kit-cookiecutter) templates (Python, and Node for TypeScript libraries) rather than writing project files itself: the templates hold the files, and project-kit handles creating projects from them, keeping projects up to date with cruft, and checking projects for drift. New projects come with [spec-kit](https://github.com/github/spec-kit), the standard linting and formatting rules (ruff for Python, Biome for Node, pre-commit for both) and a [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) `CHANGELOG.md`.
+project-kit is a Claude and Codex plugin for setting up and maintaining software projects to a consistent standard. It drives the [project-kit-cookiecutter](https://github.com/samuelduchesne/project-kit-cookiecutter) templates (Python, and Node for TypeScript libraries) rather than writing project files itself: the templates hold the files, and project-kit handles creating projects from them, keeping projects up to date with cruft, and checking projects for drift. New projects come with [spec-kit](https://github.com/github/spec-kit), the standard linting and formatting rules (ruff for Python, Biome for Node, pre-commit for both) and a [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) `CHANGELOG.md`.
 
-The plugin installs in claude.ai chat, the Claude desktop app, Cowork and Claude Code, and each skill needs the tools its workflow calls. `create-release` and `stacked-prs` need a shell with `git` and `gh`. `review-docs` needs the Workflow tool, which is documented for the Claude Code CLI, desktop app and IDE extensions.
+The plugin installs in claude.ai chat, the Claude desktop app, Cowork, Claude Code and Codex, and each skill needs the tools its workflow calls. `create-release` and `stacked-prs` need a shell with `git` and `gh`. `review-docs` needs the Workflow tool, which is documented for the Claude Code CLI, desktop app and IDE extensions, so it is not available in Codex.
 
 ## Workflows
 
@@ -43,7 +43,7 @@ Ask Claude to audit a project, for example "audit this repository against our st
 
 ### Requirements
 
-new-project, upgrade-project and audit-project need a shell on your own computer (Claude Code, or Cowork running locally) with:
+new-project, upgrade-project and audit-project need a shell on your own computer (Claude Code, Codex, or Cowork running locally) with:
 
 - git and [uv](https://docs.astral.sh/uv/)
 - network access to GitHub and PyPI (cruft and spec-kit are run with `uvx`)
@@ -103,27 +103,32 @@ Or inside a session:
 /plugin install sci-review@project-kit
 ```
 
-### sci-review in Codex
+### Codex
 
-The repository also ships a Codex marketplace, `.agents/plugins/marketplace.json`, which lists `sci-review` only. Add it, then install `sci-review` from it:
+The repository also ships a Codex marketplace, `.agents/plugins/marketplace.json`, which lists both plugins. Add it, then install either plugin from it:
 
 ```bash
 codex plugin marketplace add samuelduchesne/project-kit
 ```
 
 ```bash
+codex plugin add project-kit@project-kit
+```
+
+```bash
 codex plugin add sci-review@project-kit
 ```
 
-Codex reads `.agents/plugins/marketplace.json` in preference to `.claude-plugin/marketplace.json`, so `project-kit` is not offered there.
+In ChatGPT, both plugins appear in the same marketplace once it is added. Codex reads `.agents/plugins/marketplace.json` in preference to `.claude-plugin/marketplace.json`, so a plugin is offered there only when it has a `.codex-plugin/plugin.json` and an entry in that file. In Codex, `project-kit` has its nine skills but not the `editor` agent: `diataxis` and `editorial` apply the editorial rules directly instead, and `review-docs` stops because it needs the Claude Workflow tool.
 
 ## Development
 
 ```text
 .claude-plugin/marketplace.json   Claude marketplace definition (project-kit and sci-review)
-.agents/plugins/marketplace.json  Codex marketplace definition (sci-review only)
+.agents/plugins/marketplace.json  Codex marketplace definition (project-kit and sci-review)
 plugins/project-kit/              the project-kit plugin
-  .claude-plugin/plugin.json
+  .claude-plugin/plugin.json      Claude manifest
+  .codex-plugin/plugin.json       Codex manifest
   scripts/new_project.py          new-project helper (check, options, create)
   scripts/upgrade_project.py      upgrade-project helper (status, link, update)
   scripts/audit_project.py        audit-project helper (read-only)

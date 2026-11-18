@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `project-kit` now installs in Codex and ChatGPT: it has a Codex manifest and is listed in the Codex marketplace at `.agents/plugins/marketplace.json`, next to `sci-review`. `review-docs` stays Claude-only, because it needs the Workflow tool, and the `editor` agent is not available in Codex.
+
+### Changed
+
+- `new-project`, `upgrade-project` and `audit-project` find their helper scripts relative to the skill folder instead of through `${CLAUDE_PLUGIN_ROOT}`, which Codex does not set.
+- The manifest check covers the Codex manifests of both plugins and fails when a Codex-listed skill runs a path under `${CLAUDE_PLUGIN_ROOT}`.
+
 ## [sci-review-v0.2.0] - 2026-11-05
 
 Second release of the `sci-review` plugin, tagged separately from `project-kit`.

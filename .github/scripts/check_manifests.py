@@ -6,9 +6,9 @@ lists: each entry and manifest name match, each source path is a contained ./
 path that holds a plugin manifest, no entry sets a version, no plugin folder
 contains anything it must not ship, and no skill or agent frontmatter has a
 plain value that a strict YAML parser rejects. Checks the Codex manifest of
-sci-review against its Claude manifest (same name and version, skills path,
-interface block) and that the Codex marketplace lists sci-review only, since
-project-kit has no Codex manifest.
+each plugin against its Claude manifest (same name and version, skills path,
+interface block, no command path under ${CLAUDE_PLUGIN_ROOT}) and that the
+Codex marketplace lists exactly those plugins.
 
 Read-only. Exit 0 when every check passes, 1 otherwise.
 """
@@ -22,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 MARKETPLACE = ROOT / ".claude-plugin" / "marketplace.json"
 CODEX_MARKETPLACE = ROOT / ".agents" / "plugins" / "marketplace.json"
-CODEX_PLUGINS = ("sci-review",)
+CODEX_PLUGINS = ("project-kit", "sci-review")
 FORBIDDEN = ("bin", "CLAUDE.md", "hooks", ".mcp.json")
 
 
@@ -110,6 +110,12 @@ def check_codex(plugin_dirs: dict[str, Path], errors: list[str]) -> None:
             errors.append(f"{name}: Codex manifest must set skills to './skills/', got {codex.get('skills')!r}")
         if not isinstance(codex.get("interface"), dict) or not codex["interface"].get("displayName"):
             errors.append(f"{name}: Codex manifest needs an interface block with a displayName")
+        for skill in sorted(plugin_dir.glob("skills/*/SKILL.md")):
+            if '"${CLAUDE_PLUGIN_ROOT}/' in skill.read_text(encoding="utf-8"):
+                errors.append(
+                    f"{skill.relative_to(ROOT)}: runs a path under ${{CLAUDE_PLUGIN_ROOT}}, which Codex does not set;"
+                    " use a path relative to the skill folder"
+                )
 
     marketplace = load_json(CODEX_MARKETPLACE, errors)
     if marketplace is None:

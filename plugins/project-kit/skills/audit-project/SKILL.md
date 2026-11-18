@@ -10,10 +10,12 @@ Report how a project measures up to the [project-kit-cookiecutter](https://githu
 Run the audit script exactly like this, from any folder:
 
 ```bash
-uv run --no-project "${CLAUDE_PLUGIN_ROOT}/scripts/audit_project.py" --project <project folder>
+uv run --no-project "<skill folder>/../../scripts/audit_project.py" --project <project folder>
 ```
 
-Add `--offline` only if the user asks for a quick audit without the template checks. If you cannot run shell commands, say this workflow needs Claude Code or Cowork on the user's computer, with git and uv, and stop.
+`<skill folder>` is the folder that holds this SKILL.md: on Claude it is `${CLAUDE_PLUGIN_ROOT}/skills/audit-project`, on Codex the folder Codex loaded this skill from. Write the absolute path out in every command; don't store it in a shell variable, because the shell is not kept between commands.
+
+Add `--offline` only if the user asks for a quick audit without the template checks. If you cannot run shell commands, say this workflow needs Claude Code, Cowork or Codex on the user's computer, with git and uv, and stop.
 
 ## Reading the result
 

@@ -14,7 +14,7 @@ Works with any project that ships mkdocs-style docs (mkdocs-material, mkdocstrin
 
 ## Prerequisites
 
-This skill requires the `Workflow` tool, which is documented for the Claude Code CLI, desktop app and IDE extensions. The plugin ships the workflow itself in `workflows/review-docs.js`. If the tool is unavailable or workflows are disabled, state what is missing and stop.
+This skill requires the `Workflow` tool, which is documented for the Claude Code CLI, desktop app and IDE extensions. The plugin ships the workflow itself in `workflows/review-docs.js`. It is not available in Codex, claude.ai chat or Cowork. If the tool is unavailable or workflows are disabled, state what is missing and stop; for a single-page check, offer to compare that page with the code directly instead.
 
 ## Scoping the review
 
