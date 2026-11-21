@@ -9,7 +9,7 @@ This repository is a plugin marketplace, `project-kit`, that publishes two plugi
 
 project-kit is a Claude and Codex plugin for setting up and maintaining software projects to a consistent standard. It drives the [project-kit-cookiecutter](https://github.com/samuelduchesne/project-kit-cookiecutter) templates (Python, and Node for TypeScript libraries) rather than writing project files itself: the templates hold the files, and project-kit handles creating projects from them, keeping projects up to date with cruft, and checking projects for drift. New projects come with [spec-kit](https://github.com/github/spec-kit), the standard linting and formatting rules (ruff for Python, Biome for Node, pre-commit for both) and a [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) `CHANGELOG.md`.
 
-The plugin installs in claude.ai chat, the Claude desktop app, Cowork, Claude Code and Codex, and each skill needs the tools its workflow calls. `create-release` and `stacked-prs` need a shell with `git` and `gh`. `review-docs` needs the Workflow tool, which is documented for the Claude Code CLI, desktop app and IDE extensions, so it is not available in Codex.
+The plugin installs in claude.ai chat, the Claude desktop app, Cowork, Claude Code and Codex, and each skill needs the tools its workflow calls. `create-release` and `stacked-prs` need a shell with `git` and `gh`. `review-docs` runs its `low` and `medium` levels in the conversation on every surface with a shell and `git`; its `high`, `xhigh` and `max` levels need the Workflow tool, which is documented for the Claude Code CLI, desktop app and IDE extensions.
 
 ## Workflows
 
@@ -23,7 +23,7 @@ The plugin installs in claude.ai chat, the Claude desktop app, Cowork, Claude Co
 | `/project-kit:stacked-prs` | Split uncommitted changes into stacked pull requests and merge them in dependency order | Available |
 | `/project-kit:diataxis` | Write, place and reorganize documentation using the Diátaxis framework | Available |
 | `/project-kit:editorial` | Apply the house writing style, after Jean-Luc Doumont's *Trees, maps and theorems* | Available |
-| `/project-kit:review-docs` | Review documentation against a scoped code diff and report misalignments | Available |
+| `/project-kit:review-docs` | Review documentation against a scoped code diff at an effort level (`low` to `max`) and report misalignments | Available |
 
 The plugin also includes the `editor` agent, which writes and revises prose to the `editorial` standard. `diataxis` and `review-docs` delegate prose work to it. Agents are not available on every surface; where it is unavailable, apply the `editorial` skill directly.
 
@@ -119,7 +119,7 @@ codex plugin add project-kit@project-kit
 codex plugin add sci-review@project-kit
 ```
 
-In ChatGPT, both plugins appear in the same marketplace once it is added. Codex reads `.agents/plugins/marketplace.json` in preference to `.claude-plugin/marketplace.json`, so a plugin is offered there only when it has a `.codex-plugin/plugin.json` and an entry in that file. In Codex, `project-kit` has its nine skills but not the `editor` agent: `diataxis` and `editorial` apply the editorial rules directly instead, and `review-docs` stops because it needs the Claude Workflow tool.
+In ChatGPT, both plugins appear in the same marketplace once it is added. Codex reads `.agents/plugins/marketplace.json` in preference to `.claude-plugin/marketplace.json`, so a plugin is offered there only when it has a `.codex-plugin/plugin.json` and an entry in that file. In Codex, `project-kit` has its nine skills but not the `editor` agent: `diataxis` and `editorial` apply the editorial rules directly instead, and `review-docs` runs at `low` or `medium` only, because its higher levels need the Claude Workflow tool.
 
 ## Development
 
