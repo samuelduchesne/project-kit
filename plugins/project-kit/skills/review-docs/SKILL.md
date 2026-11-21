@@ -2,7 +2,7 @@
 name: review-docs
 description: >-
   Review user-facing documentation against a scoped code diff at an effort level (low|medium|high|xhigh|max) to find misalignments: stale signatures, renamed flags, changed config fields, broken examples, undocumented features. Defaults to the current branch's own diff (the PR diff) and accepts a narrower scope: a git range, specific paths, a topic, or a drift category. Use this skill whenever you've made code changes and want to check if docs are still accurate, when reviewing a PR or branch, before a release, or when the user asks to audit documentation. Also trigger when the user says "check docs", "docs review", "are the docs up to date", "documentation audit", "did I forget to update the docs", or asks to review the docs for a specific PR, branch, release, directory, or feature. Use the max level only when the user, or instructions such as CLAUDE.md or a skill, explicitly ask for it, never on your own judgment: it is the costliest level and starts many reviewer agents.
-argument-hint: "[low|medium|high|xhigh|max] [<ref>|<range>|<path>...] [--focus <topic>] [--categories <a,b>] [--fix] [--max-findings <n>|all]"
+argument-hint: "[low|medium|high|xhigh|max] [<ref>|<range>|<path>...] [--focus <topic>] [--categories <a,b>] [--comment] [--fix] [--max-findings <n>|all]"
 ---
 
 # Documentation review
@@ -14,7 +14,7 @@ The review works like `/code-review`: an effort level sets how much it spends. `
 ## 1. Arguments
 
 ```text
-/project-kit:review-docs [low|medium|high|xhigh|max] [<ref>|<range>|<path>...] [--focus <topic>] [--categories <a,b>] [--fix] [--max-findings <n>|all]
+/project-kit:review-docs [low|medium|high|xhigh|max] [<ref>|<range>|<path>...] [--focus <topic>] [--categories <a,b>] [--comment] [--fix] [--max-findings <n>|all]
 ```
 
 | Argument | Meaning |
@@ -24,7 +24,8 @@ The review works like `/code-review`: an effort level sets how much it spends. `
 | paths | Restrict to these paths. A path can name either side of the code→docs mapping: `docs/cli/` and `src/foo/cli.py` both work. An argument that exists as a file or directory is a path; otherwise it is a ref. |
 | `--focus` | A topic. Code areas unrelated to it are dropped. |
 | `--categories` | A subset of `api`, `cli`, `configuration`, `installation`, `behavioral`, `example-notebook`, `missing-docs`. |
-| `--fix` | After the report, apply the findings to the docs (section 6). |
+| `--comment` | After the report, post the findings on the current branch's open GitHub pull request (section 6). Without an explicit ref, the baseline becomes the merge-base with the pull request's base branch. |
+| `--fix` | After the report, apply the findings to the docs (section 7). |
 | `--max-findings` | Report at most `n` findings, most severe first; `all` removes the limit. The number withheld is stated. |
 
 Where the host has no argument field, read the same values from the wording of the request:
@@ -40,6 +41,7 @@ Where the host has no argument field, read the same values from the wording of t
 | "focus on the per-zone assumptions work" | `--focus "per-zone modeling assumptions"` |
 | "are my code examples still valid?" | `--categories example-notebook,api` |
 | "did I document the new CLI flags?" | `--categories cli,missing-docs` |
+| "review the docs on my PR and leave comments" | `--comment` |
 
 Do not question the user about scope when the request already makes it clear. If it does not (on `main`, with uncommitted work and several tags behind, and only "check the docs"), ask one short question, because the wrong baseline wastes the whole run.
 
@@ -65,7 +67,7 @@ Use `max` only when the user, or instructions such as CLAUDE.md, explicitly ask 
 
 Do this yourself, in this conversation, at every level. It is cheap, and the result is passed to the workflow so no agent repeats it.
 
-1. **Baseline.** With an explicit ref, resolve it: a bare ref becomes `<ref>..HEAD`; `A...HEAD` becomes `$(git merge-base A HEAD)..HEAD`. Otherwise prefer the narrower range:
+1. **Baseline.** With an explicit ref, resolve it: a bare ref becomes `<ref>..HEAD`; `A...HEAD` becomes `$(git merge-base A HEAD)..HEAD`. With `--comment` and no ref, use `$(git merge-base origin/<pull request base> HEAD)..HEAD`, so the review covers the same diff as the pull request (find the pull request as in section 6 step 1). Otherwise prefer the narrower range:
    - Default branch: `git symbolic-ref --quiet --short refs/remotes/origin/HEAD`, else the first of `origin/main`, `origin/master`, `main`, `master` that exists.
    - On a branch that has diverged from it (`git rev-list --count <default>..HEAD` > 0): `$(git merge-base <default> HEAD)..HEAD` (scope mode `branch`).
    - Otherwise the latest tag: `git describe --tags --abbrev=0 HEAD`, range `<tag>..HEAD` (scope mode `tag`).
@@ -124,7 +126,16 @@ The workflow returns `{ level, baseline, scopeNote, findings, withheld, coverage
 3. Give the level, the number of findings withheld by the cap, any incomplete checks, and the auto-generated docs that were skipped.
 4. If there are no findings, say so in scope terms ("nothing drifted in this branch's diff"). If changes were dropped as out of scope, offer to rerun wider or at a higher level.
 
-## 6. Fix
+## 6. Comment
+
+Follow this section only with `--comment`, after the report and before any fix.
+
+1. **Find the pull request.** Use the open GitHub pull request whose head is the current branch: the GitHub MCP tools if they are available (`list_pull_requests` filtered by head), else `gh pr view --json number,url,baseRefName,headRefOid`. If there is none, or neither tool works (no `gh`, no authentication, no network), say so, keep the printed report, and post nothing. When the head commit of the pull request differs from local `HEAD`, say that comments are anchored to the pushed commit and that unpushed changes are not on the pull request.
+2. **Post one review.** Post every delivered finding in a single pull request review with event `COMMENT`, never `APPROVE` or `REQUEST_CHANGES`: with the GitHub MCP tools, create a pending review, add one inline comment per finding, then submit it; otherwise `gh api repos/{owner}/{repo}/pulls/{number}/reviews` with a `comments` array and `"event": "COMMENT"`.
+3. **Anchor each finding** on the line of `docLocation` when that line is in the pull request diff, on the RIGHT side. A finding whose doc line is not in the diff (often a stale page the branch did not touch, or `missing-docs`) goes in the review body instead, with its `file:line`. Each comment states the severity and category, what changed (with `codeLocation`), what is wrong and the fix. Add a GitHub `suggestion` block only when `suggestedFix` is the exact replacement text for the anchored lines.
+4. **Post nothing** when there are no findings. Comments are public and outlast the run, so never post findings that `--max-findings` withheld, and never post on a pull request other than the one found in step 1. Give the user the review's URL.
+
+## 7. Fix
 
 With `--fix`, or when the user accepts the offer, sort the fixes by what they need:
 
