@@ -1548,7 +1548,15 @@ function clamp(value, low, high, fallback) {
   return Math.max(low, Math.min(high, n))
 }
 
-const input = (args && typeof args === 'object') ? args : {}
+// The Workflow tool can deliver a large argument object as its JSON text; accept both forms.
+function parseArgs(raw) {
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw) } catch (e) { return {} }
+  }
+  return raw
+}
+const parsedArgs = parseArgs(args)
+const input = (parsedArgs && typeof parsedArgs === 'object') ? parsedArgs : {}
 const scope = input.scope || { files: [], note: 'No scope was given.' }
 const skillDir = typeof input.skill_dir === 'string' && input.skill_dir ? input.skill_dir : null
 // Scope paths are relative to the project root; agents start in the session's working directory, which may differ.

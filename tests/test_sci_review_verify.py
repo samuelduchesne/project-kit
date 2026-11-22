@@ -280,7 +280,8 @@ class TestWorkflowVerify(unittest.TestCase):
         }
         work = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, work, True)
-        (work / "args.json").write_text(json.dumps(args), encoding="utf-8")
+        as_text = args.pop("_as_text", False)
+        (work / "args.json").write_text(json.dumps(json.dumps(args) if as_text else args), encoding="utf-8")
         (work / "harness.js").write_text(harness, encoding="utf-8")
         result = subprocess.run(
             [NODE, str(work / "harness.js"), str(golden), str(work / "args.json"), str(WORKFLOW)],
@@ -322,6 +323,11 @@ class TestWorkflowVerify(unittest.TestCase):
         verify_prompt = output["prompts"]["verify:batch-1:v1"]
         self.assertIn("# Verifier", verify_prompt)
         self.assertNotIn("theorist-1", verify_prompt.split("<merged-findings>")[0])
+
+    def test_arguments_given_as_json_text_are_parsed(self) -> None:
+        # The Workflow tool can deliver a large argument object as its JSON text.
+        output = self.simulate({"protocol": "verify", "verifiers": 1, "_as_text": True})
+        self.assertEqual(len([c for c in output["calls"] if c.startswith("independent:")]), 5)
 
     def test_a_caller_without_protocol_gets_the_debate(self) -> None:
         calls = self.simulate({"rebuttal_rounds": 2})["calls"]
