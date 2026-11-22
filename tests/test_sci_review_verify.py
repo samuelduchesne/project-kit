@@ -165,6 +165,21 @@ class TestVerifyAdjudication(VerifyRunMixin):
         report = json.loads((run_dir / "report.json").read_text(encoding="utf-8"))
         self.assertEqual(panel.validate_message("report", report), [])
 
+    def test_finding_beyond_the_end_of_its_file_is_not_reported(self) -> None:
+        run_dir = self.verify_run()
+        self.write_verdicts(run_dir, 1, "v1", {"F1": "confirm", "F2": "confirm", "F5": "confirm", "F6": "confirm"})
+        self.write_verdicts(run_dir, 2, "v1", {"F3": "confirm", "F4": "confirm"})
+        self.assertEqual(run_panel("adjudicate", "--run", str(run_dir)).code, 0)
+        f1 = json.loads((run_dir / "merge" / "batch-1.json").read_text(encoding="utf-8"))["findings"][0]
+        short = self.project / f1["file"]
+        short.parent.mkdir(parents=True, exist_ok=True)
+        short.write_text("x = 1\n" * (f1["line_start"] - 1), encoding="utf-8")
+        result = run_panel("report", "--run", str(run_dir), "--format", "json")
+        self.assertEqual(result.code, 0, result.err)
+        report = json.loads((run_dir / "report.json").read_text(encoding="utf-8"))
+        self.assertNotIn("F1", [f["id"] for f in report["findings"]])
+        self.assertTrue(any("F1 cites lines" in n for n in report["notices"]), report["notices"])
+
     def test_missing_verifications_leave_findings_contested_with_a_notice(self) -> None:
         run_dir = self.verify_run()
         self.write_verdicts(run_dir, 1, "v1", {"F1": "confirm", "F2": "confirm", "F5": "confirm", "F6": "confirm"})

@@ -1056,6 +1056,8 @@ class ReportContext:
     max_findings: int | str | None = None
     notes: tuple[str, ...] = ()
     parts: tuple[ReviewPart, ...] = ()
+    # The line count of each scoped file that could be read; a finding that starts beyond it is not reported.
+    file_lines: tuple[tuple[str, int], ...] = ()
 
     @property
     def cap(self) -> int | None:
@@ -3820,11 +3822,17 @@ def build_report(
     if adjudication is not None:
         notices.extend(adjudication.notices)
         in_scope = {f.path for f in scope.files}
+        lengths = dict(context.file_lines)
         for finding in adjudication.findings:
-            if finding.file in in_scope:
-                findings.append(finding)
-            else:
+            if finding.file not in in_scope:
                 notices.append(f"Finding {finding.id} on {finding.file} lies outside the scope and was not reported.")
+            elif finding.file in lengths and finding.line_start > lengths[finding.file]:
+                notices.append(
+                    f"Finding {finding.id} cites lines {finding.line_start}-{finding.line_end} of {finding.file}, "
+                    f"which has {lengths[finding.file]} lines, and was not reported."
+                )
+            else:
+                findings.append(finding)
         rejected = list(adjudication.rejected)
     checked = [item for message in candidates for item in message.checked_items]
     checked.sort(key=lambda c: (c.file, c.line_start, c.line_end, c.dimension))
@@ -4024,9 +4032,15 @@ def render_markdown(report: ReviewReport) -> str:
 
 
 def cmd_report(args: argparse.Namespace) -> int:
-    run_dir, _info = load_run(args.run)
+    run_dir, info = load_run(args.run)
     scope = load_scope(run_dir)
     _panel, state = load_panel(run_dir)
+    read = scope_reader(Path(info.project), scope)
+    file_lines = []
+    for scoped in scope.files:
+        data = read(scoped.path)
+        if data is not None:
+            file_lines.append((scoped.path, count_lines(data)))
     adjudication_path = run_dir / "adjudication.json"
     adjudication = Adjudication.from_json(read_json(adjudication_path)) if adjudication_path.is_file() else None
     if adjudication is None and scope.files:
@@ -4040,6 +4054,7 @@ def cmd_report(args: argparse.Namespace) -> int:
         max_findings=arguments.max_findings if arguments else None,
         notes=arguments.notes if arguments else (),
         parts=derive_part_status(run_dir, load_parts(run_dir), state.panel),
+        file_lines=tuple(file_lines),
     )
     report = build_report(scope, state, adjudication, candidates, load_notices(run_dir), context)
     data = report.to_json()
