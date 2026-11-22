@@ -52,6 +52,6 @@ The orchestrator finds extensions in the host's skill listing, loads each to obt
 ## 6. How a domain perspective takes part
 
 1. A selected extension's perspective joins the panel with `source` set to the extension id, and counts toward the limit of seven perspectives.
-2. In the independent round it receives its brief (`perspective.brief`), `protocol.md`, the five dimension documents, its reference documents (`reference`), and the scope, exactly as a default perspective does; when `checks` is present, the checks document is listed with its reference documents, and the failures of those checks are reported as candidate findings.
-3. It debates on the same terms as the default perspectives, and counts in the majority denominator.
+2. In the independent round it receives its brief (`perspective.brief`), the five dimension documents (it reviews under all five; it has no focus subset), its reference documents (`reference`), and the scope, as a default perspective does; when `checks` is present, the checks document is listed with its reference documents, and the failures of those checks are reported as candidate findings.
+3. Its findings are verified on the same terms as those of the default perspectives (verify protocol). In a debate it debates on the same terms as the default perspectives and counts in the majority denominator.
 4. Its findings use the same fields, severities and agreement labels (FR-031).

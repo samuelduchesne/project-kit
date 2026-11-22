@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sci-review/schemas/verification.schema.json",
+  "title": "Verification",
+  "description": "One verifier's verdicts on every merged finding of one batch, written independently of the other verifiers and without knowledge of labels (protocol.md section 5, verify protocol). Semantic check in panel.py: no_trigger_reason is non-null when the merged finding's trigger or wrong_output is null.",
+  "type": "object",
+  "required": [
+    "batch",
+    "verifier",
+    "verdicts"
+  ],
+  "properties": {
+    "batch": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "verifier": {
+      "type": "string",
+      "pattern": "^v[1-9]$"
+    },
+    "verdicts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Verdict"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "Verdict": {
+      "type": "object",
+      "required": [
+        "finding_id",
+        "verdict",
+        "reason",
+        "argument_for",
+        "argument_against",
+        "deciding_assumption",
+        "no_trigger_reason"
+      ],
+      "properties": {
+        "finding_id": {
+          "type": "string",
+          "pattern": "^F[0-9]+$"
+        },
+        "verdict": {
+          "description": "confirm: the failure scenario reproduces or follows from the code. refute: the code is correct, or the scenario cannot occur. uncertain: the verdict turns on an assumption the code does not settle, named in deciding_assumption.",
+          "enum": [
+            "confirm",
+            "refute",
+            "uncertain"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "argument_for": {
+          "type": "string",
+          "minLength": 1
+        },
+        "argument_against": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deciding_assumption": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "no_trigger_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

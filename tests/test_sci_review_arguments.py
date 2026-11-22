@@ -217,9 +217,7 @@ class TestGrammar(RunMixin):
                 result = self.args(run_dir, argv)
                 self.assertEqual(result.code, 0, result.err)
                 notes = self.arguments(run_dir)["notes"]
-                self.assertTrue(
-                    any(n.startswith(panel.MAX_FINDINGS_IGNORED) for n in notes), notes
-                )
+                self.assertTrue(any(n.startswith(panel.MAX_FINDINGS_IGNORED) for n in notes), notes)
                 self.assertIn(f"{panel.MAX_FINDINGS_IGNORED} {panel.USUAL_LIMIT}", notes)
 
     def test_request_text_takes_only_grammar_tokens(self) -> None:
@@ -385,12 +383,13 @@ class TestPreferences(RunMixin):
 # Level profiles (T012) and level persistence (T013)
 # ---------------------------------------------------------------------------
 
+# Spec 009: level -> (perspective ids, rebuttal rounds, batches, protocol, verifiers).
 EXPECTED_PROFILES = {
-    "low": (["theorist", "numerical-analyst", "methodologist"], 1, 1),
-    "medium": (None, 2, 2),
-    "high": (None, 2, 3),
-    "xhigh": (None, 3, 4),
-    "max": (None, 3, 4),
+    "low": (["generalist"], 0, 1, "verify", 1),
+    "medium": (["theorist", "numerical-analyst", "methodologist"], 0, 2, "verify", 1),
+    "high": (None, 0, 3, "verify", 2),
+    "xhigh": (None, 0, 4, "verify", 3),
+    "max": (None, 3, 4, "debate", 1),
 }
 DEFAULT_IDS = ["theorist", "numerical-analyst", "experimentalist", "methodologist", "computer-scientist"]
 
@@ -400,7 +399,7 @@ class TestLevelProfiles(RunMixin):
         return json.loads((run_dir / "panel.json").read_text(encoding="utf-8"))["panel"]
 
     def test_each_level_matches_the_table(self) -> None:
-        for level, (ids, rounds, batches) in EXPECTED_PROFILES.items():
+        for level, (ids, rounds, batches, protocol, verifiers) in EXPECTED_PROFILES.items():
             with self.subTest(level=level):
                 run_dir = self.init_run()
                 result = run_panel("panel", "--run", str(run_dir), "--runner", "claude-agents", "--level", level)
@@ -408,6 +407,7 @@ class TestLevelProfiles(RunMixin):
                 data = self.panel_json(run_dir)
                 self.assertEqual([p["id"] for p in data["perspectives"]], ids or DEFAULT_IDS)
                 self.assertEqual((data["rebuttal_rounds"], data["max_batches"]), (rounds, batches))
+                self.assertEqual((data["protocol"], data["verifiers"]), (protocol, verifiers))
                 self.assertEqual((data["level"], data["overrides"]), (level, []))
                 self.assertNotIn("max_findings", data)
 
@@ -420,31 +420,70 @@ class TestLevelProfiles(RunMixin):
         sizes = [len(p.requested(DEFAULT_IDS)) for p in profiles]
         self.assertEqual(sizes, sorted(sizes))
 
-    def test_medium_equals_feature_007_defaults(self) -> None:
-        available = [panel.default_perspective(pid, name) for pid, name in panel.DEFAULT_PERSPECTIVES]
-        legacy, _ = panel.configure_panel(available, None, None, None, "claude-agents")
+    def test_medium_focuses_three_finders_on_all_dimensions(self) -> None:
         run_dir = self.init_run()
         result = run_panel("panel", "--run", str(run_dir), "--runner", "claude-agents")
         self.assertEqual(result.code, 0, result.err)
         data = self.panel_json(run_dir)
-        self.assertEqual((data["level"], data["level_source"]), ("medium", "default"))
-        self.assertEqual(data, legacy.to_json())
+        self.assertEqual((data["level"], data["level_source"], data["protocol"]), ("medium", "default", "verify"))
+        focus = {p["id"]: p["dimensions"] for p in data["perspectives"]}
+        self.assertEqual(
+            focus,
+            {
+                "theorist": ["mathematical-derivations", "physical-modelling-and-units"],
+                "numerical-analyst": ["numerical-stability", "algorithmic-correctness"],
+                "methodologist": ["statistical-integrity"],
+            },
+        )
+        self.assertEqual(data["estimate"], {"minimum": 3, "maximum": 7, "confirm": False})
+
+    def test_each_default_perspective_takes_its_own_dimension_at_high(self) -> None:
+        focus = panel.assign_dimensions(DEFAULT_IDS)
+        self.assertEqual(sorted(d for dims in focus.values() for d in dims), sorted(panel.Dimension.VALUES))
+        self.assertTrue(all(len(dims) == 1 for dims in focus.values()))
+
+    def test_max_keeps_the_feature_007_debate(self) -> None:
+        run_dir = self.init_run()
+        result = run_panel("panel", "--run", str(run_dir), "--runner", "claude-agents", "--level", "max")
+        self.assertEqual(result.code, 0, result.err)
+        data = self.panel_json(run_dir)
+        self.assertEqual((data["protocol"], data["rebuttal_rounds"]), ("debate", 3))
+        self.assertTrue(all(p["dimensions"] == [] for p in data["perspectives"]))
+        # 5 finders + 4 batches x (merge + 6 members x 4 rounds + notes)
+        self.assertEqual(data["estimate"], {"minimum": 5, "maximum": 109, "confirm": True})
+
+    def test_estimate_grows_with_parts_only_in_the_finders(self) -> None:
+        available = [panel.default_perspective(pid, name) for pid, name in panel.DEFAULT_PERSPECTIVES]
+        configured, _ = panel.configure_panel(available, None, 0, 3, "claude-agents", protocol="verify", verifiers=2)
+        self.assertEqual(
+            panel.estimate_agents(configured, 1).to_json(), {"minimum": 5, "maximum": 14, "confirm": False}
+        )
+        self.assertEqual(panel.estimate_agents(configured, 4).maximum, 29)
 
     def test_explicit_option_overrides_the_profile(self) -> None:
         run_dir = self.init_run()
-        result = run_panel(
-            "panel", "--run", str(run_dir), "--runner", "sequential", "--level", "high", "--rounds", "1"
-        )
+        result = run_panel("panel", "--run", str(run_dir), "--runner", "sequential", "--level", "high", "--rounds", "1")
         self.assertEqual(result.code, 0, result.err)
         data = self.panel_json(run_dir)
-        self.assertEqual((data["rebuttal_rounds"], data["max_batches"]), (1, 3))
-        self.assertEqual(data["overrides"], ["rounds"])
+        # Rebuttal rounds ask for a debate, so they select the debate protocol at a verify level.
+        self.assertEqual((data["protocol"], data["rebuttal_rounds"], data["max_batches"]), ("debate", 1, 3))
+        self.assertEqual(data["overrides"], ["protocol", "rounds"])
+
+    def test_verifiers_override(self) -> None:
+        run_dir = self.init_run()
+        result = run_panel(
+            "panel", "--run", str(run_dir), "--runner", "sequential", "--level", "medium", "--verifiers", "9"
+        )
+        self.assertEqual(result.code, 0, result.err)
+        state = json.loads((run_dir / "panel.json").read_text(encoding="utf-8"))
+        self.assertEqual((state["panel"]["verifiers"], state["panel"]["overrides"]), (3, ["verifiers"]))
+        self.assertTrue(any("Verifiers were clamped" in n for n in state["notices"]))
 
     def test_repeating_the_profile_records_no_override(self) -> None:
         run_dir = self.init_run()
         result = run_panel(
             "panel", "--run", str(run_dir), "--runner", "sequential", "--level", "low",
-            "--perspectives", "theorist,numerical-analyst,methodologist", "--rounds", "1", "--batches", "1",
+            "--perspectives", "generalist", "--batches", "1", "--verifiers", "1",
         )  # fmt: skip
         self.assertEqual(result.code, 0, result.err)
         self.assertEqual(self.panel_json(run_dir)["overrides"], [])
@@ -454,7 +493,7 @@ class TestLevelProfiles(RunMixin):
         self.assertEqual(self.args(run_dir, "xhigh").code, 0)
         run_panel("panel", "--run", str(run_dir), "--runner", "sequential")
         data = self.panel_json(run_dir)
-        self.assertEqual((data["level"], data["level_source"], data["rebuttal_rounds"]), ("xhigh", "given", 3))
+        self.assertEqual((data["level"], data["level_source"], data["verifiers"]), ("xhigh", "given", 3))
 
 
 class TestLevelPersistence(RunMixin):
@@ -546,9 +585,7 @@ class TestTargets(RunMixin):
                 self.assertEqual(self.args(run_dir, argv).code, 0)
                 result = self.scope(run_dir)
                 self.assertEqual(result.code, 2, result.err)
-                self.assertIn(
-                    "`hig` is not a recognised level: use low, medium, high, xhigh or max.", result.err
-                )
+                self.assertIn("`hig` is not a recognised level: use low, medium, high, xhigh or max.", result.err)
 
     def test_near_level_that_is_a_branch_is_the_target(self) -> None:
         git(self.project, "branch", "hig", "feature/other")
@@ -848,7 +885,9 @@ class TestCapPersistence(RunMixin):
         data = self.arguments(run_dir)
         self.assertEqual((data["max_findings"], data["max_findings_source"]), (5, "reused"))
         self.assertTrue(any(n.endswith(panel.DEFAULT_CAP_HINT) for n in data["notes"]), data["notes"])
-        self.assertTrue(panel.DEFAULT_CAP_HINT.startswith("passing `--max-findings default` goes back to the usual limit"))
+        self.assertTrue(
+            panel.DEFAULT_CAP_HINT.startswith("passing `--max-findings default` goes back to the usual limit")
+        )
         self.assertEqual(self.args(self.init_run(), "--max-findings default", "--persist").code, 0)
         self.assertNotIn("last_max_findings", json.loads(self.prefs.read_text()))
 
@@ -913,7 +952,13 @@ class TestParts(RunMixin):
             self.assertEqual(len(ids), 1, directory)
 
         kernels = (self.project / "solver" / "kernels.py").read_text().splitlines()
-        starts = [r[0] for p in parts["parts"] for f in p["files"] if f["path"] == "solver/kernels.py" for r in f["line_ranges"]]
+        starts = [
+            r[0]
+            for p in parts["parts"]
+            for f in p["files"]
+            if f["path"] == "solver/kernels.py"
+            for r in f["line_ranges"]
+        ]
         self.assertGreater(len(starts), 1)
         for start in starts[1:]:
             self.assertRegex(kernels[start - 1], r"^(def|class|async def|@)")
@@ -971,7 +1016,7 @@ COMMENT_GITHUB = [
 COMMENT_GITLAB = [
     "## Posting to GitLab (--comment)",
     "The `--comment` flag was passed. After producing the findings list, if the review target is a GitLab merge "
-    "request, post the findings as one general MR note via `glab mr note <iid> [-R <project>] -m \"<body>\"` "
+    'request, post the findings as one general MR note via `glab mr note <iid> [-R <project>] -m "<body>"` '
     "(every finding with its file:line, the issue, and the suggested fix). glab has no single verb for "
     "line-anchored comments; those require `glab api projects/:id/merge_requests/:iid/discussions`, so post the "
     "general note unless the user asks for inline threads. If glab is not available in this session, print the "
@@ -1033,7 +1078,7 @@ class TestReproducedSections(unittest.TestCase):
         self.assertIn("--argv-stdin <<'SCI_REVIEW_ARGS'", block.group(1))
         # The block, with $ARGUMENTS replaced by hostile text, passes that text to panel.py unchanged in every shell
         # present, bash 3.2 (macOS /bin/bash) included: an unbalanced `)` or quote once ran commands there.
-        hostile = 'high `touch pwned` $(touch pwned2) a)$(touch pwned3) it\'s "my dir --fix'
+        hostile = "high `touch pwned` $(touch pwned2) a)$(touch pwned3) it's \"my dir --fix"
         shells = [shell for shell in ("/bin/bash", "bash", "zsh", "/bin/sh", "dash") if shutil.which(shell)]
         panel_py = ROOT / "plugins" / "sci-review" / "scripts" / "panel.py"
         for shell in shells:
@@ -1058,9 +1103,11 @@ class TestReproducedSections(unittest.TestCase):
     def test_panel_command_is_never_a_shell_variable(self) -> None:
         # zsh does not split `$PANEL` holding "python3 .../panel.py"; every definition says to write it in full.
         skill_dir = SKILL_MD.parent
-        for path in [SKILL_MD, *sorted((skill_dir / "runners").glob("*.md"))]:
+        # Spec 009: the file-based runners take their notation from protocol.md section 12.1.
+        for path in [SKILL_MD, skill_dir / "protocol.md", skill_dir / "runners" / "claude-workflow.md"]:
             definition = next(
-                (line for line in path.read_text(encoding="utf-8").splitlines() if line.startswith("| `$PANEL` |")), None
+                (line for line in path.read_text(encoding="utf-8").splitlines() if line.startswith("| `$PANEL` |")),
+                None,
             )
             with self.subTest(file=path.name):
                 if definition is None:

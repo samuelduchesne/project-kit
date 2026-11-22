@@ -19,7 +19,7 @@ Effort level: medium (default).
 - Computer scientist (`computer-scientist`, source `sci-review`)
 - Defender and moderator
 
-Rebuttal rounds: 2. Debate batches: at most 1.
+Protocol: debate. Rebuttal rounds: 2. Debate batches: at most 1.
 
 ## Extensions
 

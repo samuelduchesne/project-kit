@@ -108,7 +108,9 @@ class TestDrift(unittest.TestCase):
     def test_every_source_is_embedded(self) -> None:
         generated = section(WORKFLOW.read_text(encoding="utf-8"), "// BEGIN GENERATED", "// END GENERATED")
         skill = PLUGIN / "skills" / "scientific-review"
-        sources = [skill / "protocol.md", *sorted((skill / "roles").glob("*.md"))]
+        # Spec 009: no prompt embeds protocol.md; the role briefs carry what each role needs.
+        self.assertNotIn("const PROTOCOL", generated)
+        sources = sorted((skill / "roles").glob("*.md"))
         sources += sorted((skill / "dimensions").glob("*.md"))
         for path in sources:
             with self.subTest(path=path.name):

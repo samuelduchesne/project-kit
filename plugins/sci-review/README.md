@@ -1,6 +1,6 @@
 # sci-review
 
-sci-review reviews code for scientific correctness. A panel of independent reviewers examines a branch, a pull request, a whole repository or named paths, debates every candidate finding, and reports only findings that carry a concrete failure scenario, each labelled by the panel's measured agreement. Style, formatting, naming, lint and documentation are out of scope: a finding is reported only when it affects a computed result.
+sci-review reviews code for scientific correctness. A panel of independent reviewers examines a branch, a pull request, a whole repository or named paths; independent verifiers then try to refute every candidate finding; and the review reports only findings that carry a concrete failure scenario, each labelled by the measured agreement. Style, formatting, naming, lint and documentation are out of scope: a finding is reported only when it affects a computed result.
 
 The plugin runs on Claude (Claude Code, the Claude desktop app, claude.ai chat and Cowork) and on Codex. It contains:
 
@@ -81,21 +81,25 @@ Every perspective reviews every review part of the scope across five dimensions.
 
 The full protocol is defined once, in `skills/scientific-review/protocol.md`; every runner follows it.
 
+A panel judges findings by one of two protocols. Every level but `max` uses **verify**: focused finders, a deterministic merge, and independent verifiers. `max` keeps the **debate** of version 0.1.0. Verify became the default (spec 009) because, on the seeded fixture, the debate cost far more and found nothing more (see `specs/009-sci-review-cost/validation.md`).
+
 ### 4.1 Roles
 
 | Role | Number | Responsibility |
 |------|--------|----------------|
-| Perspective reviewer | 2 to 7 | Reviews the scope independently from one perspective and raises candidate findings. The defaults are `theorist`, `numerical-analyst`, `experimentalist`, `methodologist` and `computer-scientist`; selected domain extensions add further perspectives. |
-| Defender | 1, always present | Argues that each finding is not a defect. Never raises findings and never withdraws. |
-| Moderator | 1, always present | Merges duplicate candidates and writes notes on each finding after its debate. Never introduces findings and never assigns labels. |
+| Perspective reviewer (finder) | 1 to 7 | Reviews the scope independently and raises candidate findings. The defaults are `theorist`, `numerical-analyst`, `experimentalist`, `methodologist` and `computer-scientist`, each focused on its own dimension; at `medium` three of them share the five dimensions, and at `low` one `generalist` covers all five. Selected domain extensions add further perspectives. |
+| Verifier (verify) | 1 to 3 per batch | Tries to refute each merged finding, by reading or computing its failure scenario, and gives a verdict: `confirm`, `refute` or `uncertain`. Never sees another verifier's verdicts. |
+| Defender (debate) | 1 | Argues that each finding is not a defect. Never raises findings and never withdraws. |
+| Moderator | 0 or 1 per batch | Merges a batch whose location clusters hold several candidates; in a debate, also writes notes on each finding. Never introduces findings and never assigns labels. |
 
 The role briefs are under `skills/scientific-review/roles/`.
 
 ### 4.2 Phases
 
 1. **Independent round.** `panel.py parts` divides the scope into review parts of at most 2,000 lines, keeping the files of a directory together where they fit. Each perspective reviews every part without access to any other reviewer's output and writes one candidate-findings message per part. A reviewer may read any project file to follow a reference, but raises findings only on lines of its part.
-2. **Debate.** `panel.py merge` clusters the candidates of every part by location (same file, line ranges within three lines) and groups the clusters into debate batches by file. For each batch, the moderator confirms or splits each cluster. The perspectives and the defender then state positions on every merged finding in round 0, followed by at most `rebuttal_rounds` rebuttal rounds. A batch stops early when no stance changes in a round. The moderator then writes notes on every finding of the batch.
-3. **Adjudication.** `panel.py adjudicate` computes each finding's label, or rejects it, from the recorded positions. No model takes part in this step.
+2. **Merge.** `panel.py merge` clusters the candidates of every part by location (same file, line ranges within three lines) and groups the clusters into batches by file. In the verify protocol, a batch whose clusters each hold one candidate is merged by the script; the moderator confirms or splits the clusters of any other batch.
+3. **Judgement.** In the verify protocol, each batch's verifiers give their verdicts in parallel. In a debate, the perspectives and the defender state positions on every merged finding in round 0, followed by at most `rebuttal_rounds` rebuttal rounds; a batch stops early when no stance changes, and the moderator then writes notes.
+4. **Adjudication.** `panel.py adjudicate` computes each finding's label, or rejects it, from the verdicts or positions. No model takes part in this step.
 
 Every panel message conforms to a JSON Schema under `skills/scientific-review/schemas/`. A message that fails validation is returned once to its author; a second failure drops it, and the report records a notice.
 
@@ -109,9 +113,16 @@ Every panel message conforms to a JSON Schema under `skills/scientific-review/sc
 
 ### 4.4 Agreement labels
 
-A member's stance on a finding is its latest position (`accept`, `challenge` or `withdraw`). "Perspectives" means every perspective reviewer in the panel, default and domain, including the raiser, and never the defender; the majority denominator is the number of perspectives in the panel. A defender objection is a defender `challenge`; it is answered when a later perspective position responds to it and the defender does not challenge again afterwards.
+**Verify protocol.** The rules apply in order, and the first that matches decides:
 
-The rules apply in order, and the first that matches decides:
+1. No verifier recorded a verdict: label `contested`, with a notice.
+2. More verifiers refute than confirm: the finding is rejected, with the refuting verifier's reason.
+3. The finding has no concrete trigger or no wrong output: label `contested`.
+4. Every verifier confirms, and the raisers plus the confirming verifiers number at least two: label `consensus`.
+5. More verifiers confirm than refute: label `majority`.
+6. Otherwise (a tie, or every verdict uncertain): label `contested`.
+
+**Debate protocol.** A member's stance on a finding is its latest position (`accept`, `challenge` or `withdraw`). "Perspectives" means every perspective reviewer in the panel, default and domain, including the raiser, and never the defender; the majority denominator is the number of perspectives in the panel. A defender objection is a defender `challenge`; it is answered when a later perspective position responds to it and the defender does not challenge again afterwards. The rules apply in order:
 
 1. Every raiser withdrew: the finding is rejected (`withdrawn`).
 2. No perspective other than the raisers accepts, and a defender objection is unanswered: the finding is rejected (`unsupported`).
@@ -120,7 +131,7 @@ The rules apply in order, and the first that matches decides:
 5. More than half of the perspectives accept: label `majority`.
 6. Otherwise: label `contested`.
 
-Labels are computed by `panel.py adjudicate` only; the orchestrating model never assigns, raises or lowers a label. Contested findings carry the moderator's argument for, argument against and deciding assumption.
+Labels are computed by `panel.py adjudicate` only; the orchestrating model never assigns, raises or lowers a label. Contested findings carry an argument for, an argument against and the deciding assumption, from the verifiers or the moderator's notes.
 
 ## 5. Runners
 
@@ -135,11 +146,11 @@ A runner executes the panel phases on a given host. The skill selects the first 
 
 The following rules modify the selection:
 
-1. A user request for the review satisfies the Workflow opt-in requirement. A review started on the model's own initiative asks first, because it spawns many agents.
+1. A user request for the review satisfies the Workflow opt-in requirement. A review started on the model's own initiative asks first, because it spawns agents.
 2. The user may force a lower runner. "Run it without agents" selects `sequential`; a request for agents but not the Workflow selects `claude-agents`.
-3. When a multi-agent runner cannot spawn its agents, the review falls back to `sequential` with the same perspectives, rounds and batches.
+3. When a multi-agent runner cannot spawn its agents, the review falls back to `sequential` with the same panel.
 
-The `sequential` runner plays every role in one conversation, so its perspectives are not independent. The report then carries a reduced-independence notice. The runner documents are under `skills/scientific-review/runners/`.
+The `sequential` runner plays every role in one conversation, so its perspectives are not independent. The report then carries a reduced-independence notice. The runner documents are under `skills/scientific-review/runners/`. The three file-based runners share the procedure of `protocol.md` section 12; each runner file says only how it starts a task.
 
 ## 6. Arguments
 
@@ -165,15 +176,15 @@ A level and a `--max-findings` choice that the user typed are stored per user, o
 
 ### 6.2 Effort levels
 
-| Level | Perspectives | Rebuttal rounds | Debate batches | Default finding cap |
-|-------|--------------|-----------------|----------------|---------------------|
-| `low` | `theorist`, `numerical-analyst`, `methodologist` | 1 | 1 | none |
-| `medium` | the five defaults plus selected extensions, at most 7 | 2 | 2 | none |
-| `high` | as `medium` | 2 | 3 | none |
-| `xhigh` | as `medium` | 3 | 4 | none |
-| `max` | all defaults and selected extensions, at most 7 | 3 | 4 | none |
+| Level | Finders | Judgement | Batches | Panel agents, one part |
+|-------|---------|-----------|---------|------------------------|
+| `low` | `generalist`, plus selected extensions | 1 verifier per batch | 1 | 1 to 3 |
+| `medium` | `theorist`, `numerical-analyst`, `methodologist`, plus selected extensions | 1 verifier per batch | 2 | 3 to 7 |
+| `high` | the five defaults plus selected extensions, at most 7 | 2 verifiers per batch | 3 | 5 to 14 |
+| `xhigh` | as `high` | 3 verifiers per batch | 4 | 5 to 21 |
+| `max` | all defaults and selected extensions, at most 7 | debate, 3 rebuttal rounds | 4 | 5 to 109 |
 
-`medium` is the configuration of version 0.1.0, so a review with no arguments behaves as before. The model uses `max` only when the user, or an instruction file, asks for it.
+No level caps the number of findings by default. Finders run once per review part, so K parts multiply the finder count by K. The skill states the estimated number of agents before the panel starts, and asks first when it can exceed 40. The model uses `max`, or a debate at a lower level, only when the user, or an instruction file, asks for it.
 
 ### 6.3 Arguments from the wording of the request
 
@@ -184,8 +195,10 @@ These arguments are read from the request where no explicit argument covers them
 | `mode` | `branch` | `branch`, `repository` ("review the whole repository") or `paths` ("review src/solver"); ignored when a target is given |
 | `baseline` | Resolved from the default branch by `panel.py scope` | Branch mode or a branch target only; "since v1.2" sets the baseline to `v1.2` |
 | `paths` | None | Required in `paths` mode |
-| `perspectives` | From the level | 2 to 7 in total |
-| `rebuttal_rounds` | From the level | 0 to 3 |
+| `perspectives` | From the level | 1 to 7 in total (2 to 7 in a debate) |
+| `verifiers` | From the level | 1 to 3 per batch |
+| `protocol` | From the level | `debate` when the request asks for a debate or rebuttal rounds |
+| `rebuttal_rounds` | From the level | 0 to 3, debate only |
 | `max_batches` | From the level | 1 to 4 |
 | `models` | None | `claude-workflow` runner only, as `role=model` pairs |
 | Keep the run directory | No | When requested, the run directory is kept and its path is given |
@@ -194,7 +207,7 @@ A parameter named in words overrides that part of the level, and the report reco
 
 ### 6.4 Scope size
 
-No file is excluded for the size of the scope. The scope is divided into review parts of at most 2,000 lines, each reviewed in full by every perspective. Above 6,000 lines (the large-scope threshold), the skill states the number of lines, files and parts and asks for confirmation before any reviewer runs; on refusal it runs nothing and offers a narrower target. With P perspectives and K parts, the independent round makes P x K reviewer invocations; the debate does not grow with K.
+No file is excluded for the size of the scope. The scope is divided into review parts of at most 2,000 lines, each reviewed in full by every perspective. Above 6,000 lines (the large-scope threshold), the skill states the number of lines, files and parts and asks for confirmation before any reviewer runs; on refusal it runs nothing and offers a narrower target. With P perspectives and K parts, the independent round makes P x K reviewer invocations; the merge and the judgement do not grow with K.
 
 ## 7. Report
 

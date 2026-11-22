@@ -1,13 +1,13 @@
 ---
 name: scientific-review
 description: >-
-  Review code for scientific correctness with a panel of independent reviewers (theorist, numerical analyst, experimentalist, methodologist, computer scientist), a defender and a moderator, across mathematical derivations, numerical stability, physical modelling and units, statistical integrity, and algorithmic correctness. Use when the user asks for a scientific review, to check the maths, numerical stability, units or conservation, data leakage, or algorithm termination, on a branch (the default), a pull request, a whole repository or named paths. Not for style, lint, formatting or documentation reviews. Use the max level only when the user, or instructions such as CLAUDE.md or a skill, explicitly ask for it, never on your own judgment: it is the costliest level and starts many reviewer agents.
+  Review code for scientific correctness with a panel of independent reviewers (theorist, numerical analyst, experimentalist, methodologist, computer scientist) whose findings independent verifiers then try to refute, across mathematical derivations, numerical stability, physical modelling and units, statistical integrity, and algorithmic correctness. Use when the user asks for a scientific review, to check the maths, numerical stability, units or conservation, data leakage, or algorithm termination, on a branch (the default), a pull request, a whole repository or named paths. Not for style, lint, formatting or documentation reviews. Use the max level only when the user, or instructions such as CLAUDE.md or a skill, explicitly ask for it, never on your own judgment: it is the costliest level and starts many reviewer agents.
 argument-hint: "[low|medium|high|xhigh|max] [<pr#>|<branch>|<path>] [--comment] [--fix] [--max-findings <n>|all|default]"
 ---
 
 # Scientific review
 
-This skill reviews code for scientific correctness with a panel. Perspective reviewers review the scope independently, a moderator merges their candidate findings, the perspectives and a defender debate each finding, and a script computes each finding's agreement label from the recorded positions. The review is read-only: no panel phase creates, modifies or deletes a file in the reviewed project. The only exception is the closing `--fix` step of section 8, which the user requests explicitly: it edits the working tree after the report, and stages or commits nothing (constitution 1.3.0, Principle III exception; spec 008 FR-016e).
+This skill reviews code for scientific correctness with a panel. Perspective reviewers (finders) review the scope independently, each focused on its own dimensions; a script merges their candidate findings by location (a moderator rules only where candidates overlap); independent verifiers then try to refute each merged finding; and a script computes each finding's agreement label from the verdicts. At the `max` level the verifiers are replaced by the feature 007 debate among the perspectives, a defender and a moderator (spec 009). The review is read-only: no panel phase creates, modifies or deletes a file in the reviewed project. The only exception is the closing `--fix` step of section 8, which the user requests explicitly: it edits the working tree after the report, and stages or commits nothing (constitution 1.3.0, Principle III exception; spec 008 FR-016e).
 
 The protocol is defined once, in [protocol.md](protocol.md). The role briefs are in [roles/](roles/), the dimension documents in [dimensions/](dimensions/), the message schemas in [schemas/](schemas/), the runners in [runners/](runners/), and the domain-extension contract in [extensions.md](extensions.md).
 
@@ -66,8 +66,10 @@ The arguments of feature 007 are still read from the request where no explicit a
 | mode | `branch` | "review the whole repository" gives `repository`; "review src/solver" gives `paths`; ignored when a target is given |
 | baseline | resolved by `panel.py scope` | branch mode or a branch target only; "since v1.2" gives `--baseline v1.2` |
 | paths | none | required for `paths` mode |
-| perspectives | from the level | 2 to 7 in total; "a quick review with the theorist and the numerical analyst" names two |
-| rebuttal_rounds | from the level | 0 to 3; "a quick review" may use 1 |
+| perspectives | from the level | 1 to 7 in total (2 to 7 in a debate); "a quick review with the theorist and the numerical analyst" names two |
+| verifiers | from the level | 1 to 3 per batch; "have three verifiers check each finding" gives 3 |
+| protocol | from the level | "debate the findings" or "with rebuttal rounds" gives `debate` (`--protocol debate`); rounds of 1 or more also select it |
+| rebuttal_rounds | from the level | 0 to 3, debate only |
 | max_batches | from the level | 1 to 4 |
 | models | none | Workflow runner only, as `role=model` pairs |
 | keep the run directory | no | when the user asks to keep it, skip `clean` and give its path |
@@ -76,15 +78,15 @@ Out-of-range values are clamped by `panel.py panel`, and the report states the p
 
 ### 2.3 Effort levels
 
-| Level | Perspectives | Rebuttal rounds | Debate batches |
-|-------|--------------|-----------------|----------------|
-| `low` | `theorist`, `numerical-analyst`, `methodologist` | 1 | 1 |
-| `medium` | the five defaults plus selected extensions, at most 7 | 2 | 2 |
-| `high` | as `medium` | 2 | 3 |
-| `xhigh` | as `medium` | 3 | 4 |
-| `max` | all defaults and selected extensions, at most 7 | 3 | 4 |
+| Level | Finders | Judgement | Batches | Panel agents, one part |
+|-------|---------|-----------|---------|------------------------|
+| `low` | `generalist` (all five dimensions), plus selected extensions | 1 verifier per batch | 1 | 1 to 3 |
+| `medium` | `theorist`, `numerical-analyst`, `methodologist`, each focused on its dimensions, plus selected extensions | 1 verifier per batch | 2 | 3 to 7 |
+| `high` | the five defaults, one dimension each, plus selected extensions, at most 7 | 2 verifiers per batch | 3 | 5 to 14 |
+| `xhigh` | as `high` | 3 verifiers per batch | 4 | 5 to 21 |
+| `max` | all defaults and selected extensions, at most 7 | debate: defender, 3 rebuttal rounds, moderator notes | 4 | 5 to 109 |
 
-`medium` is the configuration of feature 007, so a review with no arguments behaves as before. No level caps the number of findings by default. Use the max level only when the user, or instructions such as CLAUDE.md or a skill, explicitly ask for it, never on your own judgment: it is the costliest level and starts many reviewer agents.
+Each finder runs once per review part, so a scope of K parts multiplies the first number by K. The agents are counted before the run in `panel.json` (`estimate`); the most is reached only when every batch has findings and needs a merge moderator. No level caps the number of findings by default. Use the max level only when the user, or instructions such as CLAUDE.md or a skill, explicitly ask for it, never on your own judgment: it is the costliest level and starts many reviewer agents.
 
 ## 3. Preconditions
 
@@ -108,7 +110,7 @@ Select the first available runner, in this order (contracts/invocation.md sectio
 
 Rules:
 
-1. **Workflow opt-in.** A user request for the review satisfies the Workflow opt-in requirement. When the review is started on your own initiative, ask first, because it spawns many agents.
+1. **Workflow opt-in.** A user request for the review satisfies the Workflow opt-in requirement. When the review is started on your own initiative, ask first, because it spawns agents.
 2. **User-forced lower runner.** When the user asks to run the review without agents ("run it without agents", "do it in this conversation"), use `sequential`. When the user asks for agents but not the Workflow, use `claude-agents`.
 3. **Fallback.** When a multi-agent runner cannot spawn its agents, the runner file switches to `sequential` and records it with `$PANEL panel --runner sequential` (same perspectives, rounds and batches), so that the report carries the reduced-independence notice (FR-028).
 
@@ -135,18 +137,19 @@ Run these in the orchestrating conversation.
    1. In the host's skill listing, find every skill whose name ends in `sci-review-extension`.
    2. Load each such skill to obtain its base directory, and locate `extension.json` in that directory. A skill without one is passed anyway, so that it is reported as failed with the reason.
    3. Run `$PANEL select-extensions --run $RUN --declaration <dir>/extension.json [--declaration ...]`, once, with every declaration found (with no `--declaration` when none was found, so that known extensions are still recommended). It records each extension as `selected`, `not-applicable` or `failed` (with the reason), and adds known but uninstalled extensions that would apply as `recommended`.
-7. **Panel.** `$PANEL panel --run $RUN --runner <runner> [--level LEVEL] [--perspectives a,b,...] [--rounds N] [--batches N] [--models role=model ...]`. The level defaults to the `level` of `arguments.json`; pass `--level` only to repeat it. `--perspectives`, `--rounds` and `--batches` come from the wording of the request (section 2.2) and override the level's values; they are recorded as overrides. Selected domain perspectives join the panel with their absolute brief and reference paths; the runners take every perspective from `panel.json`, so domain perspectives need no runner change.
+7. **Panel.** `$PANEL panel --run $RUN --runner <runner> [--level LEVEL] [--perspectives a,b,...] [--protocol verify|debate] [--verifiers N] [--rounds N] [--batches N] [--models role=model ...]`. The level defaults to the `level` of `arguments.json`; pass `--level` only to repeat it. The other options come from the wording of the request (section 2.2) and override the level's values; they are recorded as overrides. Selected domain perspectives join the panel with their absolute brief and reference paths; the runners take every perspective from `panel.json`, so domain perspectives need no runner change.
+   - **Agent estimate.** `panel.json` records `estimate` (`minimum`, `maximum`, `confirm`). Tell the user in one line: "This review will start <minimum> to <maximum> panel agents." When `confirm` is true (more than 40 agents at most), ask before any reviewer runs, as a separate question: "This review can start up to <maximum> panel agents (<level>, <parts> parts). Continue?" A review started on your own initiative always asks. When the user declines, run nothing, clean the run directory, and offer a lower level or a narrower target.
 8. **Project state.** When the project is a git repository, record `git -C "$PROJECT" status --porcelain --ignored` for the comparison at the end.
 
 ## 6. Panel phases (runner file)
 
-Open the selected runner file and follow it. It covers the independent round, which runs once per perspective and review part, the merge, the debate and the moderator notes, and leaves every panel message in `$RUN` in the layout of contracts/panel-messages.md section 2. Then return here for the closing steps.
+Open the selected runner file and follow it. The file-based runners (`codex-subagents`, `claude-agents`, `sequential`) follow the shared procedure of [protocol.md](protocol.md) section 12 and say only how they start a task; the `claude-workflow` runner performs the same phases in its script. The phases are the independent round, which runs once per perspective and review part, the merge, and the judgement (verifiers, or in a debate the rounds and the moderator notes). Every panel message is left in `$RUN`. Then return here for the closing steps.
 
 ## 7. Closing steps (every runner)
 
 The closing steps run in this order: adjudicate, report, project check, deliver, then post (`--comment`), then fix (`--fix`), then clean.
 
-1. **Adjudicate.** `$PANEL adjudicate --run $RUN`. It applies the rules of [protocol.md](protocol.md) section 5 and exits 1 on a protocol violation (for example a `withdraw` from a member that did not raise the finding); report such a violation to the user rather than editing the messages.
+1. **Adjudicate.** `$PANEL adjudicate --run $RUN`. It applies the rules of [protocol.md](protocol.md) section 5.1 (verify) or 5.2 (debate) and exits 1 on a protocol violation (for example a `withdraw` from a member that did not raise the finding); report such a violation to the user rather than editing the messages.
 2. **Report.** `$PANEL report --run $RUN --format json` when `ReportFindings` is available, otherwise `$PANEL report --run $RUN --format markdown`. Both write `$RUN/report.json`. The report states the effort level and whether it was given, reused or defaulted, the panel actually used, the target, the number of review parts, the finding cap and the number of findings withheld by it. The withheld findings remain in `$RUN/adjudication.json`.
 3. **Project check.** Compare (`--ignored` also lists files that `.gitignore` hides, such as a bytecode cache) `git -C "$PROJECT" status --porcelain --ignored` with the state recorded in the opening steps. If anything changed, tell the user which files changed; the panel must not modify the project (SC-004). This check runs before the fix step, so that any change it reports was made by the panel.
 4. **Delivery** (contracts/report.md section 3):
@@ -218,8 +221,8 @@ When the findings were delivered as a message rather than rendered by the host, 
 
 1. **Read-only panel.** Never create, modify or delete a file in the reviewed project during the panel phases, and never instruct a panel member to do so. Every panel message lives in `$RUN`. Only the closing fix step of section 8 (Applying fixes), requested with `--fix`, writes to the project.
 2. **Scientific correctness only.** Report nothing about style, formatting, naming, lint or documentation that has no effect on the computed result (FR-007).
-3. **Labels come from the script.** Never assign, raise or lower an agreement label yourself; `panel.py adjudicate` computes them from the recorded positions.
+3. **Labels come from the script.** Never assign, raise or lower an agreement label yourself; `panel.py adjudicate` computes them from the recorded verdicts or positions.
 4. **Independence.** Never pass one perspective's independent-round output, or a summary of it, to another perspective (SC-011). Pass each role only the inputs listed in [protocol.md](protocol.md) section 3.
 5. **No simulations or long computations** in the project without the user's request; short checks of a claim (evaluating an expression at a trigger) are allowed when they write nothing in the project. Run Python with `python3 -B`, so that importing a project module writes no `__pycache__` in the project.
-6. **The max level.** Use the max level only when the user, or instructions such as CLAUDE.md or a skill, explicitly ask for it, never on your own judgment: it is the costliest level and starts many reviewer agents (FR-008).
+6. **The max level.** Use the max level only when the user, or instructions such as CLAUDE.md or a skill, explicitly ask for it, never on your own judgment: it is the costliest level and starts many reviewer agents (FR-008). Likewise, select the debate protocol at a lower level only when the user asks for a debate or for rebuttal rounds.
 7. **Preferences.** Pass `--persist` to `panel.py args` only for arguments the user typed or wrote; a level or cap you choose yourself is never stored (FR-007).
