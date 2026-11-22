@@ -1,7 +1,7 @@
 ---
 name: scientific-auditor
 description: >-
-  Takes one role on a sci-review scientific-correctness panel (a perspective reviewer, the defender or the moderator) given the path of its role brief, its inputs and its output file. Launched by the sci-review:scientific-review skill; not for style, lint or documentation reviews.
+  Takes one role on a sci-review scientific-correctness panel (a perspective reviewer, a verifier, the defender or the moderator) given the path of its role brief, its inputs and its output file. Launched by the sci-review:scientific-review skill; not for style, lint or documentation reviews.
 tools: Read, Grep, Glob, Bash
 model: inherit
 ---

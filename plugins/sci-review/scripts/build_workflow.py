@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Regenerate the generated section of scripts/scientific-review-panel.js.
 
-Workflow scripts cannot read plugin files at run time, so the protocol, the
-role briefs, the dimension documents and the message schemas are embedded in
+Workflow scripts cannot read plugin files at run time, so the role briefs, the
+dimension documents and the message schemas are embedded in
 the script as string and object constants between the `// BEGIN GENERATED`
 and `// END GENERATED` markers. This keeps the Claude Workflow runner identical
 to the file-based runners (research R6).
@@ -53,7 +53,6 @@ def js_object(entries: dict[str, str]) -> str:
 
 
 def generated_section() -> str:
-    protocol = (SKILL_DIR / "protocol.md").read_text(encoding="utf-8")
     roles = {p.stem: js_string(p.read_text(encoding="utf-8")) for p in sorted((SKILL_DIR / "roles").glob("*.md"))}
     dimensions = {
         p.stem: js_string(p.read_text(encoding="utf-8")) for p in sorted((SKILL_DIR / "dimensions").glob("*.md"))
@@ -68,9 +67,8 @@ def generated_section() -> str:
         raise PreconditionError(f"no role briefs or schemas found under {SKILL_DIR}")
     parts = [
         BEGIN,
-        "// Sources: skills/scientific-review/protocol.md, roles/*.md, dimensions/*.md, schemas/*.schema.json",
-        f"const PROTOCOL = {js_string(protocol)}",
-        "",
+        # Spec 009: no prompt embeds protocol.md; each role's brief carries what that role needs.
+        "// Sources: skills/scientific-review/roles/*.md, dimensions/*.md, schemas/*.schema.json",
         f"const ROLES = {js_object(roles)}",
         "",
         f"const DIMENSIONS = {js_object(dimensions)}",

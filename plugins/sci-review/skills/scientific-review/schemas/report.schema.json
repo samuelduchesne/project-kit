@@ -289,6 +289,13 @@
           "items": {
             "type": "string"
           }
+        },
+        "dimensions": {
+          "description": "Dimensions the perspective focuses on in the verify protocol (spec 009); empty or absent means all five.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Dimension"
+          }
         }
       },
       "additionalProperties": false
@@ -359,20 +366,59 @@
           "$ref": "#/$defs/Source"
         },
         "overrides": {
-          "description": "Level-profile parameters overridden by explicit options (perspectives, rounds, batches).",
+          "description": "Level-profile parameters overridden by explicit options (perspectives, rounds, batches, protocol, verifiers).",
           "type": "array",
           "items": {
             "type": "string",
             "enum": [
               "perspectives",
               "rounds",
-              "batches"
+              "batches",
+              "protocol",
+              "verifiers"
             ]
           }
         },
         "parts": {
           "type": "integer",
           "minimum": 0
+        },
+        "protocol": {
+          "description": "verify: independent verifiers judge each finding (spec 009); debate: the feature 007 debate.",
+          "type": "string",
+          "enum": [
+            "verify",
+            "debate"
+          ]
+        },
+        "verifiers": {
+          "description": "Verifiers per debate batch (verify protocol).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "estimate": {
+          "description": "Fewest and most panel agents the run could start, before any finding was known.",
+          "type": "object",
+          "required": [
+            "minimum",
+            "maximum",
+            "confirm"
+          ],
+          "properties": {
+            "minimum": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "maximum": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "confirm": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

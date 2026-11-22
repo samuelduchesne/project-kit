@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sci-review/schemas/verification.schema.json",
+  "title": "Verification",
+  "description": "One verifier's verdicts on every merged finding of one batch, written independently of the other verifiers and without knowledge of labels (protocol.md section 5, verify protocol). Semantic check in panel.py: no_trigger_reason is non-null when the merged finding's trigger or wrong_output is null.",
+  "type": "object",
+  "required": [
+    "batch",
+    "verifier",
+    "verdicts"
+  ],
+  "properties": {
+    "batch": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "verifier": {
+      "type": "string",
+      "pattern": "^v[1-9]$"
+    },
+    "verdicts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Verdict"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "Verdict": {
+      "type": "object",
+      "required": [
+        "finding_id",
+        "verdict",
+        "evidence",
+        "refutation_search",
+        "reason",
+        "argument_for",
+        "argument_against",
+        "deciding_assumption",
+        "no_trigger_reason"
+      ],
+      "properties": {
+        "finding_id": {
+          "type": "string",
+          "pattern": "^F[0-9]+$"
+        },
+        "verdict": {
+          "description": "confirm: the failure scenario was reproduced or traced and no reason the code is correct was found. refute: a documented regime, caller precondition, convention or derivation shows the code is correct, or the trigger cannot occur. uncertain: correctness turns on an assumption the code and its documentation do not settle (named in deciding_assumption), or the scenario could not be established.",
+          "enum": [
+            "confirm",
+            "refute",
+            "uncertain"
+          ]
+        },
+        "evidence": {
+          "description": "How the verdict was established. reproduced: the trigger was run (python3 -B or node) and its output observed. traced: the trigger was followed line by line through the code, with the lines named in reason. none: neither. A confirm with evidence none counts as uncertain.",
+          "enum": [
+            "reproduced",
+            "traced",
+            "none"
+          ]
+        },
+        "refutation_search": {
+          "description": "Where the verifier looked for a reason the code is correct before deciding: the files, callers, docstrings and conventions read, and what each showed.",
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "argument_for": {
+          "type": "string",
+          "minLength": 1
+        },
+        "argument_against": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deciding_assumption": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "no_trigger_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

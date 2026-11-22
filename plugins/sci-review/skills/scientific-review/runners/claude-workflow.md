@@ -1,6 +1,6 @@
 # Runner: Claude Workflow
 
-This runner performs the panel phases of `protocol.md` (independent round, merge, debate and moderator notes) by launching the panel Workflow script of the plugin, which runs every panel agent with schema-validated output and returns all panel messages in one result. It starts after the opening steps of `SKILL.md` (`panel.py init`, `scope`, extension discovery with `select-extensions`, and `panel --runner claude-workflow`) and ends before its closing steps (`adjudicate`, `report`, delivery and `clean`). On completion, return to the closing steps of `SKILL.md`.
+This runner performs the panel phases of `protocol.md` (independent round, merge, and verification or debate) by launching the panel Workflow script of the plugin, which runs every panel agent with schema-validated output and returns all panel messages in one result. It starts after the opening steps of `SKILL.md` (`panel.py init`, `scope`, extension discovery with `select-extensions`, and `panel --runner claude-workflow`) and ends before its closing steps (`adjudicate`, `report`, delivery and `clean`). On completion, return to the closing steps of `SKILL.md`.
 
 ## 1. Notation
 
@@ -24,12 +24,13 @@ This runner performs the panel phases of `protocol.md` (independent round, merge
 
 ## 3. Inputs per phase
 
-The Workflow embeds `protocol.md`, the role briefs of `roles/` and the schemas of `schemas/`, and builds each agent's prompt itself. It passes each role only the inputs of contracts/panel-messages.md section 1 (SC-011):
+The Workflow embeds the role briefs of `roles/`, the dimension documents and the schemas of `schemas/`, and builds each agent's prompt itself. No prompt embeds `protocol.md` (spec 009). It passes each role only the inputs of `protocol.md` section 3 (SC-011):
 
 | Phase | Role | Inputs passed by the Workflow |
 |-------|------|-------------------------------|
-| Independent | each perspective, once per review part | its brief; `protocol.md`; the five dimension documents; for a domain perspective, the files of its `reference_paths`; the scope; its review part (when there are several); the candidate-findings schema |
-| Merge | moderator, one call per batch | its brief; all candidate-findings messages; the clusters of the batch; the merge-ruling schema |
+| Independent | each perspective, once per review part | its brief; its focus dimensions, whose documents it reads first; for a domain perspective, the files of its `reference_paths`; the scope; its review part (when there are several); the candidate-findings schema |
+| Merge | moderator, only for a batch with a cluster of several candidates (verify), or every batch (debate) | its brief; all candidate-findings messages; the clusters of the batch; the merge-ruling schema |
+| Verify | each of the batch's verifiers | its brief; the batch's merge ruling; the verification schema |
 | Debate round 0 | each perspective and the defender | its brief; the batch's merge ruling; for a perspective, its own candidate-findings message; the debate-positions schema |
 | Debate round k >= 1 | each member that protocol.md section 8 calls | its brief; the batch's merge ruling; all positions of the batch from rounds 0 to k-1; the debate-positions schema |
 | Moderator notes | moderator, one call per batch | its brief; the batch's merge ruling; all positions of the batch; the moderator-notes schema |
@@ -46,7 +47,9 @@ The arguments of section 4 are the only information the orchestrating conversati
    | `scope` | the contents of `$RUN/scope.json` |
    | `project` | `$PROJECT`, the absolute path of the reviewed project; scope paths are relative to it, and Workflow agents do not necessarily start there |
    | `skill_dir` | `$SKILL`, the absolute path of the scientific-review skill directory, from which Workflow agents read the dimension documents (`dimensions/`) on demand |
-   | `perspectives` | `panel.perspectives` of `$RUN/panel.json`, each entry reduced to `id`, `name`, `brief_path` and `reference_paths` |
+   | `perspectives` | `panel.perspectives` of `$RUN/panel.json`, each entry reduced to `id`, `name`, `brief_path`, `reference_paths` and `dimensions` |
+   | `protocol` | `panel.protocol` (`verify` or `debate`) |
+   | `verifiers` | `panel.verifiers` |
    | `extensions` | the entries of `extensions` in `$RUN/panel.json` whose `status` is `selected` |
    | `rebuttal_rounds` | `panel.rebuttal_rounds` |
    | `max_batches` | `panel.max_batches` |
@@ -66,19 +69,19 @@ The arguments of section 4 are the only information the orchestrating conversati
 4. **Launch** the Workflow:
 
    ```text
-   Workflow({ scriptPath: "$WORKFLOW", args: { scope, project, skill_dir, perspectives, extensions, rebuttal_rounds, max_batches, parts, models } })
+   Workflow({ scriptPath: "$WORKFLOW", args: { scope, project, skill_dir, perspectives, protocol, verifiers, extensions, rebuttal_rounds, max_batches, parts, models } })
    ```
 
    The independent round runs one agent per perspective and review part, in parallel. Each agent receives its part, may read any file of the project to follow a reference, and raises findings only on lines of its part; its message carries `part`, and in a review of several parts the script numbers its findings `<perspective>-<part>-<n>`. In debate round 0, a perspective receives its candidates of every part. A failed agent returns nothing and is listed in `dropped`; the Workflow writes no part status, and `panel.py report` derives each part's status from the ingested candidate files.
 
-5. **Write the result.** Write the returned `PanelRun` object (`candidates`, `merge`, `debate` as a list of `{batch, message}`, `notes`, `dropped`), exactly as returned, to `$RUN/workflow-result.json`. When the copy or the launch fails, or the Workflow returns no `PanelRun`, apply section 6.
+5. **Write the result.** Write the returned `PanelRun` object (`candidates`, `merge`, `verify` and `debate` as lists of `{batch, message}`, `notes`, `dropped`), exactly as returned, to `$RUN/workflow-result.json`. When the copy or the launch fails, or the Workflow returns no `PanelRun`, apply section 6.
 6. **Ingest** the messages into the run directory layout of contracts/panel-messages.md section 2:
 
    ```sh
    $PANEL ingest --run $RUN $RUN/workflow-result.json
    ```
 
-   `ingest` validates every message, writes `candidates/` (as `candidates/<perspective>--<part>.json`), `merge/`, `debate/` and `notes/`, records a notice for each message it drops, and records the notice "The output of <role> was dropped after failing validation twice." for each role listed in `dropped`. A non-zero exit means the result is not a `PanelRun`; apply section 6.
+   `ingest` validates every message, writes `candidates/` (as `candidates/<perspective>--<part>.json`), `merge/`, `verify/`, `debate/` and `notes/`, records a notice for each message it drops, and records the notice "The output of <role> was dropped after failing validation twice." for each role listed in `dropped`. A non-zero exit means the result is not a `PanelRun`; apply section 6.
 7. **Project check** (SC-004).
    1. For a git repository, run `git -C "$PROJECT" status --porcelain --ignored` and compare it with the baseline of section 2.3. Otherwise, run `find "$PROJECT" -type f -newer "$RUN/run.json" -not -path '*/.git/*'`.
    2. When any path differs from the baseline, or `find` lists any file, record it and tell the user which paths changed. Do not revert them.
@@ -102,7 +105,7 @@ When the Workflow is unavailable, the session has no scratchpad directory, the c
 2. Record it, repeating the panel recorded in `$RUN/panel.json`:
 
    ```sh
-   $PANEL panel --run $RUN --runner <runner> --perspectives <ids of panel.perspectives, comma-separated> --rounds <panel.rebuttal_rounds> --batches <panel.max_batches>
+   $PANEL panel --run $RUN --runner <runner> --perspectives <ids of panel.perspectives, comma-separated> --protocol <panel.protocol> --rounds <panel.rebuttal_rounds> --batches <panel.max_batches> --verifiers <panel.verifiers>
    ```
 
-3. Remove any partially ingested message directories (`candidates/`, `merge/`, `debate/`, `notes/`) from `$RUN`, and continue with `runners/claude-agents.md` or `runners/sequential.md` from its first step.
+3. Remove any partially ingested message directories (`candidates/`, `merge/`, `verify/`, `debate/`, `notes/`) from `$RUN`, and continue with `runners/claude-agents.md` or `runners/sequential.md` from the first step of `protocol.md` section 12.4.

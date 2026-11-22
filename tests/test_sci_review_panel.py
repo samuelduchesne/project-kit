@@ -1041,7 +1041,7 @@ class TestExtensions(RunDirMixin):
         self.assertEqual(result.code, 0, result.err)
         self.assertFalse((run_dir / "panel.json").exists())
         self.assertEqual(run_panel(*argv).code, 0)
-        result = run_panel("panel", "--run", str(run_dir), "--runner", "claude-agents")
+        result = run_panel("panel", "--run", str(run_dir), "--runner", "claude-agents", "--level", "high")
         self.assertEqual(result.code, 0, result.err)
         state = json.loads((run_dir / "panel.json").read_text(encoding="utf-8"))
         ids = [p["id"] for p in state["panel"]["perspectives"]]
@@ -1151,12 +1151,12 @@ class TestCodexRunnerIndependence(unittest.TestCase):
 
     def test_every_spawn_sets_fork_turns_none(self) -> None:
         text = self.RUNNER.read_text(encoding="utf-8")
-        preconditions = text.split("## 2. Preconditions", 1)[1].split("## 3. Rules", 1)[0]
-        self.assertIn('Set `fork_turns` to `"none"` in every spawn.', preconditions)
+        starting = text.split("## 1. Starting a task", 1)[1].split("## 2.", 1)[0]
+        self.assertIn('Set `fork_turns` to `"none"` in every spawn.', starting)
 
     def test_fallback_covers_spawns_that_cannot_avoid_a_fork(self) -> None:
         text = self.RUNNER.read_text(encoding="utf-8")
-        fallback = text.split("## 6. Fallback to the sequential runner", 1)[1]
+        fallback = text.split("## 2. Fallback to the sequential runner", 1)[1]
         self.assertIn("no way to spawn without a history fork", fallback)
 
 

@@ -45,9 +45,9 @@ Two manifest formats are read: this fixture's (``defects``, ``lookalikes`` and
 per-dimension recall; their languages are reported as found.
 
 ``--verify-fixes REPO`` runs every reproduction check listed in the manifest
-against REPO and prints which pass (SC-007). Python checks run with this
-interpreter; TypeScript checks run with ``node --experimental-strip-types``
-(Node 22.6 or later).
+against REPO and prints which pass (SC-007). Check paths are relative to the
+directory of the manifest. Python checks run with this interpreter; TypeScript
+checks run with ``node --experimental-strip-types`` (Node 22.6 or later).
 
 The exit status is 0 whatever the verdicts, and 2 when an input cannot be read.
 Only the Python standard library is used.
@@ -603,9 +603,9 @@ def check_command(check: Path, repo: Path) -> list[str]:
     return [sys.executable, str(check), str(repo)]
 
 
-def run_check(defect: Defect, repo: Path) -> CheckResult:
+def run_check(defect: Defect, repo: Path, base: Path = HERE) -> CheckResult:
     assert defect.reproduce is not None
-    check = HERE / defect.reproduce
+    check = base / defect.reproduce
     if not check.is_file():
         return CheckResult(defect.id, defect.reproduce, None, "check file not found")
     try:
@@ -623,9 +623,9 @@ def run_check(defect: Defect, repo: Path) -> CheckResult:
     return CheckResult(defect.id, defect.reproduce, done.returncode, lines[-1] if lines else "")
 
 
-def verify_fixes(manifest: Manifest, repo: Path) -> None:
+def verify_fixes(manifest: Manifest, repo: Path, base: Path = HERE) -> None:
     print(f"SC-007 Reproduction checks against {repo}")
-    results = [run_check(d, repo) for d in manifest.defects if d.reproduce]
+    results = [run_check(d, repo, base) for d in manifest.defects if d.reproduce]
     for result in results:
         if result.exit_code == 0:
             status = "pass   (fixed)"
@@ -677,7 +677,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.verify_fixes is not None:
             if not args.verify_fixes.is_dir():
                 raise UnreadableInput(f"repository {args.verify_fixes} does not exist")
-            verify_fixes(manifest, args.verify_fixes.resolve())
+            verify_fixes(manifest, args.verify_fixes.resolve(), args.manifest.resolve().parent)
     except UnreadableInput as error:
         print(f"error: {error}", file=sys.stderr)
         return EXIT_UNREADABLE

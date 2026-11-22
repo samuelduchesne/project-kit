@@ -57,8 +57,13 @@ LARGE_SCOPE_THRESHOLD = 6000
 REPORT_TOOL_LIMIT = 32
 PREFERENCES_VERSION = 1
 MIN_PERSPECTIVES, MAX_PERSPECTIVES = 2, 7
+# The verify protocol (spec 009) accepts a single finder, the generalist of the low level.
+MIN_FINDERS = 1
 MIN_ROUNDS, MAX_ROUNDS, DEFAULT_ROUNDS = 0, 3, 2
 MIN_BATCHES, MAX_BATCHES, DEFAULT_BATCHES = 1, 4, 2
+MIN_VERIFIERS, MAX_VERIFIERS = 1, 3
+# Above this many agents at most, the skill states the estimate and asks before any reviewer runs (spec 009).
+AGENT_CONFIRM_THRESHOLD = 40
 RUN_PREFIX = "sci-review-"
 MEMBER_ID = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
@@ -74,12 +79,8 @@ USAGE = (
     "usage: /sci-review:scientific-review [low|medium|high|xhigh|max] [<pr#>|<pr-url>|<branch>|<path>...] "
     "[--comment] [--fix] [--max-findings <n>|all|default]"
 )
-ULTRA_MESSAGE = (
-    "`ultra` is not an effort level of the scientific review; use `max`."
-)
-MAX_FINDINGS_IGNORED = (
-    "`--max-findings` was ignored: type a whole number above zero, `all`, or `default` after it."
-)
+ULTRA_MESSAGE = "`ultra` is not an effort level of the scientific review; use `max`."
+MAX_FINDINGS_IGNORED = "`--max-findings` was ignored: type a whole number above zero, `all`, or `default` after it."
 USUAL_LIMIT = "Using the usual limit."
 DEFAULT_CAP_HINT = "passing `--max-findings default` goes back to the usual limit."
 REPORT_TOOL_NOTICE = "This review reports at most 32 findings, so the limit is 32 here."
@@ -174,6 +175,25 @@ class AgreementLabel:
     RANK: ClassVar[dict[str, int]] = {CONSENSUS: 0, MAJORITY: 1, CONTESTED: 2}
 
 
+class Protocol:
+    """How candidate findings are judged (spec 009).
+
+    `verify`: independent verifiers each give a verdict on every merged finding; the default at every level but
+    max. `debate`: the feature 007 debate among the perspectives and the defender, with moderator notes.
+    """
+
+    VERIFY = "verify"
+    DEBATE = "debate"
+    VALUES = (VERIFY, DEBATE)
+
+
+class Verdict:
+    CONFIRM = "confirm"
+    REFUTE = "refute"
+    UNCERTAIN = "uncertain"
+    VALUES = (CONFIRM, REFUTE, UNCERTAIN)
+
+
 class Runner:
     CLAUDE_WORKFLOW = "claude-workflow"
     CODEX_SUBAGENTS = "codex-subagents"
@@ -259,6 +279,25 @@ DEFAULT_PERSPECTIVES: tuple[tuple[str, str], ...] = (
     ("methodologist", "Methodologist"),
     ("computer-scientist", "Computer scientist"),
 )
+# The single finder of the low level (spec 009): one reviewer across all five dimensions. It is available to every
+# level but never selected by `defaults+extensions` or `all`.
+GENERALIST = ("generalist", "Generalist")
+# Primary dimensions of each default perspective, and for each dimension the perspectives that take it over, in
+# order, when its primary owner is not on the panel (spec 009, focused finders).
+PRIMARY_DIMENSIONS: dict[str, tuple[str, ...]] = {
+    "theorist": ("mathematical-derivations",),
+    "numerical-analyst": ("numerical-stability",),
+    "experimentalist": ("physical-modelling-and-units",),
+    "methodologist": ("statistical-integrity",),
+    "computer-scientist": ("algorithmic-correctness",),
+}
+DIMENSION_OWNERS: dict[str, tuple[str, ...]] = {
+    "mathematical-derivations": ("theorist", "numerical-analyst", "experimentalist", "computer-scientist"),
+    "numerical-stability": ("numerical-analyst", "theorist", "computer-scientist", "experimentalist"),
+    "physical-modelling-and-units": ("experimentalist", "theorist", "numerical-analyst", "methodologist"),
+    "statistical-integrity": ("methodologist", "experimentalist", "numerical-analyst", "computer-scientist"),
+    "algorithmic-correctness": ("computer-scientist", "numerical-analyst", "theorist", "methodologist"),
+}
 
 
 @dataclass(frozen=True)
@@ -432,6 +471,8 @@ class Perspective(Record):
     brief_path: str
     source: str
     reference_paths: tuple[str, ...] = ()
+    # The dimensions this perspective focuses on in the independent round (spec 009); empty means all five.
+    dimensions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -477,6 +518,20 @@ class ModelAssignment(Record):
 
 
 @dataclass(frozen=True)
+class AgentEstimate(Record):
+    """The number of panel agents a run can start, before any finding is known (spec 009).
+
+    `minimum` counts the finders alone (a review that finds nothing); `maximum` adds a merge moderator and the
+    verifiers (or the debate members and the notes moderator) for every batch. `confirm` is true above
+    AGENT_CONFIRM_THRESHOLD, when the skill states the estimate and asks before any reviewer runs.
+    """
+
+    minimum: int
+    maximum: int
+    confirm: bool
+
+
+@dataclass(frozen=True)
 class Panel(Record):
     perspectives: tuple[Perspective, ...]
     rebuttal_rounds: int
@@ -488,12 +543,22 @@ class Panel(Record):
     level_source: str = Source.DEFAULT
     overrides: tuple[str, ...] = ()
     parts: int = 1
-    _records: ClassVar[dict[str, str]] = {"perspectives": "Perspective", "models": "ModelAssignment"}
+    # Spec 009. A panel.json written before it has no protocol and is a debate panel.
+    protocol: str = Protocol.DEBATE
+    verifiers: int = 1
+    estimate: AgentEstimate | None = None
+    _records: ClassVar[dict[str, str]] = {
+        "perspectives": "Perspective",
+        "models": "ModelAssignment",
+        "estimate": "AgentEstimate",
+    }
     _enums: ClassVar[dict[str, Sequence[str]]] = {
         "runner": Runner.VALUES,
         "level": Level.VALUES,
         "level_source": Source.VALUES,
+        "protocol": Protocol.VALUES,
     }
+    _optional: ClassVar[tuple[str, ...]] = ("estimate",)
 
 
 @dataclass(frozen=True)
@@ -619,6 +684,40 @@ class NotesMessage(Record):
 
 
 @dataclass(frozen=True)
+class VerdictRecord(Record):
+    finding_id: str
+    verdict: str
+    reason: str
+    argument_for: str
+    argument_against: str
+    deciding_assumption: str | None
+    no_trigger_reason: str | None
+    # How the verdict was established (reproduced, traced or none) and where a refutation was sought.
+    evidence: str = "traced"
+    refutation_search: str = ""
+    verifier: str = ""
+    _enums: ClassVar[dict[str, Sequence[str]]] = {
+        "verdict": Verdict.VALUES,
+        "evidence": ("reproduced", "traced", "none"),
+    }
+
+    @property
+    def effective(self) -> str:
+        """The verdict as adjudicated: a confirmation with no evidence counts as uncertain (spec 009)."""
+        if self.verdict == Verdict.CONFIRM and self.evidence == "none":
+            return Verdict.UNCERTAIN
+        return self.verdict
+
+
+@dataclass(frozen=True)
+class VerificationMessage(Record):
+    batch: int
+    verifier: str
+    verdicts: tuple[VerdictRecord, ...]
+    _records: ClassVar[dict[str, str]] = {"verdicts": "VerdictRecord"}
+
+
+@dataclass(frozen=True)
 class DebateRecord(Record):
     finding_id: str
     positions: tuple[Position, ...]
@@ -686,10 +785,12 @@ class Adjudication(Record):
     rejected: tuple[RejectedFinding, ...]
     records: tuple[DebateRecord, ...]
     notices: tuple[str, ...] = ()
+    verdicts: tuple[VerdictRecord, ...] = ()
     _records: ClassVar[dict[str, str]] = {
         "findings": "Finding",
         "rejected": "RejectedFinding",
         "records": "DebateRecord",
+        "verdicts": "VerdictRecord",
     }
 
 
@@ -757,8 +858,10 @@ class LevelProfile(Record):
     """The panel configuration of one effort level (data-model.md section 4, research R6).
 
     `perspectives` is a tuple of perspective ids, or `defaults+extensions`, or `all`; both strings select every
-    available perspective (the five defaults and the selected extensions), up to `max_perspectives`.
-    `default_cap` is null for every level: the report is not capped by default (FR-006).
+    available perspective (the five defaults and the selected extensions, never the generalist), up to
+    `max_perspectives`. A tuple profile with `with_extensions` also selects the selected extensions'
+    perspectives. `protocol` and `verifiers` are those of spec 009; `rebuttal_rounds` applies to the debate
+    protocol only. `default_cap` is null for every level: the report is not capped by default (FR-006).
     """
 
     level: str
@@ -767,16 +870,21 @@ class LevelProfile(Record):
     rebuttal_rounds: int
     max_batches: int
     default_cap: int | None = None
-    _enums: ClassVar[dict[str, Sequence[str]]] = {"level": Level.VALUES}
+    protocol: str = Protocol.VERIFY
+    verifiers: int = 1
+    with_extensions: bool = False
+    _enums: ClassVar[dict[str, Sequence[str]]] = {"level": Level.VALUES, "protocol": Protocol.VALUES}
 
     def __post_init__(self) -> None:
         super().__post_init__()
         if isinstance(self.perspectives, str) and self.perspectives not in ("defaults+extensions", "all"):
             raise ValidationFailure(f"LevelProfile.perspectives: {self.perspectives!r} is not a perspective list")
+        minimum = MIN_PERSPECTIVES if self.protocol == Protocol.DEBATE else MIN_FINDERS
         checks = (
-            ("max_perspectives", self.max_perspectives, MIN_PERSPECTIVES, MAX_PERSPECTIVES),
+            ("max_perspectives", self.max_perspectives, minimum, MAX_PERSPECTIVES),
             ("rebuttal_rounds", self.rebuttal_rounds, MIN_ROUNDS, MAX_ROUNDS),
             ("max_batches", self.max_batches, MIN_BATCHES, MAX_BATCHES),
+            ("verifiers", self.verifiers, MIN_VERIFIERS, MAX_VERIFIERS),
         )
         for name, value, low, high in checks:
             if not low <= value <= high:
@@ -785,20 +893,30 @@ class LevelProfile(Record):
     def requested(self, available: Sequence[str]) -> list[str]:
         """The perspective ids this profile selects from the available ones, in order.
 
-        For `defaults+extensions` and `all`, every available perspective is returned; `configure_panel` then
-        applies the limit of seven and records a notice naming those left out, as in feature 007.
+        For `defaults+extensions` and `all`, every available perspective but the generalist is returned;
+        `configure_panel` then applies the limit of seven and records a notice naming those left out, as in
+        feature 007.
         """
         if isinstance(self.perspectives, str):
-            return list(available)
-        return [pid for pid in self.perspectives if pid in available][: self.max_perspectives]
+            return [pid for pid in available if pid != GENERALIST[0]]
+        chosen = [pid for pid in self.perspectives if pid in available][: self.max_perspectives]
+        if self.with_extensions:
+            defaults = {pid for pid, _ in DEFAULT_PERSPECTIVES} | {GENERALIST[0]}
+            chosen += [pid for pid in available if pid not in defaults and pid not in chosen]
+        return chosen
 
 
+# Spec 009: every level but max finds with focused perspectives and judges with independent verifiers; max keeps
+# the feature 007 debate. The low level's single generalist and the medium level's three perspectives cover all
+# five dimensions between them (assign_dimensions).
 LEVEL_PROFILES: dict[str, LevelProfile] = {
-    Level.LOW: LevelProfile(Level.LOW, ("theorist", "numerical-analyst", "methodologist"), 3, 1, 1),
-    Level.MEDIUM: LevelProfile(Level.MEDIUM, "defaults+extensions", MAX_PERSPECTIVES, 2, 2),
-    Level.HIGH: LevelProfile(Level.HIGH, "defaults+extensions", MAX_PERSPECTIVES, 2, 3),
-    Level.XHIGH: LevelProfile(Level.XHIGH, "defaults+extensions", MAX_PERSPECTIVES, 3, 4),
-    Level.MAX: LevelProfile(Level.MAX, "all", MAX_PERSPECTIVES, 3, 4),
+    Level.LOW: LevelProfile(Level.LOW, (GENERALIST[0],), 1, 0, 1, verifiers=1, with_extensions=True),
+    Level.MEDIUM: LevelProfile(
+        Level.MEDIUM, ("theorist", "numerical-analyst", "methodologist"), 3, 0, 2, verifiers=1, with_extensions=True
+    ),
+    Level.HIGH: LevelProfile(Level.HIGH, "defaults+extensions", MAX_PERSPECTIVES, 0, 3, verifiers=2),
+    Level.XHIGH: LevelProfile(Level.XHIGH, "defaults+extensions", MAX_PERSPECTIVES, 0, 4, verifiers=3),
+    Level.MAX: LevelProfile(Level.MAX, "all", MAX_PERSPECTIVES, 3, 4, protocol=Protocol.DEBATE),
 }
 
 
@@ -938,6 +1056,8 @@ class ReportContext:
     max_findings: int | str | None = None
     notes: tuple[str, ...] = ()
     parts: tuple[ReviewPart, ...] = ()
+    # The line count of each scoped file that could be read; a finding that starts beyond it is not reported.
+    file_lines: tuple[tuple[str, int], ...] = ()
 
     @property
     def cap(self) -> int | None:
@@ -1005,7 +1125,7 @@ class ReportFinding:
 # JSON Schema validation (subset) and single-message semantic checks
 # ---------------------------------------------------------------------------
 
-SCHEMA_NAMES = ("candidate-findings", "merge-ruling", "debate-positions", "moderator-notes", "report")
+SCHEMA_NAMES = ("candidate-findings", "merge-ruling", "debate-positions", "moderator-notes", "verification", "report")
 
 
 def load_schema(name: str) -> dict[str, Any]:
@@ -1458,7 +1578,9 @@ def resolve_invocation(parsed: ParsedArguments, loaded: PreferencesLoad, raw: st
     else:
         if cap.kind == CapKind.MALFORMED:
             notes.append(
-                MAX_FINDINGS_IGNORED if stored.last_max_findings is not None else f"{MAX_FINDINGS_IGNORED} {USUAL_LIMIT}"
+                MAX_FINDINGS_IGNORED
+                if stored.last_max_findings is not None
+                else f"{MAX_FINDINGS_IGNORED} {USUAL_LIMIT}"
             )
         if stored.last_max_findings is not None:
             max_findings, cap_source = stored.last_max_findings, Source.REUSED
@@ -2056,9 +2178,7 @@ def fetch_pull_request(project: Path, target: Target) -> PullRequestRefs:
     url = REQUEST_URL_REPOSITORY.match(target.text)
     if tool == "gh":
         reference = target.text if url else str(target.number)
-        result = _run_tool(
-            project, ["gh", "pr", "view", reference, "--json", "baseRefOid,headRefOid,baseRefName,url"]
-        )
+        result = _run_tool(project, ["gh", "pr", "view", reference, "--json", "baseRefOid,headRefOid,baseRefName,url"])
     else:
         repository = ["--repo", f"https://{url.group(1)}/{url.group(2)}"] if url else []
         result = _run_tool(project, ["glab", "mr", "view", str(target.number), *repository, "-F", "json"])
@@ -2117,7 +2237,9 @@ def worktree_branch_listing(project: Path, baseline: str | None) -> ScopeListing
 
 def ref_listing(project: Path, mode: str, base: str, ref: str, description: str) -> ScopeListing:
     """The changes from `base` to a git ref that is not checked out; nothing is read from the working tree."""
-    diff = git(project, "diff", "--unified=0", "--no-color", "--no-ext-diff", "--no-prefix", "--find-renames", base, ref)
+    diff = git(
+        project, "diff", "--unified=0", "--no-color", "--no-ext-diff", "--no-prefix", "--find-renames", base, ref
+    )
     return ScopeListing(mode, base, ref, f"{description} ({base[:12]}...{ref})", parse_diff(diff), ref=ref)
 
 
@@ -2197,9 +2319,11 @@ def finalise_scope(
         if listing.ref is None:
             if reason is None and is_binary(project / path):
                 reason = "binary file"
-            if reason is None and listing.mode in (ScopeMode.BRANCH, ScopeMode.EXPLICIT) and not (
-                project / path
-            ).is_file():
+            if (
+                reason is None
+                and listing.mode in (ScopeMode.BRANCH, ScopeMode.EXPLICIT)
+                and not (project / path).is_file()
+            ):
                 reason = "deleted"
         else:
             data = read(path)
@@ -2688,8 +2812,11 @@ def configure_panel(
     batches: int | None,
     runner: str,
     models: Sequence[ModelAssignment] = (),
+    protocol: str = Protocol.DEBATE,
+    verifiers: int = 1,
 ) -> tuple[Panel, list[str]]:
     _check_enum("panel", "runner", runner, Runner.VALUES)
+    _check_enum("panel", "protocol", protocol, Protocol.VALUES)
     notices: list[str] = []
     by_id = {p.id: p for p in available}
     if requested:
@@ -2698,20 +2825,25 @@ def configure_panel(
             notices.append(f"Unknown perspectives were ignored: {', '.join(unknown)}.")
         chosen = list(dict.fromkeys(r for r in requested if r in by_id))
     else:
-        chosen = [p.id for p in available]
+        chosen = [p.id for p in available if p.id != GENERALIST[0]]
     if len(chosen) > MAX_PERSPECTIVES:
         notices.append(
             f"The panel was limited to {MAX_PERSPECTIVES} perspectives; "
             f"{', '.join(chosen[MAX_PERSPECTIVES:])} did not take part."
         )
         chosen = chosen[:MAX_PERSPECTIVES]
-    if len(chosen) < MIN_PERSPECTIVES:
+    minimum = MIN_PERSPECTIVES if protocol == Protocol.DEBATE else MIN_FINDERS
+    if protocol == Protocol.DEBATE and GENERALIST[0] in chosen:
+        # The debate counts perspectives towards a majority; the generalist is a finder of the verify protocol.
+        chosen.remove(GENERALIST[0])
+        notices.append("The generalist does not take part in a debate; the default perspectives were used.")
+    if len(chosen) < minimum:
         for pid in by_id:
-            if len(chosen) >= MIN_PERSPECTIVES:
+            if len(chosen) >= minimum:
                 break
-            if pid not in chosen:
+            if pid not in chosen and pid != GENERALIST[0]:
                 chosen.append(pid)
-        notices.append(f"The panel was raised to the minimum of {MIN_PERSPECTIVES} perspectives.")
+        notices.append(f"The panel was raised to the minimum of {minimum} perspectives.")
     requested_rounds = DEFAULT_ROUNDS if rounds is None else rounds
     requested_batches = DEFAULT_BATCHES if batches is None else batches
     rebuttal_rounds = clamp(requested_rounds, MIN_ROUNDS, MAX_ROUNDS)
@@ -2720,15 +2852,59 @@ def configure_panel(
         notices.append(f"Rebuttal rounds were clamped from {requested_rounds} to {rebuttal_rounds}.")
     if max_batches != requested_batches:
         notices.append(f"Debate batches were clamped from {requested_batches} to {max_batches}.")
+    clamped_verifiers = clamp(verifiers, MIN_VERIFIERS, MAX_VERIFIERS)
+    if clamped_verifiers != verifiers:
+        notices.append(f"Verifiers were clamped from {verifiers} to {clamped_verifiers}.")
+    if protocol == Protocol.VERIFY:
+        rebuttal_rounds = 0
+    focus = assign_dimensions(chosen) if protocol == Protocol.VERIFY else {}
     panel = Panel(
-        perspectives=tuple(by_id[pid] for pid in chosen),
+        perspectives=tuple(dataclasses.replace(by_id[pid], dimensions=focus.get(pid, ())) for pid in chosen),
         rebuttal_rounds=rebuttal_rounds,
         max_batches=max_batches,
         runner=runner,
         independent=runner != Runner.SEQUENTIAL,
         models=tuple(models),
+        protocol=protocol,
+        verifiers=clamped_verifiers,
     )
     return panel, notices
+
+
+def assign_dimensions(chosen: Sequence[str]) -> dict[str, tuple[str, ...]]:
+    """The dimensions each default perspective focuses on in the verify protocol (spec 009).
+
+    Each default perspective takes its primary dimension; a dimension whose primary owner is not on the panel goes
+    to the first perspective of DIMENSION_OWNERS that is. The generalist and domain perspectives keep every
+    dimension (an empty tuple). With every default perspective on the panel, each reviews its own dimension.
+    """
+    defaults = [pid for pid in chosen if pid in PRIMARY_DIMENSIONS]
+    focus: dict[str, list[str]] = {pid: list(PRIMARY_DIMENSIONS[pid]) for pid in defaults}
+    if not defaults:
+        return {}
+    for dimension in Dimension.VALUES:
+        if any(dimension in dims for dims in focus.values()):
+            continue
+        owner = next((pid for pid in DIMENSION_OWNERS[dimension] if pid in focus), defaults[0])
+        focus[owner].append(dimension)
+    order = {dimension: index for index, dimension in enumerate(Dimension.VALUES)}
+    return {pid: tuple(sorted(dims, key=order.__getitem__)) for pid, dims in focus.items()}
+
+
+def estimate_agents(panel: Panel, parts: int) -> AgentEstimate:
+    """The fewest and the most panel agents a run can start (spec 009), retries excluded.
+
+    Finders run once per perspective and part. Each debate batch adds at most one merge moderator (none when
+    every cluster has a single member) and either its verifiers or, in a debate, every member in every round
+    and the notes moderator.
+    """
+    finders = len(panel.perspectives) * max(1, parts)
+    if panel.protocol == Protocol.VERIFY:
+        per_batch = 1 + panel.verifiers
+    else:
+        per_batch = 1 + (len(panel.perspectives) + 1) * (panel.rebuttal_rounds + 1) + 1
+    maximum = finders + panel.max_batches * per_batch
+    return AgentEstimate(minimum=finders, maximum=maximum, confirm=maximum > AGENT_CONFIRM_THRESHOLD)
 
 
 @dataclass(frozen=True)
@@ -2758,11 +2934,14 @@ def configure_level_panel(
     runner: str,
     models: Sequence[ModelAssignment] = (),
     parts: int = 1,
+    protocol: str | None = None,
+    verifiers: int | None = None,
 ) -> tuple[Panel, list[str]]:
     """Apply the level profile, then the explicit options as overrides (FR-009, spec edge case).
 
     An option counts as an override only when it differs from the profile's value, so that a runner fallback
-    that repeats the recorded panel records no override.
+    that repeats the recorded panel records no override. At a verify level, rebuttal rounds of 1 or more ask for
+    a debate, so they select the debate protocol unless `protocol` is given (spec 009).
     """
     profile = LEVEL_PROFILES[choice.level]
     ids = [p.id for p in available]
@@ -2773,21 +2952,32 @@ def configure_level_panel(
         if list(dict.fromkeys(perspectives)) != profile_ids:
             overrides.append("perspectives")
         requested = list(perspectives)
-    if rounds is not None and rounds != profile.rebuttal_rounds:
+    chosen_protocol = protocol or profile.protocol
+    if protocol is None and profile.protocol == Protocol.VERIFY and rounds is not None and rounds >= 1:
+        chosen_protocol = Protocol.DEBATE
+    if chosen_protocol != profile.protocol:
+        overrides.append("protocol")
+    default_rounds = profile.rebuttal_rounds if chosen_protocol == profile.protocol else DEFAULT_ROUNDS
+    if rounds is not None and rounds != default_rounds and chosen_protocol == Protocol.DEBATE:
         overrides.append("rounds")
     if batches is not None and batches != profile.max_batches:
         overrides.append("batches")
+    if verifiers is not None and verifiers != profile.verifiers and chosen_protocol == Protocol.VERIFY:
+        overrides.append("verifiers")
     panel, notices = configure_panel(
         available,
         requested,
-        profile.rebuttal_rounds if rounds is None else rounds,
+        default_rounds if rounds is None else rounds,
         profile.max_batches if batches is None else batches,
         runner,
         models,
+        protocol=chosen_protocol,
+        verifiers=profile.verifiers if verifiers is None else verifiers,
     )
     panel = dataclasses.replace(
         panel, level=choice.level, level_source=choice.source, overrides=tuple(overrides), parts=parts
     )
+    panel = dataclasses.replace(panel, estimate=estimate_agents(panel, parts))
     return panel, notices
 
 
@@ -2801,6 +2991,7 @@ def cmd_panel(args: argparse.Namespace) -> int:
     state = load_panel_state(run_dir)
     available = [default_perspective(pid, name) for pid, name in DEFAULT_PERSPECTIVES]
     available += [e.perspective for e in state.extensions if e.status == ExtensionStatus.SELECTED and e.perspective]
+    available.append(default_perspective(*GENERALIST))
     requested = [p for item in (args.perspectives or []) for p in item.split(",") if p]
     models = []
     for item in args.models or []:
@@ -2819,6 +3010,8 @@ def cmd_panel(args: argparse.Namespace) -> int:
         args.runner,
         models,
         parts=len(parts.parts) if parts is not None else 1,
+        protocol=args.protocol,
+        verifiers=args.verifiers,
     )
     state = dataclasses.replace(state, panel=panel, notices=tuple(notices))
     write_json(run_dir / "panel.json", state.to_json(), args.dry_run)
@@ -2973,6 +3166,63 @@ def cmd_merge(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def auto_ruling(
+    batch: Batch, clusters: Sequence[Cluster], candidates: dict[str, CandidateFinding]
+) -> MergeRuling | None:
+    """The merge ruling of a batch whose clusters all have one member, or None (spec 009).
+
+    A single-member cluster needs no moderator: its merged finding is its candidate, under the cluster's
+    suggested identifier. A batch with any cluster of several members goes to the moderator.
+    """
+    by_id = {cluster.id: cluster for cluster in clusters}
+    findings = []
+    for cluster_id in batch.clusters:
+        cluster = by_id[cluster_id]
+        if len(cluster.members) != 1:
+            return None
+        candidate = candidates[cluster.members[0]]
+        findings.append(
+            MergedFinding(
+                id=cluster.suggested_finding_id,
+                members=(candidate.id,),
+                raised_by=(candidate.raised_by,),
+                batch=batch.batch,
+                file=candidate.file,
+                line_start=candidate.line_start,
+                line_end=candidate.line_end,
+                dimension=candidate.dimension,
+                severity=candidate.severity,
+                summary=candidate.summary,
+                trigger=candidate.trigger,
+                wrong_output=candidate.wrong_output,
+                fix=candidate.fix,
+            )
+        )
+    return MergeRuling(batch=batch.batch, findings=tuple(findings))
+
+
+def cmd_auto_merge(args: argparse.Namespace) -> int:
+    """Write the merge ruling of every batch that needs no moderator; print which batches do (spec 009).
+
+    Only the verify protocol merges automatically; in a debate every batch is listed under `moderator`.
+    """
+    run_dir, _info = load_run(args.run)
+    panel, _state = load_panel(run_dir)
+    candidates = {f.id: f for m in load_candidates(run_dir) for f in m.findings}
+    plan = merge_plan(list(candidates.values()), panel.max_batches)
+    written, moderator = [], []
+    for batch in plan.batches:
+        # A debate keeps the feature 007 merge: the moderator rules on every batch.
+        ruling = auto_ruling(batch, plan.clusters, candidates) if panel.protocol == Protocol.VERIFY else None
+        if ruling is None:
+            moderator.append(batch.batch)
+            continue
+        write_json(run_dir / "merge" / f"batch-{batch.batch}.json", ruling.to_json(), args.dry_run)
+        written.append(batch.batch)
+    print(dumps({"written": written, "moderator": moderator}), end="")
+    return EXIT_OK
+
+
 def cmd_debate_status(args: argparse.Namespace) -> int:
     run_dir, _info = load_run(args.run)
     if args.round < 1:
@@ -3060,7 +3310,9 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         perspective = field(message, "perspective", "unknown")
         part = field(message, "part", None)
         if part is None:
-            accept("candidate-findings", message, [(perspective, "id")], "candidates/{}.json", f"{perspective} candidates")
+            accept(
+                "candidate-findings", message, [(perspective, "id")], "candidates/{}.json", f"{perspective} candidates"
+            )
         else:
             accept(
                 "candidate-findings",
@@ -3090,6 +3342,20 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         batch = field(message, "batch", 0)
         accept(
             "moderator-notes", message, [(batch, "batch")], "notes/batch-{}.json", f"moderator notes (batch {batch})"
+        )
+    for entry in result.get("verify", []):
+        message = entry.get("message") if isinstance(entry, dict) else None
+        if message is None:
+            notices.append("A verification entry without a message was dropped.")
+            continue
+        batch = field(message, "batch", entry.get("batch", 0))
+        verifier = field(message, "verifier", "unknown")
+        accept(
+            "verification",
+            message,
+            [(batch, "batch"), (verifier, "id")],
+            "verify/batch-{}/{}.json",
+            f"{verifier} verification (batch {batch})",
         )
     for role in result.get("dropped", []):
         notices.append(f"The output of {role} was dropped after failing validation twice.")
@@ -3320,6 +3586,144 @@ def adjudicate(
     )
 
 
+def load_verifications(run_dir: Path) -> dict[int, list[VerdictRecord]]:
+    """Every verifier's verdicts, per batch (`verify/batch-<b>/<verifier>.json`), tagged with the verifier."""
+    verdicts: dict[int, list[VerdictRecord]] = {}
+    for path in sorted((run_dir / "verify").glob("batch-*/*.json")):
+        data = read_json(path)
+        require_valid("verification", data, str(path))
+        message = VerificationMessage.from_json(data)
+        batch = int(path.parent.name.split("-", 1)[1])
+        verdicts.setdefault(batch, []).extend(
+            dataclasses.replace(v, verifier=message.verifier) for v in message.verdicts
+        )
+    return verdicts
+
+
+def verify_outcome(finding: MergedFinding, verdicts: Sequence[VerdictRecord]) -> Outcome:
+    """The label of a merged finding from its raisers and its verifiers' verdicts (spec 009, protocol.md 5).
+
+    Rules, in order: no verdict gives `contested`; more refutations than confirmations reject the finding
+    (`refuted`); a finding without a concrete trigger is at most `contested`; every verifier confirming, with at
+    least two independent supporters among raisers and confirming verifiers, gives `consensus`; more
+    confirmations than refutations give `majority`; otherwise `contested`. A confirmation whose evidence is `none`
+    counts as uncertain.
+    """
+    if not verdicts:
+        return Outcome(AgreementLabel.CONTESTED, None)
+    confirms = sum(1 for v in verdicts if v.effective == Verdict.CONFIRM)
+    refutes = sum(1 for v in verdicts if v.effective == Verdict.REFUTE)
+    if refutes > confirms:
+        return Outcome(None, "refuted")
+    if finding.trigger is None or finding.wrong_output is None:
+        return Outcome(AgreementLabel.CONTESTED, None)
+    if confirms == len(verdicts) and len(finding.raised_by) + confirms >= 2:
+        return Outcome(AgreementLabel.CONSENSUS, None)
+    if confirms > refutes:
+        return Outcome(AgreementLabel.MAJORITY, None)
+    return Outcome(AgreementLabel.CONTESTED, None)
+
+
+def adjudicate_verified(
+    rulings: Sequence[MergeRuling],
+    verifications: dict[int, list[VerdictRecord]],
+    candidate_severity: dict[str, str],
+) -> Adjudication:
+    """Adjudicate a verify-protocol run: labels from verdicts, notes from the verifiers' arguments."""
+    findings: list[Finding] = []
+    rejected: list[RejectedFinding] = []
+    kept: list[VerdictRecord] = []
+    notices: list[str] = []
+    errors: list[str] = []
+    seen: set[str] = set()
+    for ruling in rulings:
+        batch_verdicts = verifications.get(ruling.batch, [])
+        for merged in ruling.findings:
+            if merged.id in seen:
+                errors.append(f"merged finding {merged.id} appears in more than one merge ruling")
+                continue
+            seen.add(merged.id)
+            member_ranks = [Severity.RANK[candidate_severity[m]] for m in merged.members if m in candidate_severity]
+            if member_ranks and Severity.RANK[merged.severity] > min(member_ranks) and not merged.severity_reason:
+                errors.append(
+                    f"{merged.id}: severity lowered below the highest member severity without severity_reason"
+                )
+            verdicts = [v for v in batch_verdicts if v.finding_id == merged.id]
+            kept.extend(verdicts)
+            if not verdicts:
+                notices.append(f"{merged.id} was not verified: no verifier recorded a verdict on it.")
+            outcome = verify_outcome(merged, verdicts)
+            if outcome.label is None:
+                refuting = next((v for v in verdicts if v.effective == Verdict.REFUTE), None)
+                rejected.append(
+                    RejectedFinding(
+                        finding_id=merged.id,
+                        summary=merged.summary,
+                        raised_by=merged.raised_by,
+                        reason=refuting.reason if refuting else (outcome.rejection or "refuted"),
+                    )
+                )
+                continue
+            concrete = merged.trigger is not None and merged.wrong_output is not None
+            extra: dict[str, Any] = {}
+            if outcome.label == AgreementLabel.CONTESTED:
+                supporting = next((v for v in verdicts if v.effective != Verdict.REFUTE), None)
+                opposing = next((v for v in verdicts if v.effective != Verdict.CONFIRM), None)
+                none = "No verifier recorded a verdict."
+                extra["argument_for"] = supporting.argument_for if supporting else none
+                extra["argument_against"] = opposing.argument_against if opposing else none
+                extra["deciding_assumption"] = next(
+                    (
+                        v.deciding_assumption
+                        for v in sorted(verdicts, key=lambda v: v.effective != Verdict.UNCERTAIN)
+                        if v.deciding_assumption
+                    ),
+                    None,
+                )
+            if not concrete:
+                extra["no_trigger_reason"] = next(
+                    (v.no_trigger_reason for v in verdicts if v.no_trigger_reason),
+                    "No member supplied a concrete trigger.",
+                )
+            findings.append(
+                Finding(
+                    id=merged.id,
+                    members=merged.members,
+                    raised_by=merged.raised_by,
+                    batch=merged.batch,
+                    file=merged.file,
+                    line_start=merged.line_start,
+                    line_end=merged.line_end,
+                    dimension=merged.dimension,
+                    severity=merged.severity,
+                    summary=merged.summary,
+                    trigger=merged.trigger,
+                    wrong_output=merged.wrong_output,
+                    fix=merged.fix,
+                    label=outcome.label,
+                    severity_reason=merged.severity_reason,
+                    **extra,
+                )
+            )
+    if errors:
+        raise ValidationFailure("adjudication found protocol violations", errors)
+    merged_members = {member for ruling in rulings for merged in ruling.findings for member in merged.members}
+    unmerged = sorted(set(candidate_severity) - merged_members)
+    if unmerged:
+        notices.append(
+            "These candidate findings were not merged into any verified finding and are not reported: "
+            + ", ".join(unmerged)
+            + "."
+        )
+    return Adjudication(
+        findings=tuple(order_findings(findings)),
+        rejected=tuple(rejected),
+        records=(),
+        notices=tuple(notices),
+        verdicts=tuple(kept),
+    )
+
+
 def order_findings(findings: Iterable[Finding]) -> list[Finding]:
     return sorted(
         findings,
@@ -3331,13 +3735,16 @@ def cmd_adjudicate(args: argparse.Namespace) -> int:
     run_dir, _info = load_run(args.run)
     panel, _state = load_panel(run_dir)
     candidate_severity = {f.id: f.severity for m in load_candidates(run_dir) for f in m.findings}
-    result = adjudicate(
-        load_merge_rulings(run_dir),
-        load_debate(run_dir),
-        load_notes(run_dir),
-        [p.id for p in panel.perspectives],
-        candidate_severity,
-    )
+    if panel.protocol == Protocol.VERIFY:
+        result = adjudicate_verified(load_merge_rulings(run_dir), load_verifications(run_dir), candidate_severity)
+    else:
+        result = adjudicate(
+            load_merge_rulings(run_dir),
+            load_debate(run_dir),
+            load_notes(run_dir),
+            [p.id for p in panel.perspectives],
+            candidate_severity,
+        )
     write_json(run_dir / "adjudication.json", result.to_json(), args.dry_run)
     if not args.dry_run:
         counts = {label: sum(1 for f in result.findings if f.label == label) for label in AgreementLabel.VALUES}
@@ -3415,11 +3822,17 @@ def build_report(
     if adjudication is not None:
         notices.extend(adjudication.notices)
         in_scope = {f.path for f in scope.files}
+        lengths = dict(context.file_lines)
         for finding in adjudication.findings:
-            if finding.file in in_scope:
-                findings.append(finding)
-            else:
+            if finding.file not in in_scope:
                 notices.append(f"Finding {finding.id} on {finding.file} lies outside the scope and was not reported.")
+            elif finding.file in lengths and finding.line_start > lengths[finding.file]:
+                notices.append(
+                    f"Finding {finding.id} cites lines {finding.line_start}-{finding.line_end} of {finding.file}, "
+                    f"which has {lengths[finding.file]} lines, and was not reported."
+                )
+            else:
+                findings.append(finding)
         rejected = list(adjudication.rejected)
     checked = [item for message in candidates for item in message.checked_items]
     checked.sort(key=lambda c: (c.file, c.line_start, c.line_end, c.dimension))
@@ -3529,9 +3942,20 @@ def render_markdown(report: ReviewReport) -> str:
     lines += ["", parts]
     lines += ["", "## Panel", "", f"Effort level: {report.level} ({report.level_source}).", ""]
     for perspective in panel.perspectives:
-        lines.append(f"- {perspective.name} (`{perspective.id}`, source `{perspective.source}`)")
-    lines.append("- Defender and moderator")
-    lines += ["", f"Rebuttal rounds: {panel.rebuttal_rounds}. Debate batches: at most {panel.max_batches}."]
+        focus = f"; focus: {', '.join(perspective.dimensions)}" if perspective.dimensions else ""
+        lines.append(f"- {perspective.name} (`{perspective.id}`, source `{perspective.source}`{focus})")
+    if panel.protocol == Protocol.VERIFY:
+        verifiers = "1 verifier" if panel.verifiers == 1 else f"{panel.verifiers} independent verifiers"
+        lines.append(f"- {verifiers} per batch, and a moderator for clusters of several candidates")
+        lines += ["", f"Protocol: verify. Batches: at most {panel.max_batches}."]
+    else:
+        lines.append("- Defender and moderator")
+        lines += [
+            "",
+            f"Protocol: debate. Rebuttal rounds: {panel.rebuttal_rounds}. Debate batches: at most {panel.max_batches}.",
+        ]
+    if panel.estimate is not None:
+        lines.append(f"Panel agents: {panel.estimate.minimum} to {panel.estimate.maximum}, estimated before the run.")
     if panel.overrides:
         lines.append(f"Overridden from the {report.level} profile: {', '.join(panel.overrides)}.")
     if panel.models:
@@ -3608,9 +4032,15 @@ def render_markdown(report: ReviewReport) -> str:
 
 
 def cmd_report(args: argparse.Namespace) -> int:
-    run_dir, _info = load_run(args.run)
+    run_dir, info = load_run(args.run)
     scope = load_scope(run_dir)
     _panel, state = load_panel(run_dir)
+    read = scope_reader(Path(info.project), scope)
+    file_lines = []
+    for scoped in scope.files:
+        data = read(scoped.path)
+        if data is not None:
+            file_lines.append((scoped.path, count_lines(data)))
     adjudication_path = run_dir / "adjudication.json"
     adjudication = Adjudication.from_json(read_json(adjudication_path)) if adjudication_path.is_file() else None
     if adjudication is None and scope.files:
@@ -3624,6 +4054,7 @@ def cmd_report(args: argparse.Namespace) -> int:
         max_findings=arguments.max_findings if arguments else None,
         notes=arguments.notes if arguments else (),
         parts=derive_part_status(run_dir, load_parts(run_dir), state.panel),
+        file_lines=tuple(file_lines),
     )
     report = build_report(scope, state, adjudication, candidates, load_notices(run_dir), context)
     data = report.to_json()
@@ -3733,6 +4164,10 @@ def build_parser() -> argparse.ArgumentParser:
     panel.add_argument("--perspectives", action="append", help="perspective ids, comma-separated or repeated")
     panel.add_argument("--rounds", type=int, help=f"rebuttal rounds ({MIN_ROUNDS} to {MAX_ROUNDS})")
     panel.add_argument("--batches", type=int, help=f"maximum debate batches ({MIN_BATCHES} to {MAX_BATCHES})")
+    panel.add_argument(
+        "--protocol", choices=Protocol.VALUES, help="verify or debate (default: the level's; rounds >= 1 select debate)"
+    )
+    panel.add_argument("--verifiers", type=int, help=f"verifiers per batch ({MIN_VERIFIERS} to {MAX_VERIFIERS})")
     panel.add_argument("--runner", required=True, choices=Runner.VALUES)
     panel.add_argument("--models", action="append", help="ROLE=MODEL (Workflow runner only; repeatable)")
 
@@ -3744,6 +4179,7 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("file")
 
     add("merge", cmd_merge, "print location clusters grouped into debate batches", dry_run=False)
+    add("auto-merge", cmd_auto_merge, "write the merge rulings of batches whose clusters each have one member")
     status = add(
         "debate-status", cmd_debate_status, "print whether a batch's debate stops and whom to call next", dry_run=False
     )

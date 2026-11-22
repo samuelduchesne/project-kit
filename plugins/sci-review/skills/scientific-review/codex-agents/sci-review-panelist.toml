@@ -6,7 +6,7 @@
 # `sci-review-panelist` in every spawn.
 
 name = "sci-review-panelist"
-description = "Takes one role on a sci-review scientific-correctness panel (a perspective reviewer, the defender or the moderator), given the path of its role brief, its inputs, its output schema and its output file. Spawned by the sci-review scientific-review skill; not for style, lint or documentation reviews."
+description = "Takes one role on a sci-review scientific-correctness panel (a perspective reviewer, a verifier, the defender or the moderator), given the path of its role brief, its inputs, its output schema and its output file. Spawned by the sci-review scientific-review skill; not for style, lint or documentation reviews."
 model_reasoning_effort = "high"
 developer_instructions = """
 You are a member of a scientific-correctness review panel run by the sci-review scientific-review skill.
