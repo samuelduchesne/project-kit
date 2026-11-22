@@ -37,9 +37,35 @@ function str(v) {
   return typeof v === 'string' && v.trim() ? v.trim() : null
 }
 
-const rawArgs = (typeof args === 'string') ? { focus: args } : (args || {})
+function has(obj, key) {
+  return typeof key === 'string' && Object.prototype.hasOwnProperty.call(obj, key)
+}
 
-const levelName = LEVELS[rawArgs.level] ? rawArgs.level : 'high'
+const LEVEL_WORDS = ['low', 'medium', 'high', 'xhigh', 'max']
+
+// A string `args` comes from a typed command. Read it with the skill's grammar
+// (level, --focus, --categories, --max-findings, refs or paths). A string with no
+// level word and no flag is a bare topic, as before.
+function parseArgString(text) {
+  const tokens = (text.match(/"[^"]*"|'[^']*'|\S+/g) || []).map(t => t.replace(/^(["'])(.*)\1$/, '$2'))
+  const isGrammar = tokens.some(t => t.startsWith('--') || LEVEL_WORDS.indexOf(t) !== -1)
+  if (!isGrammar) return text.trim() ? { focus: text.trim() } : {}
+  const out = { targets: [] }
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i]
+    if (LEVEL_WORDS.indexOf(t) !== -1) out.level = t
+    else if (t === '--focus') out.focus = tokens[++i]
+    else if (t === '--categories') out.categories = (tokens[++i] || '').split(',').map(s => s.trim()).filter(Boolean)
+    else if (t === '--max-findings') out.maxFindings = tokens[++i]
+    else if (t === '--comment' || t === '--fix') out.ignoredFlags = (out.ignoredFlags || []).concat(t)
+    else if (!t.startsWith('--')) out.targets.push(t)
+  }
+  return out
+}
+
+const rawArgs = (typeof args === 'string') ? parseArgString(args) : (args || {})
+
+const levelName = has(LEVELS, rawArgs.level) ? rawArgs.level : 'high'
 const level = LEVELS[levelName]
 
 // maxFindings: a positive number, 'all', or absent (the level's default).
@@ -55,9 +81,11 @@ const scope = {
   paths: toList(rawArgs.paths),
   focus: str(rawArgs.focus),
   categories: requestedCategories.filter(c => DRIFT_CATEGORIES.indexOf(c) !== -1),
+  // Refs or paths typed in a string command; the map stage tells them apart.
+  targets: toList(rawArgs.targets),
 }
 
-const isScoped = Boolean(scope.baseline || scope.paths.length || scope.focus || scope.categories.length)
+const isScoped = Boolean(scope.baseline || scope.paths.length || scope.focus || scope.categories.length || scope.targets.length)
 
 function scopeBlock(resolvedBaseline) {
   if (!isScoped) return ''
@@ -66,7 +94,10 @@ function scopeBlock(resolvedBaseline) {
   if (scope.paths.length) lines.push(`- Paths: ${JSON.stringify(scope.paths)}. Keep a unit only if its changed code OR its docPaths fall under one of these.`)
   if (scope.focus) lines.push(`- Topic focus: "${scope.focus}". Drop anything unrelated.`)
   if (scope.categories.length) lines.push(`- Drift categories: ${JSON.stringify(scope.categories)}. Report no other category.`)
-  return lines.join('\n') + '\n'
+  if (scope.targets.length && !resolvedBaseline) {
+    lines.push(`- Typed targets: ${JSON.stringify(scope.targets)}. Each one that exists as a file or directory (\`test -e\`) is a path constraint, applied as above; the first other one is the baseline ref, resolved as a caller-named baseline.`)
+  }
+  return lines.join('\n') + '\n\n'
 }
 
 // ---------------------------------------------------------------------------
@@ -228,7 +259,7 @@ function verifyChecklist() {
 function verifyBatchPrompt(findings, map) {
   return `You are a VERIFIER in a documentation review. Try to refute each finding below. Range: \`${map.baseline}\` plus uncommitted work. Read the real files; do not trust the summaries. When uncertain, mark it not real.
 
-${verifyChecklist()}
+${scopeBlock(map.baseline)}${verifyChecklist()}
 
 ${findings.map((f, i) => findingText(f, i)).join('\n\n')}
 
@@ -238,7 +269,7 @@ Return one verdict per finding, using its number as index.`
 function verifyOnePrompt(f, map) {
   return `You are a VERIFIER in a documentation review. Try to refute ONE finding. Range: \`${map.baseline}\` plus uncommitted work. Read the real files; do not trust the summary. When uncertain, real=false.
 
-${verifyChecklist()}
+${scopeBlock(map.baseline)}${verifyChecklist()}
 
 ${findingText(f)}`
 }
@@ -246,7 +277,7 @@ ${findingText(f)}`
 function verifyLensPrompt(f, lens, map) {
   return `You are a VERIFIER in a documentation review. Test ONE finding through ONE lens. Range: \`${map.baseline}\` plus uncommitted work. Read the real files. When uncertain, real=false.
 
-Lens: ${LENS_TEXT[lens]}
+${scopeBlock(map.baseline)}Lens: ${LENS_TEXT[lens]}
 
 ${findingText(f)}`
 }
@@ -256,6 +287,26 @@ ${findingText(f)}`
 // ---------------------------------------------------------------------------
 
 const incomplete = []
+// Unit ids that already have an incomplete entry, matched exactly.
+const failedUnits = new Set()
+// Candidate findings cut by the per-unit limit before verification.
+let truncated = 0
+
+function markUnitFailed(id, message) {
+  failedUnits.add(id)
+  incomplete.push(message)
+}
+
+// A map built by the caller is not schema-checked, so normalise its units.
+function normaliseUnits(units) {
+  return units.filter(u => u && typeof u === 'object').map((u, i) => ({
+    id: str(u.id) || `unit-${i + 1}`,
+    codeArea: str(u.codeArea) || '(not stated)',
+    changedFilesSummary: str(u.changedFilesSummary) || '(not stated)',
+    docPaths: toList(u.docPaths),
+    driftCategories: toList(u.driftCategories).filter(c => DRIFT_CATEGORIES.indexOf(c) !== -1),
+  }))
+}
 
 function report(findings, map, note) {
   const ranked = findings.slice().sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity])
@@ -268,8 +319,9 @@ function report(findings, map, note) {
     lastTag: map ? (map.lastTag || null) : null,
     findings: delivered,
     withheld,
+    truncated,
     coverageNote: map
-      ? `Level ${levelName}. Baseline ${map.baseline} (${map.scopeMode}). ${map.scopeNote || ''} Units: ${(map.reviewUnits || []).map(u => u.id).join(', ') || 'none'}. Skipped auto-generated: ${JSON.stringify(map.skippedAutogen || [])}.${map.outOfScopeNote ? ` Out of scope: ${map.outOfScopeNote}` : ''}`
+      ? `Level ${levelName}. Baseline ${map.baseline} (${map.scopeMode}). ${map.scopeNote || ''} Units: ${(map.reviewUnits || []).map(u => u.id).join(', ') || 'none'}. Skipped auto-generated: ${JSON.stringify(map.skippedAutogen || [])}.${map.outOfScopeNote ? ` Out of scope: ${map.outOfScopeNote}` : ''}${truncated ? ` ${truncated} candidate finding(s) beyond the per-unit limit of ${level.perUnitFindings} were not verified.` : ''}`
       : '',
     incomplete: incomplete.slice().sort(),
     note,
@@ -297,10 +349,14 @@ async function verifyUnit(findings, unit, map) {
   if (level.verify === 'unit') {
     const res = await agent(verifyBatchPrompt(findings, map), { schema: BATCH_VERDICT_SCHEMA, phase: 'Verify', label: `verify:${unit.id}` })
     if (!res) {
-      incomplete.push(`verification of unit ${unit.id} did not finish; its ${findings.length} finding(s) were dropped`)
+      markUnitFailed(unit.id, `verification of unit ${unit.id} did not finish; its ${findings.length} finding(s) were dropped`)
       return []
     }
+    const answered = new Set(res.verdicts.map(v => v.index))
     const realIdx = new Set(res.verdicts.filter(v => v.real).map(v => v.index))
+    findings.forEach((f, i) => {
+      if (!answered.has(i)) incomplete.push(`the verifier gave no verdict for the finding at ${f.docLocation} (unit ${unit.id}); it was dropped`)
+    })
     return findings.filter((_, i) => realIdx.has(i))
   }
   if (level.verify === 'finding') {
@@ -331,8 +387,11 @@ async function verifyUnit(findings, unit, map) {
 // Orchestration
 // ---------------------------------------------------------------------------
 
-if (rawArgs.level && !LEVELS[rawArgs.level]) {
+if (rawArgs.level && !has(LEVELS, rawArgs.level)) {
   log(`Level "${rawArgs.level}" does not run as a workflow (low and medium run inline); using high.`)
+}
+if (rawArgs.ignoredFlags) {
+  log(`${rawArgs.ignoredFlags.join(' and ')} belong to the project-kit:review-docs skill; this workflow only reports.`)
 }
 
 if (ignoredCategories.length) {
@@ -348,7 +407,7 @@ if (!map) {
   map = await agent(mapPrompt(), { schema: MAP_SCHEMA, label: 'map' })
   if (!map) return report([], null, 'The map stage produced no result.')
 }
-map = { scopeMode: 'explicit', scopeNote: '', lastTag: null, skippedAutogen: [], ...map }
+map = { ...map, scopeMode: map.scopeMode || 'unspecified', scopeNote: map.scopeNote || '', lastTag: map.lastTag || null, skippedAutogen: toList(map.skippedAutogen), reviewUnits: normaliseUnits(map.reviewUnits) }
 
 if (!map.reviewUnits.length) {
   return report([], map, `No doc-relevant code changes in scope (${map.scopeNote || map.baseline}).`)
@@ -362,19 +421,25 @@ const results = await pipeline(
   unit => agent(reviewPrompt(unit, map), { schema: FINDINGS_SCHEMA, phase: 'Review', label: `review:${unit.id}` }),
   (res, unit) => {
     if (!res) {
-      incomplete.push(`review of unit ${unit.id} did not finish`)
+      markUnitFailed(unit.id, `review of unit ${unit.id} did not finish`)
       return []
     }
-    const found = level.perUnitFindings === Infinity ? res.findings : res.findings.slice(0, level.perUnitFindings)
+    const found = res.findings.slice(0, level.perUnitFindings)
+    if (found.length < res.findings.length) {
+      truncated += res.findings.length - found.length
+      log(`Unit ${unit.id}: ${res.findings.length - found.length} candidate(s) beyond the limit of ${level.perUnitFindings} were not verified.`)
+    }
     return verifyUnit(found, unit, map)
   },
 )
 
 results.forEach((r, i) => {
-  if (r === null && !incomplete.some(m => m.indexOf(units[i].id) !== -1)) incomplete.push(`unit ${units[i].id} did not finish`)
+  if (r === null && !failedUnits.has(units[i].id)) markUnitFailed(units[i].id, `unit ${units[i].id} did not finish`)
 })
 
+// Reviewers and verifiers are told the caller's categories; enforce them here too.
 const confirmed = results.filter(Boolean).flat()
+  .filter(f => !scope.categories.length || scope.categories.indexOf(f.category) !== -1)
 log(`${confirmed.length} finding(s) confirmed.${incomplete.length ? ` ${incomplete.length} check(s) incomplete.` : ''}`)
 
 return report(confirmed, map, confirmed.length
