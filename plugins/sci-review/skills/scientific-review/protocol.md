@@ -50,7 +50,7 @@ A merged finding takes the highest severity among its members unless the moderat
 
 ### 5.1 Verify protocol
 
-For each merged finding, count the verdicts of its batch's verifiers: `confirm` (the failure scenario reproduces or follows from the code), `refute` (the code is correct, or the trigger cannot occur) and `uncertain` (the verdict turns on an assumption the code does not settle). The raisers are the perspectives in its `raised_by`, each of which found it independently. The rules are applied in order; the first that matches decides:
+For each merged finding, count the verdicts of its batch's verifiers: `confirm` (the failure scenario was reproduced or traced and no reason the code is correct was found), `refute` (the code is correct, or the trigger cannot occur) and `uncertain` (the verdict turns on an assumption the code does not settle). Each verdict records its `evidence` (`reproduced`, `traced` or `none`) and where the verifier searched for a refutation; a `confirm` whose evidence is `none` counts as `uncertain`. The raisers are the perspectives in its `raised_by`, each of which found it independently. The rules are applied in order; the first that matches decides:
 
 1. **Not verified**: no verifier recorded a verdict. Label `contested`, with a notice.
 2. **Refuted**: more verifiers refute than confirm. The finding is rejected, with the first refuting verifier's reason.

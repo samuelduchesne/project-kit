@@ -32,6 +32,8 @@
       "required": [
         "finding_id",
         "verdict",
+        "evidence",
+        "refutation_search",
         "reason",
         "argument_for",
         "argument_against",
@@ -44,12 +46,25 @@
           "pattern": "^F[0-9]+$"
         },
         "verdict": {
-          "description": "confirm: the failure scenario reproduces or follows from the code. refute: the code is correct, or the scenario cannot occur. uncertain: the verdict turns on an assumption the code does not settle, named in deciding_assumption.",
+          "description": "confirm: the failure scenario was reproduced or traced and no reason the code is correct was found. refute: a documented regime, caller precondition, convention or derivation shows the code is correct, or the trigger cannot occur. uncertain: correctness turns on an assumption the code and its documentation do not settle (named in deciding_assumption), or the scenario could not be established.",
           "enum": [
             "confirm",
             "refute",
             "uncertain"
           ]
+        },
+        "evidence": {
+          "description": "How the verdict was established. reproduced: the trigger was run (python3 -B or node) and its output observed. traced: the trigger was followed line by line through the code, with the lines named in reason. none: neither. A confirm with evidence none counts as uncertain.",
+          "enum": [
+            "reproduced",
+            "traced",
+            "none"
+          ]
+        },
+        "refutation_search": {
+          "description": "Where the verifier looked for a reason the code is correct before deciding: the files, callers, docstrings and conventions read, and what each showed.",
+          "type": "string",
+          "minLength": 1
         },
         "reason": {
           "type": "string",

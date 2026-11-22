@@ -60,6 +60,8 @@ def verification(batch: int, verifier: str, verdicts: dict[str, str]) -> dict:
             {
                 "finding_id": fid,
                 "verdict": kind,
+                "evidence": "reproduced",
+                "refutation_search": "Read the module docstring and the callers.",
                 "reason": f"{verifier} judged {fid} {kind}.",
                 "argument_for": f"{verifier}: the scenario follows from the code.",
                 "argument_against": f"{verifier}: none found.",
@@ -94,6 +96,12 @@ class TestVerifyOutcome(unittest.TestCase):
     def test_no_concrete_scenario_is_at_most_contested(self) -> None:
         self.assertEqual(self.label(merged(concrete=False), "confirm", "confirm"), ("contested", None))
         self.assertEqual(self.label(merged(concrete=False), "refute"), (None, "refuted"))
+
+    def test_confirmation_without_evidence_counts_as_uncertain(self) -> None:
+        unproven = panel.dataclasses.replace(verdict("confirm"), evidence="none")
+        self.assertEqual(panel.verify_outcome(merged(), [unproven]).label, "contested")
+        proven = panel.dataclasses.replace(verdict("confirm", verifier="v2"), evidence="traced")
+        self.assertEqual(panel.verify_outcome(merged(), [unproven, proven]).label, "majority")
 
     def test_unverified_finding_is_contested(self) -> None:
         self.assertEqual(self.label(merged()), ("contested", None))

@@ -692,8 +692,21 @@ class VerdictRecord(Record):
     argument_against: str
     deciding_assumption: str | None
     no_trigger_reason: str | None
+    # How the verdict was established (reproduced, traced or none) and where a refutation was sought.
+    evidence: str = "traced"
+    refutation_search: str = ""
     verifier: str = ""
-    _enums: ClassVar[dict[str, Sequence[str]]] = {"verdict": Verdict.VALUES}
+    _enums: ClassVar[dict[str, Sequence[str]]] = {
+        "verdict": Verdict.VALUES,
+        "evidence": ("reproduced", "traced", "none"),
+    }
+
+    @property
+    def effective(self) -> str:
+        """The verdict as adjudicated: a confirmation with no evidence counts as uncertain (spec 009)."""
+        if self.verdict == Verdict.CONFIRM and self.evidence == "none":
+            return Verdict.UNCERTAIN
+        return self.verdict
 
 
 @dataclass(frozen=True)
@@ -3591,12 +3604,13 @@ def verify_outcome(finding: MergedFinding, verdicts: Sequence[VerdictRecord]) ->
     Rules, in order: no verdict gives `contested`; more refutations than confirmations reject the finding
     (`refuted`); a finding without a concrete trigger is at most `contested`; every verifier confirming, with at
     least two independent supporters among raisers and confirming verifiers, gives `consensus`; more
-    confirmations than refutations give `majority`; otherwise `contested`.
+    confirmations than refutations give `majority`; otherwise `contested`. A confirmation whose evidence is `none`
+    counts as uncertain.
     """
     if not verdicts:
         return Outcome(AgreementLabel.CONTESTED, None)
-    confirms = sum(1 for v in verdicts if v.verdict == Verdict.CONFIRM)
-    refutes = sum(1 for v in verdicts if v.verdict == Verdict.REFUTE)
+    confirms = sum(1 for v in verdicts if v.effective == Verdict.CONFIRM)
+    refutes = sum(1 for v in verdicts if v.effective == Verdict.REFUTE)
     if refutes > confirms:
         return Outcome(None, "refuted")
     if finding.trigger is None or finding.wrong_output is None:
@@ -3638,7 +3652,7 @@ def adjudicate_verified(
                 notices.append(f"{merged.id} was not verified: no verifier recorded a verdict on it.")
             outcome = verify_outcome(merged, verdicts)
             if outcome.label is None:
-                refuting = next((v for v in verdicts if v.verdict == Verdict.REFUTE), None)
+                refuting = next((v for v in verdicts if v.effective == Verdict.REFUTE), None)
                 rejected.append(
                     RejectedFinding(
                         finding_id=merged.id,
@@ -3651,15 +3665,15 @@ def adjudicate_verified(
             concrete = merged.trigger is not None and merged.wrong_output is not None
             extra: dict[str, Any] = {}
             if outcome.label == AgreementLabel.CONTESTED:
-                supporting = next((v for v in verdicts if v.verdict != Verdict.REFUTE), None)
-                opposing = next((v for v in verdicts if v.verdict != Verdict.CONFIRM), None)
+                supporting = next((v for v in verdicts if v.effective != Verdict.REFUTE), None)
+                opposing = next((v for v in verdicts if v.effective != Verdict.CONFIRM), None)
                 none = "No verifier recorded a verdict."
                 extra["argument_for"] = supporting.argument_for if supporting else none
                 extra["argument_against"] = opposing.argument_against if opposing else none
                 extra["deciding_assumption"] = next(
                     (
                         v.deciding_assumption
-                        for v in sorted(verdicts, key=lambda v: v.verdict != Verdict.UNCERTAIN)
+                        for v in sorted(verdicts, key=lambda v: v.effective != Verdict.UNCERTAIN)
                         if v.deciding_assumption
                     ),
                     None,
