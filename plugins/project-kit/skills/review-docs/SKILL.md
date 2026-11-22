@@ -1,95 +1,145 @@
 ---
 name: review-docs
 description: >-
-  Review user-facing documentation against a scoped code diff to find misalignments: stale signatures, renamed flags, changed config fields, broken examples, undocumented features. Defaults to the current branch's own diff (the PR diff) and accepts a narrower scope: a git range, specific paths, a topic, or a drift category. Use this skill whenever you've made code changes and want to check if docs are still accurate, when reviewing a PR or branch, before a release, or when the user asks to audit documentation. Also trigger when the user says "check docs", "docs review", "are the docs up to date", "documentation audit", "did I forget to update the docs", or asks to review the docs for a specific PR, branch, release, directory, or feature.
+  Review user-facing documentation against a scoped code diff at an effort level (low|medium|high|xhigh|max) to find misalignments: stale signatures, renamed flags, changed config fields, broken examples, undocumented features. Defaults to the current branch's own diff (the PR diff) and accepts a narrower scope: a git range, specific paths, a topic, or a drift category. Use this skill whenever you've made code changes and want to check if docs are still accurate, when reviewing a PR or branch, before a release, or when the user asks to audit documentation. Also trigger when the user says "check docs", "docs review", "are the docs up to date", "documentation audit", "did I forget to update the docs", or asks to review the docs for a specific PR, branch, release, directory, or feature. Use the max level only when the user, or instructions such as CLAUDE.md or a skill, explicitly ask for it, never on your own judgment: it is the costliest level and starts many reviewer agents.
+argument-hint: "[low|medium|high|xhigh|max] [<ref>|<range>|<path>...] [--focus <topic>] [--categories <a,b>] [--comment] [--fix] [--max-findings <n>|all]"
 ---
 
-# Documentation Review
+# Documentation review
 
-Review hand-written user-facing documentation against code changes to find misalignments: stale API signatures, renamed CLI flags, changed config fields, broken examples, and undocumented new features.
+Review hand-written user-facing documentation against code changes and report misalignments: stale API signatures, renamed CLI flags, changed config fields, broken examples and undocumented features. It works with mkdocs-style docs (mkdocs-material, mkdocstrings, mkdocs-jupyter, `pymdownx.snippets`) and discovers the project's structure on each run.
 
-This runs as a **multi-agent workflow** (`project-kit:review-docs`): one agent resolves the diff baseline, maps the project's docs structure, and builds independent code→docs review units; the units are reviewed in parallel; every finding is confirmed by a 3-lens adversarial verification panel (correctness / doc-accuracy / does-it-actually-mislead) so false positives are dropped; then a synthesis agent produces the severity-ranked report.
+The review works like `/code-review`: an effort level sets how much it spends. `low` and `medium` run in this conversation with no subagents. `high` and `xhigh` launch the `project-kit:review-docs` workflow with a bounded number of agents. Only `max` runs the full adversarial panel.
 
-Works with any project that ships mkdocs-style docs (mkdocs-material, mkdocstrings, mkdocs-jupyter, `pymdownx.snippets`). It discovers the project structure fresh each run, with no hardcoded paths.
+## 1. Arguments
 
-## Prerequisites
+```text
+/project-kit:review-docs [low|medium|high|xhigh|max] [<ref>|<range>|<path>...] [--focus <topic>] [--categories <a,b>] [--comment] [--fix] [--max-findings <n>|all]
+```
 
-This skill requires the `Workflow` tool, which is documented for the Claude Code CLI, desktop app and IDE extensions. The plugin ships the workflow itself in `workflows/review-docs.js`. It is not available in Codex, claude.ai chat or Cowork. If the tool is unavailable or workflows are disabled, state what is missing and stop; for a single-page check, offer to compare that page with the code directly instead.
-
-## Scoping the review
-
-Scope is the single thing most likely to make this report useful or useless. A review scoped to a whole release when the user is looking at one PR buries the handful of findings they can act on under drift that predates their branch and isn't theirs to fix. So read the user's request for scope before launching, and pass it through.
-
-Four independent axes, all optional, all passed via `args`:
-
-| Axis | Type | What it does |
-| --- | --- | --- |
-| `baseline` | string | The git ref or range to diff against. A bare ref (`main`, `v0.3.0`, `abc1234`) becomes `<ref>..HEAD`; `main...HEAD` resolves to the merge-base. |
-| `paths` | string[] | Restrict to these paths. Matches **either** side of the code→docs mapping, so `["docs/cli/"]` and `["src/foo/cli.py"]` both work. |
-| `focus` | string | Freeform topic. Units unrelated to it are dropped. |
-| `categories` | string[] | Subset of `api`, `cli`, `configuration`, `installation`, `behavioral`, `example-notebook`, `missing-docs`. |
-
-**With no `args`, the workflow picks the baseline itself**, preferring the narrower one: if HEAD is on a branch that has diverged from the default branch, it uses `merge-base(default, HEAD)..HEAD`, the branch's own diff. Otherwise it falls back to the most recent tag. Uncommitted work is always included either way. So on a PR branch, launching with no args already does the right thing; you only need `baseline` when the user wants something *other* than that.
-
-### Reading scope out of the request
-
-| The user says | Pass |
+| Argument | Meaning |
 | --- | --- |
-| "review the docs" (on a feature branch) | *(nothing; auto-detects the branch diff)* |
-| "check the docs for this PR" / "just my changes" | *(nothing, or `{ baseline: "main" }` to be explicit)* |
-| "audit the docs before the release" / "since the last release" | `{ baseline: "<latest tag>" }`, or nothing if already on the default branch |
-| "what's drifted since v0.3.0" | `{ baseline: "v0.3.0" }` |
-| "the last 3 commits" | `{ baseline: "HEAD~3" }` |
-| "only the flexshell docs" | `{ paths: ["docs/flexshell/"] }` |
-| "focus on the per-zone assumptions work" | `{ focus: "per-zone modeling assumptions" }` |
-| "are my code examples still valid?" | `{ categories: ["example-notebook", "api"] }` |
-| "did I document the new CLI flags?" | `{ categories: ["cli", "missing-docs"] }` |
+| level | Effort level, section 2. Default `medium`. |
+| ref or range | The baseline: `main`, `v0.3.0`, `HEAD~3`, `main...HEAD`. A bare ref becomes `<ref>..HEAD`. Without one, the baseline is chosen as in section 3. |
+| paths | Restrict to these paths. A path can name either side of the code→docs mapping: `docs/cli/` and `src/foo/cli.py` both work. An argument that exists as a file or directory is a path; otherwise it is a ref. |
+| `--focus` | A topic. Code areas unrelated to it are dropped. |
+| `--categories` | A subset of `api`, `cli`, `configuration`, `installation`, `behavioral`, `example-notebook`, `missing-docs`. |
+| `--comment` | After the report, post the findings on the current branch's open GitHub pull request (section 6). Without an explicit ref, the baseline becomes the merge-base with the pull request's base branch. |
+| `--fix` | After the report, apply the findings to the docs (section 7). |
+| `--max-findings` | Report at most `n` findings, most severe first; `all` removes the limit. The number withheld is stated. |
 
-Combine axes freely: `{ baseline: "main", paths: ["docs/quest-phase-2/"] }` is a normal request.
+Where the host has no argument field, read the same values from the wording of the request:
 
-Don't interrogate the user about scope when their intent is already legible. If it genuinely isn't (say they're on `main` with both uncommitted work and three tags behind, and they just say "check the docs"), ask one short question rather than guessing, since the wrong baseline wastes the whole run.
+| The user says | Read as |
+| --- | --- |
+| "review the docs" (on a feature branch) | nothing; the branch diff is the default |
+| "a quick docs check" | `low` |
+| "a thorough docs review" | `high` |
+| "audit the docs before the release" | the latest tag as baseline |
+| "what's drifted since v0.3.0" | `v0.3.0` |
+| "only the flexshell docs" | `docs/flexshell/` |
+| "focus on the per-zone assumptions work" | `--focus "per-zone modeling assumptions"` |
+| "are my code examples still valid?" | `--categories example-notebook,api` |
+| "did I document the new CLI flags?" | `--categories cli,missing-docs` |
+| "review the docs on my PR and leave comments" | `--comment` |
 
-## How to run it
+Do not question the user about scope when the request already makes it clear. If it does not (on `main`, with uncommitted work and several tags behind, and only "check the docs"), ask one short question, because the wrong baseline wastes the whole run.
 
+## 2. Effort levels
+
+| Level | Where it runs | Reviewers | Verification | Default cap | Agents (typical) |
+| --- | --- | --- | --- | --- | --- |
+| `low` | this conversation | you | you re-read each cited line | 5, critical only | 0 |
+| `medium` | this conversation | you | you re-read each cited line and apply the three checks | 10 | 0 |
+| `high` | workflow | 1 per code area, at most 4 | 1 agent per code area checks all its findings | 15 | ≤ 8 |
+| `xhigh` | workflow | 1 per code area, at most 8 | 1 agent per finding | 25 | 15–30 |
+| `max` | workflow | 1 per code area, no limit | 3 agents per finding, one per check, majority wins | none | 50+ |
+
+The three checks are the same at every level:
+
+1. **Correctness**: the code change exists at the cited line, inside the range or the uncommitted work.
+2. **Doc accuracy**: the doc at the cited line really says the stale thing. For missing docs, the docs really do not cover the feature.
+3. **Misleads**: a reader following the doc would be misled, get a wrong result or hit an error. Pedantry fails this check.
+
+Use `max` only when the user, or instructions such as CLAUDE.md, explicitly ask for it. If you start the review on your own initiative, use `low` or `medium`, and ask before any workflow level.
+
+## 3. Map the review (every level)
+
+Do this yourself, in this conversation, at every level. It is cheap, and the result is passed to the workflow so no agent repeats it.
+
+1. **Baseline.** With an explicit ref, resolve it: a bare ref becomes `<ref>..HEAD`; `A...HEAD` becomes `$(git merge-base A HEAD)..HEAD`. With `--comment` and no ref, find the pull request as in section 6 step 1, run `git fetch origin <pull request base>`, and use `$(git merge-base origin/<pull request base> HEAD)..HEAD`, so the review covers the same diff as the pull request; when there is no pull request, use the rules below. Otherwise prefer the narrower range:
+   - Default branch: `git symbolic-ref --quiet --short refs/remotes/origin/HEAD`, else the first of `origin/main`, `origin/master`, `main`, `master` that exists.
+   - On a branch that has diverged from it (`git rev-list --count <default>..HEAD` > 0): `$(git merge-base <default> HEAD)..HEAD` (scope mode `branch`).
+   - Otherwise the latest tag: `git describe --tags --abbrev=0 HEAD`, range `<tag>..HEAD` (scope mode `tag`).
+
+   Uncommitted work (`git status --short`, `git diff`, `git diff --cached`) is always in scope. Write a one-sentence scope note, such as "the 7 commits on `per-zone-modeling-assumptions` since it branched from `main`, plus uncommitted work".
+2. **Changed code.** `git diff --stat RANGE` and `git log --oneline RANGE`. If only tests changed, report that nothing doc-relevant changed and stop.
+3. **Docs.** Read `mkdocs.yml` (`docs_dir`, `nav`, plugins). Skip auto-generated pages (mostly `:::` mkdocstrings directives), but keep hand-written parts of mixed pages. Snippets and notebooks are hand-written and drift-prone.
+4. **Units.** Group the changed code into areas that map to hand-written docs: CLI entry points → CLI reference; `__init__.py` exports → guides and examples; config models → configuration docs; `pyproject.toml` extras and entry points → installation. For each area, find the doc files with `grep -rl` on the changed names; do not read whole pages yet. Drop areas outside `paths`, `--focus` or `--categories`, and note what was dropped.
+
+## 4. Run the review
+
+### `low` and `medium`: inline
+
+For each unit, read the code diff for its files, then grep its doc files for every renamed or changed symbol, flag, field and default, and read only the matching passages. Check the drift categories that apply:
+
+- **api**: signatures, defaults, renames, moved import paths, deprecated API shown as current.
+- **cli**: commands, flags and defaults added, removed or renamed.
+- **configuration**: fields, types, enum and `Literal` values, defaults.
+- **installation**: extras, minimum Python version, required dependencies.
+- **behavioral**: outputs, error messages, workflow.
+- **example-notebook**: snippets, config examples and notebooks that use old names.
+- **missing-docs**: a user-facing feature with no documentation.
+
+Severity: **critical** when the doc is actively wrong and misleads or errors; **warning** when it is incomplete or stale; **info** when the issue is cosmetic. At `low`, report only critical findings you are sure of. At `medium`, check every candidate against the three checks of section 2 by re-opening the cited code and doc lines, and drop any candidate that fails one.
+
+### `high`, `xhigh` and `max`: workflow
+
+When the user asked for the review, that request satisfies the Workflow opt-in. Launch it with the map from section 3:
+
+```js
+Workflow({ name: "project-kit:review-docs", args: {
+  level: "high",                       // high | xhigh | max
+  maxFindings: 15,                     // optional; a number or "all"
+  focus: "CLI flags",                  // optional
+  categories: ["cli", "missing-docs"], // optional
+  map: {
+    baseline: "a1b2c3d..HEAD",
+    scopeMode: "branch",               // explicit | branch | tag | fallback
+    scopeNote: "the 7 commits on ... plus uncommitted work",
+    lastTag: "v0.3.0",
+    skippedAutogen: ["docs/api/foo.md"],
+    reviewUnits: [{ id: "cli-flags", codeArea: "...", changedFilesSummary: "...",
+                    docPaths: ["docs/cli.md"], driftCategories: ["cli"] }],
+  },
+} })
 ```
-Workflow({ name: "project-kit:review-docs" })                                  // auto-scoped
-Workflow({ name: "project-kit:review-docs", args: { baseline: "v0.3.0" } })     // explicit
-Workflow({ name: "project-kit:review-docs", args: { focus: "CLI flags", categories: ["cli"] } })
-```
 
-When the user invoked this skill or asked for this review, launching it satisfies the Workflow opt-in requirement, so do not ask again. If you invoked the skill on your own initiative, ask before launching, because a run spawns many agents. The workflow does all the git/file work inside its agents; you just launch it and handle the result.
+If `map` is omitted, the workflow builds it with one extra agent. Units beyond the level's limit are merged, not dropped. The Workflow tool is documented for the Claude Code CLI, desktop app and IDE extensions. Where it is unavailable, say so and run the review at `medium` instead.
 
-## What it returns
+The workflow returns `{ level, baseline, scopeNote, findings, withheld, truncated, coverageNote, incomplete, note }`. Each finding has `severity`, `category`, `whatChanged`, `codeLocation`, `docLocation`, `whatsWrong`, `readerImpact` and `suggestedFix`, and findings are sorted most severe first. A non-empty `incomplete` list means some checks did not finish, so an empty result does not prove the docs are aligned.
 
-A structured report object with `critical`, `warning`, and `info` arrays, plus `baseline`, `scopeNote`, `lastTag`, a `coverageNote`, and an optional `note`. Each finding carries: `whatChanged` + `codeLocation`, `docLocation`, `whatsWrong`, and `suggestedFix`.
+## 5. Report
 
-Severity meanings:
+1. **State the scope first**, in one line, from the scope note, so the user can tell whether the run matched their intent.
+2. **Report the findings.** If the `ReportFindings` tool is available, call it once, most severe first, with at most 32 findings (it accepts no more; state how many were left out). Take `file` and `line` from `docLocation`; for a missing-docs finding without a doc line, use the page that should cover the feature at line 1, or `codeLocation` when no page fits. Set `category` to the drift category, `summary` to what is wrong and what changed (with `codeLocation`), `failure_scenario` to the reader impact, and `severity` to `important` for critical and warning findings and `nit` for info findings. Do not also print the findings as text. Otherwise render them grouped by severity, each with what changed, where the doc is wrong, what is wrong and the suggested fix.
+3. Give the level, the number of findings withheld by the cap, the candidates left unverified by the per-area limit (`truncated`), any incomplete checks, and the auto-generated docs that were skipped.
+4. If there are no findings, say so in scope terms ("nothing drifted in this branch's diff"). If changes were dropped as out of scope, offer to rerun wider or at a higher level.
 
-- **Critical**: docs are actively wrong and will mislead users (renames where docs use the old name, removed features still documented, changed defaults, examples that would raise errors, dead import paths).
-- **Warning**: docs are incomplete or stale (new features/CLI commands with no docs, changed behavior not reflected, new extras undocumented).
-- **Info**: minor or cosmetic (help-text wording, could-mention-a-feature, minor version discrepancies, style).
+## 6. Comment
 
-## Presenting the result
+Follow this section only with `--comment`, after the report and before any fix.
 
-1. **Lead with the scope.** State `scopeNote` (or `baseline`) in one line before the findings: "Reviewed the 7 commits on `per-zone-modeling-assumptions` since it branched from `main`, plus uncommitted work." The reader can then tell instantly whether the run matched their intent, and correct it in one message if not, instead of reading findings that were never in scope.
-2. Render the report grouped by severity, most-actionable first. For each finding show what changed (with `codeLocation`), where the doc is wrong (`docLocation`), what's wrong, and the suggested fix.
-3. Include the `coverageNote` so the user knows what was reviewed and which auto-generated docs (mkdocstrings `:::` pages, etc.) were intentionally skipped.
-4. If every severity array is empty, say so clearly; that's a good outcome, and say it *in scope terms* ("nothing drifted in this branch's diff"). Surface the `note`.
-5. If the report mentions changes dropped as out of scope, offer to rerun wider.
+1. **Find the pull request.** Use the open GitHub pull request whose head is the current branch: the GitHub MCP tools if they are available (`list_pull_requests` filtered by head), else `gh pr view --json number,url,baseRefName,headRefOid`. If there is none, or neither tool works (no `gh`, no authentication, no network), say so, keep the printed report, and post nothing. When the head commit of the pull request differs from local `HEAD`, say that comments are anchored to the pushed commit and that unpushed changes are not on the pull request.
+2. **Post one review.** Post every delivered finding in a single pull request review with event `COMMENT`, never `APPROVE` or `REQUEST_CHANGES`: with the GitHub MCP tools, create a pending review, add one inline comment per finding, then submit it; otherwise `gh api repos/{owner}/{repo}/pulls/{number}/reviews` with a `comments` array and `"event": "COMMENT"`.
+3. **Anchor each finding** on the line of `docLocation` when that line is in the pull request diff, on the RIGHT side. Line numbers come from the working tree, so first check that the cited text is on that line at the pull request head (`git show <headRefOid>:<file>`). Do not post a finding that exists only in uncommitted or unpushed work; list it in the reply as not posted. A finding whose doc line is not in the diff (often a stale page the branch did not touch, or `missing-docs`) goes in the review body instead, with its `file:line`. Each comment states the severity and category, what changed (with `codeLocation`), what is wrong and the fix. Add a GitHub `suggestion` block only when `suggestedFix` is the exact replacement text for the anchored lines.
+4. **Post nothing** when there are no findings. Comments are public and outlast the run, so never post findings that `--max-findings` withheld, and never post on a pull request other than the one found in step 1. Give the user the review's URL.
 
-## Hand off
+## 7. Fix
 
-Sort the fixes by what they actually need before offering anything:
+With `--fix`, or when the user accepts the offer, sort the fixes by what they need:
 
-- **Facts** (a renamed flag, a changed default, a dead import, a broken example)
-  are yours. They need the code, and the fix is a correct value, not a better
-  sentence. Apply them directly.
-- **Prose** (a section that now explains the wrong thing, an opening that no
-  longer matches what the feature does, wording that drifted with the behavior)
-  goes to the `project-kit:editor` agent in revise mode, once the facts are right. Give it
-  the corrected facts and the finding, and let it own the wording. If agents are
-  not available, apply the `project-kit:editorial` skill yourself.
+- **Facts** (a renamed flag, a changed default, a dead import, a broken example) need the code, and the fix is a correct value. Apply them directly.
+- **Prose** (a section that now explains the wrong thing, wording that drifted with the behaviour) goes to the `project-kit:editor` agent in revise mode once the facts are right. Give it the corrected facts and the finding. If agents are not available, apply the `project-kit:editorial` skill yourself.
 
-Then offer to turn the rest into a fix plan:
-
-> Here's what I found. Want me to create a plan to fix these? Run `/plan` and I'll use this report as the basis.
+Edit the working tree only; stage and commit nothing. If `ReportFindings` was used, call it again with each finding's `outcome` (`fixed`, `skipped` or `no_change_needed`). Without `--fix`, offer to apply the fixes or to turn the report into a plan.
