@@ -48,3 +48,30 @@ Tokens by phase:
 3. The verifier labelled the contested construct `contested`, with a deciding assumption that matches the fixture's, where the debate had reached consensus. A single verifier asked to name the assumption that settles a finding does this better than a panel that converges.
 4. SC-008 of feature 007 (the panel beats its best single perspective) still fails, as in every recorded run: on this fixture one strong reviewer finds every seeded defect. The fixture does not show what extra finders buy, so `high` and `xhigh` are justified by verification depth, not by recall measured here.
 5. The higher levels and the `sequential`, `claude-agents` and `codex-subagents` runners were not run live. Their logic is covered by unit tests and the Workflow simulation.
+
+## 5. Hard fixture (blind)
+
+`tests/fixtures/sci-review/hard-repo/` was written by a separate agent, which kept the answer key to itself. The orchestrator ran the reviews and passed the reports back; that agent scored them with `score.py` and returned numbers only. The fixture has 26 defects (5, 5, 6, 5, 5 across the five dimensions; 14 Python, 12 TypeScript), 10 look-alikes and 3 contested constructs: 20 files and 1,952 changed lines, reviewed as one part at `medium`.
+
+| Measure | Before (debate) | After (verify) |
+|---------|-----------------|----------------|
+| Agents | 33 | 7 |
+| Subagent tokens | 3,774,014 | 921,248 (24%) |
+| Wall time | 923 s | 494 s |
+| Candidates, then reported findings | 137, then 29 | 80, then 32 |
+| Recall | 25 of 26 | 25 of 26 (the same defect missed) |
+| Recall by dimension | 5/5, 4/5, 6/6, 5/5, 5/5 | 5/5, 4/5, 6/6, 5/5, 5/5 |
+| Recall by language | Python 14/14, TypeScript 11/12 | Python 14/14, TypeScript 11/12 |
+| Look-alikes reported | 0 of 10 | 0 of 10 |
+| Contested constructs labelled contested | 0 of 3 (2 reported, as consensus) | 0 of 3 (2 reported, as consensus) |
+| Findings matching no manifest entry | 2 | 5 |
+| Independent-round false positives removed | 0 of 3 | 0 of 5 |
+| Rejected findings | 0 | 0 |
+
+Independent round, recall and false positives: before, theorist 25/0, numerical analyst 24/1, experimentalist 25/1, methodologist 25/0, computer scientist 25/1; after, theorist 23/1, numerical analyst 24/3, methodologist 25/1.
+
+Findings:
+
+1. The verify design matches the debate on recall and on look-alikes at a quarter of the cost.
+2. Neither the debate nor the single verifier removed a false positive or labelled a contested construct contested: the debate's 24 agents rejected nothing, and the verifier confirmed all 32 findings. A finding that "matches no manifest entry" is not necessarily wrong, since the fixture may hold unseeded defects, but the filtering step demonstrably did no filtering on this fixture.
+3. Even this fixture does not separate configurations by recall: one reviewer finds 25 of 26. What separates them is precision and calibration, where both designs fail.
