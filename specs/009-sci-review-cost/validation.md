@@ -73,5 +73,35 @@ Independent round, recall and false positives: before, theorist 25/0, numerical 
 Findings:
 
 1. The verify design matches the debate on recall and on look-alikes at a quarter of the cost.
-2. Neither the debate nor the single verifier removed a false positive or labelled a contested construct contested: the debate's 24 agents rejected nothing, and the verifier confirmed all 32 findings. A finding that "matches no manifest entry" is not necessarily wrong, since the fixture may hold unseeded defects, but the filtering step demonstrably did no filtering on this fixture.
+2. Neither the debate nor the single verifier rejected anything or labelled a contested construct contested: the debate's 24 agents rejected nothing, and the verifier confirmed all 32 findings. Section 6 shows that the findings matching no manifest entry were not false positives, so there was nothing to reject; the failure is the labelling of contested constructs.
 3. Even this fixture does not separate configurations by recall: one reviewer finds 25 of 26. What separates them is precision and calibration, where both designs fail.
+
+## 6. Revised verifier, and the unmatched findings (blind)
+
+The verifier brief was revised (commit `097b01b`): a fixed procedure per finding (read the context and callers, search for a refutation, reproduce or trace, then decide), `evidence` and `refutation_search` on every verdict, a confirmation without evidence adjudicated as uncertain, and `uncertain` required when correctness turns on an assumption the code does not settle. Run C repeated run B with it.
+
+| Measure | B (verify) | C (revised verifier) |
+|---------|------------|----------------------|
+| Agents, tokens | 7, 921,248 | 7, 916,090 |
+| Recall | 25 of 26 | 25 of 26 (the same defect missed) |
+| Look-alikes reported | 0 of 10 | 0 of 10 |
+| Contested constructs reported, labelled contested | 2, 0 | 3, 0 |
+| Verdicts | 32 confirm | 31 confirm (30 reproduced, 1 traced), 1 uncertain |
+| Labels | 32 consensus | 31 consensus, 1 contested |
+| Panel against best single finder | tie | panel better (25 against 24) |
+
+Independent round of C: theorist 24/26 (2 unmatched), numerical analyst 24/26 (2), methodologist 16/26 (0). The methodologist, focused on statistical integrity, now finds fewer defects outside its focus, as intended.
+
+The fixture's author judged every finding that matched no manifest entry, from its knowledge of the code:
+
+| Run | Unmatched | Genuine unseeded defects | Wrong (code correct) | Debatable | Other |
+|-----|-----------|--------------------------|----------------------|-----------|-------|
+| A (debate) | 2 | 2 | 0 | 0 | |
+| B (verify) | 5 | 3 | 0 | 2 | |
+| C (revised verifier) | 4 | 2 | 0 | 1 | 1 duplicate of a seeded defect, with lines beyond the end of the file |
+
+Conclusions:
+
+1. No run reported a finding on correct code. The verifiers confirmed nearly everything because nearly everything was right; the filtering step was not at fault.
+2. The remaining weakness is calibration: across 4 runs and 2 designs, 0 of the 3 contested constructs on this fixture (and the debate's 0 of 1 on the seeded fixture) were labelled contested, except the verify run on the seeded fixture. Finders and verifiers alike state a confident trigger for a construct whose correctness depends on an undocumented input range.
+3. One finding cited lines beyond the end of its file. `panel.py` should check finding locations against the file length.
