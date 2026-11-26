@@ -16,7 +16,9 @@
       "trigger_class": "user-action",
       "possibly_intended": false,
       "possibly_intended_reason": null,
-      "value_corrections": []
+      "value_corrections": [],
+      "reproduction": null,
+      "extent": []
     },
     {
       "finding_id": "F2",
@@ -39,7 +41,9 @@
           "file": ".env",
           "line": 3
         }
-      ]
+      ],
+      "reproduction": null,
+      "extent": []
     },
     {
       "finding_id": "F3",
@@ -55,7 +59,9 @@
       "trigger_class": "release",
       "possibly_intended": false,
       "possibly_intended_reason": null,
-      "value_corrections": []
+      "value_corrections": [],
+      "reproduction": null,
+      "extent": []
     }
   ]
 }

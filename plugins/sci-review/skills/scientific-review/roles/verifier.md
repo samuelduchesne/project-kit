@@ -11,7 +11,7 @@ Work through these steps for each finding, in order. Do not skip a step because 
 1. **Read the context, not only the lines.** Read the whole function or class that holds the stated lines, the module docstring, and every definition the lines use (constants, units, helpers), following imports into other files. Find the callers with `grep -rn` over the project and read how they call it.
 2. **Search for a refutation.** Look for the thing that would make the code correct: a documented regime of validity or input range, a precondition enforced by a caller or a validation step, a unit or sign convention stated in another file (for example a units module, a data class or a README), an algebraically equivalent form, a deliberate documented choice. Record in `refutation_search` where you looked and what each place showed.
 2b. **Establish practical reach.** When the trigger depends on configuration, a deployment, a release or data provenance, find how that state comes about. Read the project's settings classes and their defaults, environment files (`.env*`, `docker-compose*`), deployment manifests (Kubernetes, Helm, Terraform, Procfile, CI deploy and release workflows), and the release process (version files, changelog, tags). Record in `reach` the files read and what each showed, or "none present". Choose `trigger_class`: `user-action`, `data-condition`, `release`, `operator-change` or `unreachable`. Check every concrete value the finding quotes (a setting, a constant, a version, a count) against the repository, and record each contradiction in `value_corrections` with the quoted value, the actual value, and the file and line that hold it.
-3. **Establish the scenario.** Run the trigger when it can be run in seconds (`python3 -B` or `node`, importing the project's code and writing nothing outside the run directory), and record `evidence: "reproduced"`. Otherwise follow it line by line and name the lines in `reason`, with `evidence: "traced"`. When you can do neither, `evidence` is `"none"`, and the verdict cannot be `confirm`.
+3. **Establish the scenario.** Run the trigger when it can be run in seconds (`python3 -B` or `node`, importing the project's code and writing nothing outside the run directory), and record `evidence: "reproduced"`. Otherwise follow it line by line and name the lines in `reason`, with `evidence: "traced"`. When you ran it, record in `reproduction` the code or command you ran and the output you observed, so that a reader can run it too; a `reproduced` verdict without it is invalid. When the failure depends on the input, also record in `extent` a few runs, input by input, with the expected and the actual result: include ordinary inputs, including ones the code handles correctly, so that a reader sees which inputs fail and which do not. When you can do neither, `evidence` is `"none"`, and the verdict cannot be `confirm`.
 4. **Decide.**
    - `refute` when step 2 found something you can point to (file and line, docstring, convention, derivation) that makes the code correct for the inputs it receives, or when the trigger cannot occur. State it in `reason`.
    - `uncertain` when correctness turns on something the code and its documentation do not settle: an input range, a caller's behaviour, the intended convention, or the regime the method is used in. This includes the case where a competent domain expert could reasonably argue either way. Name the assumption that would settle it in `deciding_assumption`. Use `uncertain` too when the scenario could not be established.
@@ -42,7 +42,12 @@ Work through these steps for each finding, in order. Do not skip a step because 
          "trigger_class": "user-action",
          "possibly_intended": false,
          "possibly_intended_reason": null,
-         "value_corrections": []
+         "value_corrections": [],
+         "reproduction": "python3 -B -c 'import math; print(math.cos(30), math.cos(math.radians(30)))'\n# 0.154 0.866",
+         "extent": [
+           {"input": "tilt 0 deg", "expected": "1.000", "actual": "1.000"},
+           {"input": "tilt 30 deg", "expected": "0.866", "actual": "0.154"}
+         ]
        }
      ]
    }
@@ -52,7 +57,7 @@ Work through these steps for each finding, in order. Do not skip a step because 
 3. `no_trigger_reason`: when the finding's `trigger` or `wrong_output` is null, say why no concrete scenario can be established; otherwise null.
 4. Set `batch` to your batch number and `verifier` to the id your task names (`v1`, `v2`, `v3`).
 5. Do not raise new findings and do not change a finding's location, severity or fix.
-6. Every verdict records `reach`, `trigger_class` and `value_corrections` (empty when none). `possibly_intended_reason` is null unless `possibly_intended` is true.
+6. Every verdict records `reach`, `trigger_class`, `value_corrections` and `extent` (empty when none) and `reproduction` (null unless you ran the trigger). `possibly_intended_reason` is null unless `possibly_intended` is true.
 
 ## Rules
 

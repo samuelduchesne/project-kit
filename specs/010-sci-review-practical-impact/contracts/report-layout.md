@@ -13,7 +13,7 @@ The Scope, Panel, Extensions, Rejected findings, Checked and found correct, Not 
 
 #### F3. Cached results are not recomputed after a release
 
-`medium` (lowered from high) · consensus · algorithmic-correctness · trigger: release
+`high` · consensus · algorithmic-correctness · trigger: release
 
 <context>
 
@@ -24,6 +24,10 @@ The Scope, Panel, Extensions, Rejected findings, Checked and found correct, Not 
 - **Wrong output:** <wrong_output>
 - **Fix:** <fix>
 - **Raised by:** computer-scientist, methodologist
+
+**Extent.**                ← when recorded: | Input | Expected | Actual |
+
+**Reproduction.**          ← when recorded: the code run, in a fenced block
 
 ## Design questions
 
@@ -60,5 +64,5 @@ A run from an earlier version prints `<summary>` as the heading and "Not recorde
 - **Verifier**: step 2b of research R4. Step 4 gains: "Mark `possibly_intended` when the behaviour looks like a deliberate trade-off (stability, caching, tolerance, cost) that the code and its documentation neither state nor rule out; give the reason. When the documentation states the trade-off, refute instead and cite it." The output example gains the new fields.
 - **Defender** (debate): may mark a position possibly intended, with a reason.
 - **Computer scientist**: guiding question 7 of research R7. **`dimensions/algorithmic-correctness.md`**: the stale-caching check of research R7.
-- **`protocol.md`**: section 4 (severity definition and cap); section 5.1 (rule 2a, trigger-class combination, cap); report section (layout above).
+- **`protocol.md`**: section 4 (severity definition; the trigger class never changes it); section 5.1 (rule 2a, trigger-class combination, evidence); report section (layout above).
 - **`SKILL.md`**: the delivery step offers `panel.py issue` for any delivered finding the user wants to file, before `panel.py clean`, and states that nothing is posted.

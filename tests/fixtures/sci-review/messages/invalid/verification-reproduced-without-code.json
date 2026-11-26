@@ -1,0 +1,48 @@
+{
+  "schema": "verification",
+  "message": {
+    "batch": 1,
+    "verifier": "v1",
+    "verdicts": [
+      {
+        "finding_id": "F1",
+        "verdict": "confirm",
+        "evidence": "reproduced",
+        "refutation_search": "Read the function, its callers and the settings module.",
+        "reason": "v1 traced F1.",
+        "argument_for": "v1: the scenario follows from the code.",
+        "argument_against": "v1: none found.",
+        "deciding_assumption": null,
+        "no_trigger_reason": null,
+        "reach": "Meters are entered by users; no setting changes the unit.",
+        "trigger_class": "user-action",
+        "possibly_intended": false,
+        "possibly_intended_reason": null,
+        "value_corrections": [],
+        "reproduction": null,
+        "extent": [
+          {
+            "input": "1 kWh",
+            "expected": "3.412 kBtu",
+            "actual": "0.2931 kBtu"
+          },
+          {
+            "input": "1,000 kWh",
+            "expected": "3,412 kBtu",
+            "actual": "293.1 kBtu"
+          },
+          {
+            "input": "12,500 kWh",
+            "expected": "42,650 kBtu",
+            "actual": "3,663.7 kBtu"
+          },
+          {
+            "input": "0 kWh",
+            "expected": "0 kBtu",
+            "actual": "0 kBtu"
+          }
+        ]
+      }
+    ]
+  }
+}

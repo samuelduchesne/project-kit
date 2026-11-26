@@ -51,19 +51,20 @@ A user reads the review report, or hands one finding to a colleague who has not 
 
 ---
 
-### User Story 2 - Severity reflects how the software is used (Priority: P1)
+### User Story 2 - Findings carry evidence a reader can check (Priority: P1)
 
-A user triaging the report can trust that a `high` finding affects ordinary use, not only a contrived or rare operational state.
+A user reading a finding, or the domain reviewer it is sent to, can check it without trusting the reviewer's prose: the finding shows what was run, what came out, and how the result varies with the input. Severity stays the reviewers' judgement, and nothing lowers it on a guess about how rare a trigger is.
 
-**Why this priority**: The criticised finding was technically sound but presented as urgent when its only realistic trigger was a release. Misjudged severity wastes the reader's attention and erodes trust in every other finding.
+**Why this priority**: A domain reviewer's first reaction to an issue from the review was "valid, if we trust what the LLM has written". More confident prose does not answer that; evidence does. A second issue showed the risk of rarity guesses: it led with its most dramatic case (a minimum equal to the maximum), which invited "unlikely to be hit in practice", although its own exhaustive check found about a third of whole-lot bounds rounded wrongly, a common input for anyone who enters round numbers.
 
-**Independent Test**: Add to the fixture a stale-cache defect whose only trigger is a change of a deployment setting. The review reports it with severity at most `medium` and an in-practice statement naming the release or operator change.
+**Independent Test**: In the practical fixture, a finding the verifier reproduces carries the code it ran with its output, and a table of a few inputs with the expected and actual results, including ordinary inputs; both appear in the report and the issue.
 
 **Acceptance Scenarios**:
 
-1. **Given** a finding whose trigger class is `release` or `operator-change` and none of whose verifiers records a more frequent trigger, **When** it is adjudicated, **Then** its severity is at most `medium`, unless the moderator or the merge records a `severity_reason` for keeping it higher.
-2. **Given** a finding whose trigger class is `user-action` or `data-condition`, **When** it is adjudicated, **Then** its severity is unchanged by this rule.
-3. **Given** a finding whose verifiers record trigger class `unreachable`, **When** it is adjudicated, **Then** it is treated as refuted (the trigger cannot occur).
+1. **Given** a verdict with evidence `reproduced`, **When** it is validated, **Then** it carries the code or command run and its output, or it is rejected as not conforming.
+2. **Given** a finding whose verifiers recorded an extent table, **When** it is reported or rendered as an issue, **Then** the table appears under "Who hits this and when", with ordinary inputs as well as failing ones.
+3. **Given** a finding of any trigger class, **When** it is adjudicated, **Then** its severity is the merged finding's: the trigger class is shown beside it and never changes it.
+4. **Given** a finding whose verifiers record trigger class `unreachable`, **When** it is adjudicated, **Then** it is treated as refuted (the trigger cannot occur).
 
 ---
 
@@ -117,9 +118,9 @@ A user who wants to file a finding in the reviewed project's tracker runs one co
 
 ### Edge Cases
 
-- A finding with no concrete trigger (contested, no trigger reason): its in-practice statement says the trigger could not be established and why; the severity cap does not apply; it can still be rendered as an issue, marked contested.
+- A finding with no concrete trigger (contested, no trigger reason): its in-practice statement says the trigger could not be established and why; it can still be rendered as an issue, marked contested.
 - A repository with no configuration, environment or deployment files: the verifier records that none exist and judges reach from the code and callers alone.
-- Verifiers disagree on trigger class: the report shows the most frequent class recorded by a non-refuting verifier, preferring the more frequent trigger on a tie, and the severity cap uses that class.
+- Verifiers disagree on trigger class: the report shows the most frequent class recorded by a non-refuting verifier, preferring the more frequent trigger on a tie.
 - One verifier marks possibly intended and another confirms: the finding is a design question, with the confirming verifier's argument as the case that it is a defect.
 - A run produced before this feature (no context, in practice or reach): rendering the report or an issue still succeeds, with those sections marked "not recorded".
 - The ownership file names a team, not a person: the team is listed as given.
@@ -130,9 +131,9 @@ A user who wants to file a finding in the reviewed project's tracker runs one co
 ### Functional Requirements
 
 - **FR-001**: Every candidate finding MUST carry a non-empty `headline` (the situation in plain words, used as the issue title), `context` and `in_practice`; every merged and reported finding MUST carry them, a merge of several candidates taking the moderator's wording.
-- **FR-002**: Finder briefs MUST instruct finders to write context without code identifiers where possible, and in practice naming the trigger's actor, rough frequency and whether a wrong result would be noticed.
-- **FR-003**: Severity MUST be defined on realistic use of the software: `high` when the wrong result occurs in ordinary use; `medium` when it occurs only in plausible edge cases, on a rare operational event (a release, an operator change) or prevents reproduction; `low` when latent. Every role brief and protocol.md section 4 MUST use this definition.
-- **FR-004**: Adjudication MUST cap at `medium` the severity of a finding whose reported trigger class is `release` or `operator-change`, unless a `severity_reason` is recorded.
+- **FR-002**: Finder briefs MUST instruct finders to write context without code identifiers where possible, and in practice naming the trigger's actor, rough frequency and whether a wrong result would be noticed. In practice MUST state the triggering conditions in the users' terms, lead with the most common way the defect shows rather than the most dramatic, and cite where the triggering inputs come from (a form, an API schema or validator, a default, seed data, a configuration file), or say that their frequency is unknown.
+- **FR-003**: Severity MUST be defined on ordinary use of the software, judged from what the reviewer read (where the inputs come from, how the project is configured and deployed): `high` when the wrong result occurs in ordinary use; `medium` when it occurs only in plausible edge cases, or prevents reproduction; `low` when latent. Every role brief and protocol.md section 4 MUST use this definition.
+- **FR-004**: Adjudication MUST NOT change a finding's severity on its trigger class; the class is reported beside the severity. A verdict with evidence `reproduced` MUST record the code or command run and its output (`reproduction`), and MAY record an extent table (input, expected, actual); the report and the issue MUST show the first non-refuting verdict's, preferring a reproduced one.
 - **FR-005**: The verifier procedure MUST include a reach step: read the project's configuration, environment, deployment and release files relevant to the trigger, record which were read, the trigger class they support, and any contradiction between a value quoted in the finding and the repository.
 - **FR-006**: A verdict MUST record `reach` and `trigger_class`; a `refute` because the trigger cannot occur MUST use trigger class `unreachable`.
 - **FR-007**: A verdict MAY carry `possibly_intended` with a reason; such a verdict MUST NOT count as a confirmation, and a finding with at least one such verdict and not rejected MUST be reported under "Design questions", not among defects. protocol.md section 5.1 MUST state where this rule sits in the order of rules.
@@ -147,30 +148,32 @@ A user who wants to file a finding in the reviewed project's tracker runs one co
 
 - **Candidate finding** gains `context` and `in_practice`.
 - **Merged finding** and **reported finding** gain `context`, `in_practice`, `trigger_class`, `reach` (the representative verifier's), `possibly_intended` (with reason) and `value_corrections`.
-- **Verdict** gains `reach`, `trigger_class`, `possibly_intended` and `possibly_intended_reason`, and `value_corrections` (quoted value, actual value, file, line).
+- **Verdict** gains `reach`, `trigger_class`, `possibly_intended` and `possibly_intended_reason`, `value_corrections` (quoted value, actual value, file, line), `reproduction` and `extent` (rows of input, expected, actual).
+- **Reported finding** also gains `reproduction` and `extent`.
 - **Issue body**: a markdown file in the run directory, one per rendered finding.
 
 ## Success Criteria *(mandatory)*
 
 - **SC-001**: On the seeded fixture, 100% of reported findings have context and in-practice statements, and a reader shown only those two statements identifies the triggering actor correctly for every finding.
-- **SC-002**: On the fixture's operator-only stale-cache defect, the reported severity is at most `medium` in every run, and the in-practice statement names the release or operator change.
+- **SC-002**: On the practical fixture, every finding with evidence `reproduced` shows the code it ran and its output, and the operator-only stale-cache finding's in-practice statement names the release or the configuration change between deployments and cites the file the setting comes from.
 - **SC-003**: On the fixture's deliberate-cache case, the finding appears under design questions and not among defects in at least 4 of 5 runs.
 - **SC-004**: On the fixture's wrong-quoted-value case, the report never repeats the wrong value without a correction or notice.
 - **SC-005**: Recall of the 16 seeded defects at `medium` is unchanged (16 of 16), no look-alike is reported, and the number of panel agents is unchanged from feature 009.
-- **SC-006**: Re-reviewing the code behind the criticised issue and rendering that finding produces an issue whose first two sections a domain reader can understand without opening the code, that names the release as the realistic trigger, that presents the reuse as a design question or a medium-severity defect, and that suggests the cache's owners, not the algorithm's author.
+- **SC-006**: Re-reviewing the code behind the criticised issue and rendering that finding produces an issue whose first two sections a domain reader can understand without opening the code, that names the release as the realistic trigger, that presents the reuse as a design question or as a defect with checkable evidence, and that suggests the cache's owners, not the algorithm's author.
 - **SC-007**: Every existing sci-review test passes, updated only where it asserts the old severity wording or the old report layout.
 
 ## Assumptions
 
 - Context and in practice are written by the finders, who have already read the code; asking verifiers to write them would duplicate reading. Verifiers check them through reach.
 - Trigger class is a small closed set; finer distinctions belong in the in-practice prose.
-- The severity cap uses the trigger class only for `release` and `operator-change`, which are the cases the criticised finding exposed; other classes keep the reviewer's severity.
+- No rule lowers a severity on how rare a trigger seems. An LLM has no production data; a rule that downgrades on a guessed rarity would systematically suppress real defects. An automatic cap for release and operator-change triggers was built and then removed for this reason: how often releases happen differs between projects, and in the verify protocol most merges have no moderator to record a reason to keep a finding high.
+- How a fix is chosen is left to the reviewers. The spec asks for the fix the reviewers judge best, not for a particular kind of fix.
 - "Possibly intended" is a mark on a verdict, not a fourth verdict, so the label rules of feature 009 stay as they are apart from FR-007.
 - Ownership files are found at the locations the major hosts use (`CODEOWNERS`, `.github/CODEOWNERS`, `docs/CODEOWNERS`, `.gitlab/CODEOWNERS`); the issue command does not query a host API.
 - Posting the issue is left to the user, consistent with Principle III and the read-only guarantee.
 
 ## Constitution Check
 
-- **II. Scripts for predictable steps**: the severity cap, the design-question routing, owner suggestion and issue rendering are deterministic and belong in `panel.py`; judging context, reach and intent stays with the agents.
+- **II. Scripts for predictable steps**: the design-question routing, the choice of the reported evidence, owner suggestion and issue rendering are deterministic and belong in `panel.py`; judging context, reach and intent stays with the agents.
 - **III. Show before changing**: the issue command writes only to the run directory and posts nothing.
 - **IV. Works wherever installed**: owner suggestion uses only files and `git`; with no history available it says so and lists no owners.

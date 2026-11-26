@@ -41,7 +41,9 @@
         "no_trigger_reason",
         "reach",
         "trigger_class",
-        "value_corrections"
+        "value_corrections",
+        "reproduction",
+        "extent"
       ],
       "properties": {
         "finding_id": {
@@ -125,6 +127,20 @@
           "items": {
             "$ref": "#/$defs/ValueCorrection"
           }
+        },
+        "reproduction": {
+          "description": "The code or command run to reproduce the failure, with its observed output, so that a reader can run it; required when evidence is reproduced, null otherwise.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "extent": {
+          "description": "A few runs, input by input, including ordinary inputs that are handled correctly, so that a reader sees which inputs fail; empty when the verifier ran none.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ExtentRow"
+          }
         }
       },
       "additionalProperties": false
@@ -154,6 +170,30 @@
         "line": {
           "type": "integer",
           "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "ExtentRow": {
+      "description": "One run: an input, the result it should give and the result the code gives.",
+      "type": "object",
+      "required": [
+        "input",
+        "expected",
+        "actual"
+      ],
+      "properties": {
+        "input": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected": {
+          "type": "string",
+          "minLength": 1
+        },
+        "actual": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "additionalProperties": false

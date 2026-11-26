@@ -44,21 +44,21 @@ Every finding is written for a reader who has not opened the code (spec 010). Fi
 
 - **`headline`**: at most 90 characters, plain words, naming the situation, not the code. It is the finding's heading in the report and the title of its issue.
 - **`context`**: one or two sentences on what the code does for its users and the situation in which the finding arises.
-- **`in_practice`**: who or what triggers the finding (a user action, a deploy or release, an operator changing configuration, a data condition), roughly how often, and whether anyone would notice the wrong result.
+- **`in_practice`**: who or what triggers the finding (a user action, a deploy or release, an operator changing configuration, a data condition), roughly how often, and whether anyone would notice the wrong result. It states the triggering conditions in the users' terms, leads with the most common way the defect shows, and cites where the triggering inputs come from, or says that their frequency is unknown.
 
-Each verdict records a **trigger class**: `user-action`, `data-condition`, `release`, `operator-change` or `unreachable`, summarising how the trigger state comes about. `unreachable` is only allowed with `refute`.
+Each verdict that ran the trigger records the **reproduction** (the code or command and its output) and may record an **extent** table (a few runs, input by input, expected against actual); the report and the issue carry the first non-refuting verdict's, preferring a reproduced one, so that a reader can check the finding rather than trust it. Each verdict records a **trigger class**: `user-action`, `data-condition`, `release`, `operator-change` or `unreachable`, summarising how the trigger state comes about. `unreachable` is only allowed with `refute`.
 
 ## 4. Severity
 
 Each finding carries one of three severities (FR-018):
 
 - **High**: produces a wrong result in ordinary use of the software.
-- **Medium**: produces a wrong result only in plausible edge cases, or only after a rare operational event (a release, an operator changing configuration), or prevents reproduction of a result.
+- **Medium**: produces a wrong result only in plausible edge cases, or prevents reproduction of a result.
 - **Low**: a latent risk that does not currently produce a wrong result.
 
 A merged finding takes the highest severity among its members unless the moderator records a `severity_reason` for a lower one.
 
-Adjudication lowers `high` to `medium` when the reported trigger class (section 5.1) is `release` or `operator-change` and no `severity_reason` was recorded; the finding then carries `severity_capped`, and the report says "lowered from high".
+Severity is the reviewers' judgement, made from what they read about where the inputs come from and how the project is configured and deployed. The trigger class (section 5.1) is reported beside it and never changes it: how often a release or a configuration change happens differs between projects, and a guess about how rare an input is must not lower a finding.
 
 ## 5. Adjudication
 

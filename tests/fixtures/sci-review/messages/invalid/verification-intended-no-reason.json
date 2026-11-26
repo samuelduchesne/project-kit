@@ -18,7 +18,9 @@
         "trigger_class": "release",
         "possibly_intended": true,
         "possibly_intended_reason": null,
-        "value_corrections": []
+        "value_corrections": [],
+        "reproduction": null,
+        "extent": []
       }
     ]
   }

@@ -18,7 +18,9 @@
         "trigger_class": "unreachable",
         "possibly_intended": false,
         "possibly_intended_reason": null,
-        "value_corrections": []
+        "value_corrections": [],
+        "reproduction": null,
+        "extent": []
       }
     ]
   }

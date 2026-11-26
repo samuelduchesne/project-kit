@@ -12,7 +12,7 @@ Trigger: a release of new code. settings.py reads SEARCH_GENERATIONS from the en
 
 ## Bug or design question
 
-Defect, medium, lowered from high because its only trigger is a release of new code.
+Defect, high.
 
 ## Where
 

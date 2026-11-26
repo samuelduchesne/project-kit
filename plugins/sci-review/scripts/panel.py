@@ -206,8 +206,6 @@ class TriggerClass:
     VALUES = (USER_ACTION, DATA_CONDITION, RELEASE, OPERATOR_CHANGE, UNREACHABLE)
     # Tie order when verifiers disagree: the more frequent trigger first.
     FREQUENCY_ORDER = (USER_ACTION, DATA_CONDITION, RELEASE, OPERATOR_CHANGE)
-    # Classes whose findings are capped at medium unless a severity_reason is recorded (research R5).
-    RARE = (RELEASE, OPERATOR_CHANGE)
     WORDS: ClassVar[dict[str, str]] = {
         USER_ACTION: "a user action",
         DATA_CONDITION: "a data condition in ordinary inputs",
@@ -751,6 +749,15 @@ class ValueCorrection(Record):
 
 
 @dataclass(frozen=True)
+class ExtentRow(Record):
+    """One run of the extent table: an input, the result it should give and the result the code gives."""
+
+    input: str
+    expected: str
+    actual: str
+
+
+@dataclass(frozen=True)
 class VerdictRecord(Record):
     finding_id: str
     verdict: str
@@ -769,7 +776,10 @@ class VerdictRecord(Record):
     possibly_intended: bool = False
     possibly_intended_reason: str | None = None
     value_corrections: tuple[ValueCorrection, ...] = ()
-    _records: ClassVar[dict[str, str]] = {"value_corrections": "ValueCorrection"}
+    # Evidence a reader can check (spec 010, research R13): what was run, and a few runs input by input.
+    reproduction: str | None = None
+    extent: tuple[ExtentRow, ...] = ()
+    _records: ClassVar[dict[str, str]] = {"value_corrections": "ValueCorrection", "extent": "ExtentRow"}
     _enums: ClassVar[dict[str, Sequence[str]]] = {
         "verdict": Verdict.VALUES,
         "evidence": ("reproduced", "traced", "none"),
@@ -836,8 +846,9 @@ class Finding(Record):
     reach: str | None = None
     possibly_intended_reason: str | None = None
     value_corrections: tuple[ValueCorrection, ...] = ()
-    severity_capped: bool = False
-    _records: ClassVar[dict[str, str]] = {"value_corrections": "ValueCorrection"}
+    reproduction: str | None = None
+    extent: tuple[ExtentRow, ...] = ()
+    _records: ClassVar[dict[str, str]] = {"value_corrections": "ValueCorrection", "extent": "ExtentRow"}
     _enums: ClassVar[dict[str, Sequence[str]]] = {
         "dimension": Dimension.VALUES,
         "severity": Severity.VALUES,
@@ -856,6 +867,7 @@ class Finding(Record):
         "trigger_class",
         "reach",
         "possibly_intended_reason",
+        "reproduction",
     )
 
     def to_json(self) -> dict[str, Any]:
@@ -1348,6 +1360,8 @@ def semantic_errors(name: str, value: Any) -> list[str]:
         for index, verdict in enumerate(value.get("verdicts", [])):
             path = f"$.verdicts[{index}]"
             kind = verdict.get("verdict")
+            if verdict.get("evidence") == "reproduced" and not (verdict.get("reproduction") or "").strip():
+                errors.append(f"{path}.reproduction: required when evidence is reproduced (the code or command run)")
             if verdict.get("trigger_class") == TriggerClass.UNREACHABLE and kind != Verdict.REFUTE:
                 errors.append(f"{path}.trigger_class: unreachable requires verdict refute (the trigger cannot occur)")
             if verdict.get("possibly_intended"):
@@ -3772,11 +3786,16 @@ def combined_value_corrections(verdicts: Sequence[VerdictRecord]) -> tuple[Value
     return tuple(seen.values())
 
 
-def capped_severity(severity: str, trigger_class: str | None, severity_reason: str | None) -> tuple[str, bool]:
-    """Lower `high` to `medium` when the only trigger is a release or an operator change (spec 010, research R5)."""
-    if severity == Severity.HIGH and trigger_class in TriggerClass.RARE and not severity_reason:
-        return Severity.MEDIUM, True
-    return severity, False
+def representative_evidence(verdicts: Sequence[VerdictRecord]) -> tuple[str | None, tuple[ExtentRow, ...]]:
+    """The reproduction and extent table reported with a finding (spec 010, research R13).
+
+    Each comes from the first non-refuting verdict that recorded one, preferring a reproduced verdict. Tables of
+    different verifiers are not merged: each is a set of runs a reader can check as a whole.
+    """
+    supporting = sorted((v for v in verdicts if v.verdict != Verdict.REFUTE), key=lambda v: v.evidence != "reproduced")
+    reproduction = next((v.reproduction for v in supporting if v.reproduction), None)
+    extent = next((v.extent for v in supporting if v.extent), ())
+    return reproduction, extent
 
 
 def prose_fields(merged: MergedFinding) -> dict[str, Any]:
@@ -3874,7 +3893,7 @@ def adjudicate_verified(
                 extra["kind"] = FindingKind.DESIGN_QUESTION
                 extra["possibly_intended_reason"] = marked.possibly_intended_reason
             trigger_class, reach = combined_trigger_class(verdicts)
-            severity, capped = capped_severity(merged.severity, trigger_class, merged.severity_reason)
+            reproduction, extent = representative_evidence(verdicts)
             findings.append(
                 Finding(
                     id=merged.id,
@@ -3885,9 +3904,10 @@ def adjudicate_verified(
                     line_start=merged.line_start,
                     line_end=merged.line_end,
                     dimension=merged.dimension,
-                    severity=severity,
-                    severity_capped=capped,
+                    severity=merged.severity,
                     trigger_class=trigger_class,
+                    reproduction=reproduction,
+                    extent=extent,
                     reach=reach,
                     value_corrections=combined_value_corrections(verdicts),
                     **prose_fields(merged),
@@ -4147,8 +4167,7 @@ def trigger_text(finding: Finding, markdown: bool = True) -> str:
 
 
 def badges(finding: Finding) -> str:
-    severity = f"`{finding.severity}`" + (" (lowered from high)" if finding.severity_capped else "")
-    parts = [severity, finding.label, finding.dimension]
+    parts = [f"`{finding.severity}`", finding.label, finding.dimension]
     if finding.trigger_class:
         parts.append(f"trigger: {finding.trigger_class}")
     return " · ".join(parts)
@@ -4176,6 +4195,28 @@ def finding_block(finding: Finding) -> list[str]:
     if finding.no_trigger_reason:
         lines.append(f"- **No-trigger reason:** {finding.no_trigger_reason}")
     lines.append("")
+    lines += evidence_lines(finding, "**Extent.**", "**Reproduction.**")
+    return lines
+
+
+def code_fence(text: str) -> str:
+    """A fence longer than any run of backquotes in the text."""
+    longest = max((len(m) for m in re.findall(r"`+", text)), default=0)
+    return "`" * max(3, longest + 1)
+
+
+def extent_table(rows: Sequence[ExtentRow]) -> list[str]:
+    return _table(["Input", "Expected", "Actual"], [[r.input, r.expected, r.actual] for r in rows])
+
+
+def evidence_lines(finding: Finding, extent_heading: str, reproduction_heading: str) -> list[str]:
+    """The extent table and the runnable reproduction, when a verifier recorded them (spec 010)."""
+    lines: list[str] = []
+    if finding.extent:
+        lines += [extent_heading, "", *extent_table(finding.extent), ""]
+    if finding.reproduction:
+        fence = code_fence(finding.reproduction)
+        lines += [reproduction_heading, "", fence, finding.reproduction.rstrip("\n"), fence, ""]
     return lines
 
 
@@ -4516,16 +4557,15 @@ def render_issue(finding: Finding, owners: IssueOwners, head: str | None, level:
         if finding.reach:
             trigger += " " + first_sentences(finding.reach)
         lines += [trigger, ""]
+    if finding.extent:
+        lines += ["What the code gives for a few inputs:", "", *extent_table(finding.extent), ""]
     lines += ["## Bug or design question", ""]
     if design:
         lines += [f"Possibly intended: {finding.possibly_intended_reason or NOT_RECORDED}", ""]
         lines += [f"If it is not intended: {finding.wrong_output or NOT_RECORDED}", ""]
         lines.append("Please confirm which behaviour is wanted.")
     else:
-        sentence = f"Defect, {finding.severity}"
-        if finding.severity_capped and finding.trigger_class:
-            sentence += f", lowered from high because its only trigger is {TriggerClass.WORDS[finding.trigger_class]}"
-        lines.append(sentence + ".")
+        lines.append(f"Defect, {finding.severity}.")
     if finding.label == AgreementLabel.CONTESTED:
         lines += ["", "The reviewers disagreed on this finding.", ""]
         lines += [f"- For: {finding.argument_for or 'n/a'}"]
@@ -4537,6 +4577,9 @@ def render_issue(finding: Finding, owners: IssueOwners, head: str | None, level:
     for c in finding.value_corrections:
         lines += ["", f"Note: the finding quoted `{c.quoted}`; `{c.file}:{c.line}` has `{c.actual}`."]
     lines += ["", f"Result: {finding.wrong_output or 'n/a'}", ""]
+    if finding.reproduction:
+        fence = code_fence(finding.reproduction)
+        lines += ["To check it, run:", "", fence, finding.reproduction.rstrip("\n"), fence, ""]
     lines += ["## Proposed fix", "", finding.fix, ""]
     lines += ["## Suggested owners", "", owners_text(owners), ""]
     lines += [

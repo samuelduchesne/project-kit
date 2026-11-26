@@ -660,8 +660,17 @@
             "$ref": "#/$defs/ValueCorrection"
           }
         },
-        "severity_capped": {
-          "type": "boolean"
+        "reproduction": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "extent": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ExtentRow"
+          }
         }
       },
       "additionalProperties": false,
@@ -882,6 +891,30 @@
         "line": {
           "type": "integer",
           "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "ExtentRow": {
+      "description": "One run: an input, the result it should give and the result the code gives.",
+      "type": "object",
+      "required": [
+        "input",
+        "expected",
+        "actual"
+      ],
+      "properties": {
+        "input": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected": {
+          "type": "string",
+          "minLength": 1
+        },
+        "actual": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "additionalProperties": false

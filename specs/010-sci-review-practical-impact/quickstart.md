@@ -22,7 +22,7 @@ Expected:
 - The new `tests/test_sci_review_practical.py` covers the following:
   - validation rules 1 to 4 of data-model.md;
   - trigger-class combination and ties;
-  - the cap, with and without `severity_reason`;
+  - severity unchanged by every trigger class; the reproduction and extent chosen from the verdicts;
   - rule 2a (design question, marks counted as uncertain);
   - value corrections deduplicated;
   - the defender mark in the debate protocol;
@@ -42,7 +42,8 @@ python3 $P validate --schema verification tests/fixtures/sci-review/messages/val
 Ingest the golden messages of `tests/fixtures/sci-review/messages/golden/practical/`, then run `adjudicate` and `report --format markdown`. Expected:
 
 - Every finding opens with its headline, context and "In practice".
-- The fixture's release-only finding reads "`medium` (lowered from high)".
+- The fixture's release-only finding keeps its severity, with "trigger: release" beside it.
+- The reproduced finding shows its extent table and its reproduction.
 - The marked finding appears under "Design questions".
 
 ## 4. Issue rendering
@@ -70,7 +71,7 @@ Each case has a manifest entry, as in `seeded-repo`. Build the fixture and run a
 
 Expected:
 
-- (a) is at most `medium` with trigger class `operator-change` or `release` (SC-002).
+- (a) has trigger class `operator-change` or `release`, and its in-practice statement names the configuration difference between deployments and cites `.env` or `settings.py`; every reproduced finding shows its code and output (SC-002).
 - (b) is under "Design questions" in at least 4 of 5 runs (SC-003).
 - No report repeats (c)'s wrong value without a correction (SC-004).
 
@@ -98,7 +99,7 @@ A quick, single-case check that the feature fixes what the domain reviewer criti
 }
 ```
 
-`history_depth` must reach the commit that created the module, so that blame resolves to real authors.
+`history_depth` must reach the commit that created the module, so that blame resolves to real authors. A case file may hold several cases as `{"cases": [...]}`, each with an `id`; run the scenario once per case. A case whose realistic trigger is a data condition can add `expected_framing`, one sentence naming the common condition the issue should lead with, which the judge checks under C2.
 
 ### Setup
 
@@ -133,7 +134,7 @@ python3 $P issue --run $RUN --finding <Fn>
 1. Copy the baseline to `$E/eval/baseline.md` and the treatment to `$E/eval/treatment.md`.
 2. **Deterministic checks**, by the orchestrator, on the treatment, against the case file:
    - **C5**: no entry of `value_checks` appears with its `quoted` value, unless the corrected value accompanies it.
-   - **C6**: severity is `medium` or lower.
+   - **C6**: the body includes a runnable reproduction or an extent table.
    - **C7**: the suggested owners include one of `expected_owners`, and are not `not_owner_alone` alone.
 3. **Blind judgment**, by one separate agent. It receives:
    - the reviewer's comment, verbatim;

@@ -22,7 +22,7 @@ Decisions for feature 010, each with its rationale and the alternatives consider
 
 **Decision**: Verifiers record `trigger_class` on every verdict, from the closed set `user-action`, `data-condition`, `release`, `operator-change`, `unreachable`. The reported class is the most frequent class among non-refuting verdicts. A tie goes to the more frequent trigger, in the order `user-action`, `data-condition`, `release`, `operator-change`. A finding with no non-refuting verdict has no class. Finders do not record the class: they write `in_practice` in prose.
 
-**Rationale**: The class drives a deterministic rule (the severity cap, FR-004), so it must come from the agents that check reach against configuration and deployment files, not from the agent that raised the finding. A closed set keeps the cap testable.
+**Rationale**: The class must come from the agents that check reach against configuration and deployment files, not from the agent that raised the finding. A closed set keeps the report consistent across runs. The class is shown to the reader and changes no outcome (R5).
 
 **Alternatives considered**: finder-assigned class, checked by verifiers (the criticised finding would have been classed `operator-change` by its finder and `release` by a verifier; letting the verifier decide is simpler than reconciling the two); a free-text frequency estimate (not testable).
 
@@ -38,19 +38,23 @@ A verdict whose `trigger_class` is `unreachable` MUST be `refute` (validated by 
 
 **Alternatives considered**: a `panel.py` command that lists configuration and deployment files for the verifier (deterministic, but the relevant files depend on the trigger, and the verifier already searches with `grep`; listed as a possible follow-up); making the step conditional on the dimension (the trigger's dependence on configuration is the condition, not the dimension).
 
-## R5. Severity on realistic use, and the cap
+## R5. Severity on ordinary use, without a cap (revised)
 
 **Decision**: Every role brief and `protocol.md` section 4 adopt this definition:
 
 - **High**: produces a wrong result in ordinary use of the software.
-- **Medium**: produces a wrong result only in plausible edge cases, or only after a rare operational event (a release, an operator changing configuration), or prevents reproduction of a result.
+- **Medium**: produces a wrong result only in plausible edge cases, or prevents reproduction of a result.
 - **Low**: a latent risk that does not currently produce a wrong result.
 
-`panel.py adjudicate` lowers a `high` finding to `medium` when its reported trigger class is `release` or `operator-change`, unless the merged finding carries a `severity_reason`. It records `severity_capped: true` on the finding so the report can say so.
+Reviewers judge ordinary use from what they read: where the inputs come from and how the project is configured and deployed. Adjudication never changes a severity on the trigger class; the class is shown beside it.
 
-**Rationale**: The definition change fixes the reviewer's judgment, and the cap catches findings where the reviewer and the verifier disagree on frequency. `severity_reason` already exists for the moderator (protocol.md section 4). The cap is deterministic, so it belongs in the script (Principle II).
+**Rationale**: The first version of this decision added an automatic cap: `high` lowered to `medium` when the only trigger was a release or an operator change, unless a `severity_reason` was recorded. It was implemented and then removed, for three reasons:
 
-**Alternatives considered**: a cap applied to every class but `user-action` (too strong: a data condition such as a leap-year weather file is ordinary use in building energy work); no cap, only the definition (the criticised finding shows that reviewers already believed their trigger was "realistic").
+1. **The rarity it assumed is not known.** How often a project releases, or changes a setting, differs between projects. A cache that silently serves stale results to every user after every release is not obviously `medium` in a project that releases weekly.
+2. **It fired almost always.** In the verify protocol most batches are merged without a moderator, so no `severity_reason` is recorded to keep a finding high.
+3. **It generalises badly.** A second downstream issue was dismissed as "unlikely to ever be hit in practice", although its own check found about a third of whole-lot bounds rounded wrongly. The issue had led with its rarest case. A rule that lowers severity on a guessed rarity would make that error systematic. The remedy is better evidence and better framing (R13, and the in-practice rule of R1), not a downgrade.
+
+**Alternatives considered**: keeping the cap with a mandatory moderator (one more agent per batch, against FR-013, for a rule whose premise is unreliable); a severity cap on a guessed prevalence of the input (rejected for reason 3).
 
 ## R6. Possibly intended: a mark, not a fourth verdict
 
@@ -75,7 +79,7 @@ All other findings have `kind: defect`. In the debate protocol (`max`), the defe
 **Decision**: In `report.md`, the findings table is replaced by one block per finding. Each block has:
 
 1. a heading `Fn. <headline>`;
-2. a line of badges (severity, label, dimension, trigger class, and "capped" when applied);
+2. a line of badges (severity, label, dimension and trigger class);
 3. the context paragraph;
 4. an "In practice" paragraph;
 5. a compact list: location, trigger (with value corrections inline), wrong output, fix, raised by.
@@ -137,13 +141,31 @@ The case comes from a private downstream project, so this repository names neith
 | C3 | How often and who notices | It states frequency and whether users would notice. |
 | C4 | Intent | It is a design question, or it states that the behaviour may be deliberate. |
 | C5 | Quoted values | It contains no value that the repository contradicts, in particular the value the baseline got wrong. |
-| C6 | Severity | Severity is at most `medium`. |
+| C6 | Checkable evidence | It includes a runnable reproduction or an extent table that the reader can check without trusting the prose. |
 | C7 | Owner | Suggested owners come from the file's ownership or history and include an expected owner; they are not the algorithm's author alone. |
 
 The evaluation passes when the treatment passes C1 to C7, the judge prefers it, and the run used no more panel agents than its estimate. It is one case, so it shows the feature works on the motivating example. It does not measure precision or recall; the fixture criteria SC-001 to SC-005 do that.
+
+A second downstream issue was later reviewed by the same domain reviewer. It joins the case file as a second case, with the same seven criteria: its realistic trigger is a data condition (offers entered in pounds with whole-lot bounds), and C2 asks that the issue lead with that common condition rather than its rarest form.
 
 **Alternatives considered**:
 - Re-running the original scope: many review parts and many more agents, for one finding; too costly for a quick check.
 - Running sci-review 0.3.0 again as the baseline: it can only produce a report row, and the filed issue is the real artifact.
 - Asking the domain reviewer to score: the best judge, but outward-facing; proposed to the user as an optional follow-up, not part of the plan.
 - Committing the case to this repository: it is public, and the case belongs to a private project.
+
+## R13. Evidence a reader can check, and what the review leaves to the reviewers
+
+**Decision**: A verdict with evidence `reproduced` records `reproduction`: the code or command the verifier ran and the output it observed. `panel.py validate` rejects a reproduced verdict without one. A verdict may also record `extent`: a few runs, input by input, with the expected and the actual result, including ordinary inputs the code handles correctly. The report and the issue show those of the first non-refuting verdict, preferring a reproduced one. Tables of different verifiers are not merged, because each is a set of runs to be checked as a whole.
+
+The in-practice statement (R1) must state the triggering conditions in the users' terms and lead with the most common way the defect shows. It must cite where the triggering inputs come from (a form, an API schema or validator, a default, seed data, a configuration file), or say that their frequency is unknown.
+
+**Rationale**: The domain reviewer's comment "valid, if we trust what the LLM has written" names the real limit of prose: context and in-practice statements are more claims by the same model. A runnable reproduction and a short input table are evidence the reader can check in a minute. The reviewer also asked for a compact table of inputs and outputs, to judge the extent of a defect.
+
+**What is deliberately not specified**:
+- **How a fix is chosen.** The same reviewer preferred an interface change to the proposed tolerance fix, and also said that whatever is simple and expedient is fine. The two remarks pull against each other, and choosing an interface is a decision for the module's owners. The review proposes the fix it judges best.
+- **A prevalence estimate that changes outcomes.** Covered in R5.
+
+**Alternatives considered**:
+- Merging the extent tables of all verifiers (rows from different runs and set-ups read as one experiment);
+- A required extent table (some defects, such as a wrong unit everywhere, have no meaningful input dependence).

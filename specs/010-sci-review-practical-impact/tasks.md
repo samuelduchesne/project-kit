@@ -152,7 +152,7 @@ description: "Task list for feature 010: findings that say who hits them"
 
 ## Phase 4: User Story 2 - Severity reflects how the software is used (Priority: P1)
 
-**Goal**: Severity is defined on realistic use, and a finding triggered only by a release or an operator change is capped at `medium`.
+**Goal** (revised in Phase 9): severity is defined on ordinary use, and the trigger class is shown beside it without changing it; findings carry evidence a reader can check.
 
 **Independent Test**: Adjudicate the golden practical run. The `release` finding raised as `high` without a `severity_reason` is reported `medium` with `severity_capped: true`. With a `severity_reason` added, it stays `high`.
 
@@ -164,7 +164,7 @@ description: "Task list for feature 010: findings that say who hits them"
   - refuting verdicts ignored;
   - no non-refuting verdict gives null;
   - the reported `reach` is the first non-refuting verdict's with the reported class.
-- [X] T022 [P] [US2] Add cap tests to `PRACTICAL_TESTS` (research R5):
+- [X] T022 **Superseded by Phase 9 (cap removed).** [P] [US2] Add cap tests to `PRACTICAL_TESTS` (research R5):
   - `high` + `release` + no `severity_reason` becomes `medium` with `severity_capped` true;
   - the same with `operator-change`;
   - `high` + `data-condition` stays `high`;
@@ -175,14 +175,14 @@ description: "Task list for feature 010: findings that say who hits them"
 
 ### Implementation for User Story 2
 
-- [X] T024 [US2] In `adjudicate` of `PANEL` (verify protocol), after the label rules, combine the verdicts' `trigger_class` into `Finding.trigger_class` and `Finding.reach` per research R3. Then apply the cap: when `severity == "high"`, `trigger_class` is `release` or `operator-change`, and the merged finding has no `severity_reason`, set `severity = "medium"` and `severity_capped = True`. Make T021 to T023 pass.
-- [X] T025 [P] [US2] In `SKILL_DIR/protocol.md` section 4, replace the severity definitions with the definitions of research R5, verbatim:
+- [X] T024 **Superseded by Phase 9 (cap removed).** [US2] In `adjudicate` of `PANEL` (verify protocol), after the label rules, combine the verdicts' `trigger_class` into `Finding.trigger_class` and `Finding.reach` per research R3. Then apply the cap: when `severity == "high"`, `trigger_class` is `release` or `operator-change`, and the merged finding has no `severity_reason`, set `severity = "medium"` and `severity_capped = True`. Make T021 to T023 pass.
+- [X] T025 **Superseded by Phase 9 (cap removed).** [P] [US2] In `SKILL_DIR/protocol.md` section 4, replace the severity definitions with the definitions of research R5, verbatim:
   - **High**: produces a wrong result in ordinary use of the software.
   - **Medium**: produces a wrong result only in plausible edge cases, or only after a rare operational event (a release, an operator changing configuration), or prevents reproduction of a result.
   - **Low**: a latent risk that does not currently produce a wrong result.
 
   Add: "Adjudication lowers `high` to `medium` when the reported trigger class is `release` or `operator-change` and no `severity_reason` was recorded; the finding then carries `severity_capped`." In section 5.1, add the trigger-class combination rule of research R3 after the rules list.
-- [X] T026 [P] [US2] In the step-5 severity sentence of each finder brief (the six files of T016), replace the definition with the one of research R5. Add: "A defect whose only trigger is a release or an operator changing configuration is at most `medium`."
+- [X] T026 **Superseded by Phase 9 (cap removed).** [P] [US2] In the step-5 severity sentence of each finder brief (the six files of T016), replace the definition with the one of research R5. Add: "A defect whose only trigger is a release or an operator changing configuration is at most `medium`."
 
 **Checkpoint**: No report rates `high` a finding whose only trigger is a release or an operator change, unless a reason is given.
 
@@ -333,6 +333,19 @@ description: "Task list for feature 010: findings that say who hits them"
 - [X] T055 Run `claude plugin validate` on the marketplace and on the `sci-review` plugin (constitution, Development Workflow), and run the full test suite once more.
 
 ---
+
+## Phase 9: Revision after a second domain review (cap removed, evidence added)
+
+**Purpose**: A second issue from the review drew comments that pointed at evidence, not prose ("valid, if we trust what the LLM has written"; a request for a compact input-to-output table), and at a severity judged on a guessed rarity. Research R5 (revised) and R13 record the decisions: the automatic severity cap is removed, verdicts carry a runnable reproduction and an extent table, the in-practice statement must cite where inputs come from, and how a fix is chosen stays with the reviewers.
+
+- [X] T056 Remove the severity cap from `PANEL`: delete `capped_severity` and `TriggerClass.RARE`, remove `Finding.severity_capped`, keep the merged finding's severity, and drop "lowered from high" from `badges` and `render_issue`. Remove `severity_capped` from `SKILL_DIR/schemas/report.schema.json`.
+- [X] T057 Add to `PANEL` a frozen `ExtentRow` record (`input`, `expected`, `actual`) and the verdict fields `reproduction` (string or null) and `extent` (tuple of `ExtentRow`), and the same two fields on `Finding`. Add `representative_evidence`: the reproduction and extent of the first non-refuting verdict that recorded them, preferring a reproduced one; tables are not merged. Add both fields to `verification.schema.json` (required, nullable or empty) and `report.schema.json`.
+- [X] T058 Add validation rule 5 of data-model.md to `semantic_errors` in `PANEL`: a verdict with `evidence: reproduced` has a non-empty `reproduction`. Add the fixture `MSG/invalid/verification-reproduced-without-code.json` and its expected message to `tests/test_sci_review_panel.py`.
+- [X] T059 Render the evidence: in the report block, an "**Extent.**" table and a fenced "**Reproduction.**" after the bullets; in the issue, the extent table under "Who hits this and when" and "To check it, run:" with the fenced reproduction under "Reproduction". The fence is longer than any run of backquotes in the code.
+- [X] T060 Replace the cap tests in `PRACTICAL_TESTS` with `TestSeverityIsTheReviewers` (no trigger class changes the severity) and `TestEvidence` (reproduced verdict required to carry code, reproduced verdict preferred, refuting verdicts give no evidence, fence length). Give the golden practical run a reproduced verdict with an extent table, add the reproduction and extent to `MSG/valid/verification.json` and the verify-test helper, and regenerate the golden outputs.
+- [X] T061 Update the briefs and the protocol: the six finder briefs' severity sentence (no release or operator-change downgrade; judge ordinary use from what was read) and in-practice instruction (users' terms, most common manifestation first, cite where inputs come from or say frequency is unknown); the verifier's reproduction and extent instructions and JSON example; `protocol.md` sections 3.1 and 4; remove the release-only severity row from `dimensions/algorithmic-correctness.md`. Regenerate `plugins/sci-review/scripts/scientific-review-panel.js`.
+- [X] T062 Update `plugins/sci-review/README.md` and `CHANGELOG.md` for the removed cap and the added evidence; update spec.md (Story 2, FR-002 to FR-004, SC-002, Assumptions), research.md (R3, R5, R8, R12 C6, R13), data-model.md, contracts, quickstart.md and plan.md.
+- [X] T063 Add the second downstream issue to the private case file kept outside the repository, with its baseline body, the reviewer's comments and its expected trigger class (`data-condition`). Nothing about it enters this repository beyond generic wording.
 
 ## Dependencies & Execution Order
 

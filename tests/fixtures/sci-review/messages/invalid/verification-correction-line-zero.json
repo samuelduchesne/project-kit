@@ -25,7 +25,9 @@
             "file": ".env",
             "line": 0
           }
-        ]
+        ],
+        "reproduction": null,
+        "extent": []
       }
     ]
   }

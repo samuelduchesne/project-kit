@@ -29,9 +29,13 @@ Sections appear in this order. A missing field (a run from an earlier version) p
 
 Trigger: <trigger class in words, e.g. "a release of new code">. <reach, first two sentences>
 
+What the code gives for a few inputs:      ← only when an extent table was recorded
+
+| Input | Expected | Actual |
+
 ## Bug or design question
 
-Defect, <severity>[, lowered from high because its only trigger is <class in words>].
+Defect, <severity>.
 — or —
 Possibly intended: <possibly_intended_reason>. If it is not intended: <wrong_output>.
 Please confirm which behaviour is wanted.
@@ -46,6 +50,12 @@ Please confirm which behaviour is wanted.
 <for each value correction: "Note: the finding quoted `<quoted>`; `<file>:<line>` has `<actual>`.">
 
 Result: <wrong_output>
+
+To check it, run:                          ← only when a reproduction was recorded
+
+```
+<reproduction>
+```
 
 ## Proposed fix
 

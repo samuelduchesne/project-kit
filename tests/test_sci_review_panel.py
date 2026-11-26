@@ -134,6 +134,7 @@ class TestModelAndValidate(RunDirMixin):
             "verification-intended-no-reason": "required when possibly_intended is true",
             "verification-correction-line-zero": "0 is less than 1",
             "debate-intended-non-defender": "only the defender may mark",
+            "verification-reproduced-without-code": "required when evidence is reproduced",
         }
         for path in sorted((MESSAGES / "invalid").glob("*.json")):
             with self.subTest(path=path.name):

@@ -30,7 +30,6 @@ Typical mappings for this dimension:
 | Defect | Typical severity |
 |---|---|
 | Cache key omits a parameter that callers vary in normal use | High |
-| Cache key omits the configuration or code version that produced the value, which changes only with a release or an operator's change | Medium |
 | Iterative method returns an unconverged value as a result for inputs in the documented range | High |
 | Off-by-one boundary that drops or double-counts an element on every call | High |
 | Overflow of an `int32` counter at input sizes the project processes | High |

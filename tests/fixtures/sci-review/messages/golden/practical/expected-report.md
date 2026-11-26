@@ -43,9 +43,30 @@ This function converts each building's metered electricity into the annual total
 - **Fix:** Multiply by 3.412 kBtu/kWh.
 - **Raised by:** theorist
 
+**Extent.**
+
+| Input | Expected | Actual |
+|---|---|---|
+| 1 kWh | 3.412 kBtu | 0.2931 kBtu |
+| 1,000 kWh | 3,412 kBtu | 293.1 kBtu |
+| 12,500 kWh | 42,650 kBtu | 3,663.7 kBtu |
+| 0 kWh | 0 kBtu | 0 kBtu |
+
+**Reproduction.**
+
+```
+import sys; sys.path.insert(0, "src")
+from energy.totals import annual_total_kbtu
+for kwh in (1, 1000, 12500):
+    print(kwh, annual_total_kbtu(kwh))
+# 1 0.2931
+# 1000 293.1
+# 12500 3663.7
+```
+
 #### F2. Cached results are not recomputed after a release
 
-`medium` (lowered from high) · consensus · algorithmic-correctness · trigger: release
+`high` · consensus · algorithmic-correctness · trigger: release
 
 Optimised results are cached and reused while a building's inputs are unchanged, so users get answers without waiting.
 

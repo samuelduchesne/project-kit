@@ -16,7 +16,7 @@ Verifiers gain a reach step. They read configuration, environment, deployment an
 
 `panel.py` turns these into deterministic outcomes:
 
-- a severity cap for findings triggered only by a release or an operator change;
+- evidence a reader can check: the verifier's runnable reproduction and a short table of inputs with expected and actual results;
 - a "Design questions" section for marked findings;
 - a report that leads with prose;
 - a new `issue` command that renders a finding as an issue body, in the order a domain reader needs, with owners from CODEOWNERS or `git blame`. Nothing is posted.
@@ -61,7 +61,7 @@ Constitution version 1.3.0.
 | Principle | Check | Result |
 |-----------|-------|--------|
 | I. Templates are the source of truth | `sci-review` generates no project files. | Not applicable (Scope and Constraints) |
-| II. Scripts for predictable steps, the model for judgment | Agents make the judgments: they write the prose, check reach, classify the trigger and mark intent. `panel.py` does everything deterministic, with logged arguments: combining trigger classes, the severity cap, routing design questions, rendering, matching CODEOWNERS and counting blame. `issue` writes a file, so it accepts `--dry-run`. | Pass |
+| II. Scripts for predictable steps, the model for judgment | Agents make the judgments: they write the prose, check reach, classify the trigger and mark intent. `panel.py` does everything deterministic, with logged arguments: combining trigger classes, choosing the reported evidence, routing design questions, rendering, matching CODEOWNERS and counting blame. `issue` writes a file, so it accepts `--dry-run`. | Pass |
 | III. Show before changing | `issue` writes only to the run directory and posts nothing. The user files the issue. No new write to the project. | Pass |
 | IV. Works wherever it is installed | Owners need only files and `git`. Without `git`, `issue` says so and lists no owners. No new tool is installed or pinned. Extension briefs keep working, because schema validation returns missing fields to the agent (research R11). | Pass |
 | Development workflow | Spec-kit flow; CHANGELOG entry under `[Unreleased]`; `claude plugin validate` on both plugins; `sci-review` minor version bump (0.3.0 to 0.4.0): new required fields in messages, a new subcommand and a changed report layout. | Pass |
@@ -95,12 +95,12 @@ plugins/sci-review/
 ├── .codex-plugin/plugin.json                  # 0.4.0
 ├── README.md                                  # findings in plain words; design questions; issue command
 ├── scripts/
-│   ├── panel.py                               # records, validate rules, rule 2a, trigger class, cap, report layout, `issue`
+│   ├── panel.py                               # records, validate rules, rule 2a, trigger class, evidence, report layout, `issue`
 │   ├── build_workflow.py                      # unchanged logic; regenerate
 │   └── scientific-review-panel.js             # regenerated (schemas and briefs embedded)
 └── skills/scientific-review/
     ├── SKILL.md                               # delivery step offers `issue`
-    ├── protocol.md                            # §4 severity and cap; §5.1 rule 2a and trigger class; report section
+    ├── protocol.md                            # §4 severity; §5.1 rule 2a, trigger class and evidence; report section
     ├── dimensions/algorithmic-correctness.md  # stale-cache intent check
     ├── roles/{theorist,numerical-analyst,experimentalist,methodologist,computer-scientist,generalist}.md
     ├── roles/{moderator,verifier,defender}.md
@@ -121,7 +121,7 @@ CHANGELOG.md
 1. **Tasks** (`/speckit-tasks`), ordered as follows:
    - schemas and records;
    - `validate`;
-   - adjudication (rule 2a, trigger class, cap);
+   - adjudication (rule 2a, trigger class, evidence);
    - report layout;
    - `issue`;
    - briefs, `protocol.md` and `SKILL.md`;

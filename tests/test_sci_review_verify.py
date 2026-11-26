@@ -70,6 +70,8 @@ def verification(batch: int, verifier: str, verdicts: dict[str, str]) -> dict:
                 "reach": "Read the settings module and the environment file; the inputs come from users.",
                 "trigger_class": "unreachable" if kind == "refute" else "user-action",
                 "value_corrections": [],
+                "reproduction": f"python3 -B repro_{fid.lower()}.py  # prints the wrong output",
+                "extent": [],
             }
             for fid, kind in verdicts.items()
         ],

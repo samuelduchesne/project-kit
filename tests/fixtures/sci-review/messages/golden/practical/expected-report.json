@@ -90,7 +90,29 @@
       "trigger_class": "user-action",
       "reach": "Meters are entered by users; no setting changes the unit.",
       "value_corrections": [],
-      "severity_capped": false
+      "reproduction": "import sys; sys.path.insert(0, \"src\")\nfrom energy.totals import annual_total_kbtu\nfor kwh in (1, 1000, 12500):\n    print(kwh, annual_total_kbtu(kwh))\n# 1 0.2931\n# 1000 293.1\n# 12500 3663.7",
+      "extent": [
+        {
+          "input": "1 kWh",
+          "expected": "3.412 kBtu",
+          "actual": "0.2931 kBtu"
+        },
+        {
+          "input": "1,000 kWh",
+          "expected": "3,412 kBtu",
+          "actual": "293.1 kBtu"
+        },
+        {
+          "input": "12,500 kWh",
+          "expected": "42,650 kBtu",
+          "actual": "3,663.7 kBtu"
+        },
+        {
+          "input": "0 kWh",
+          "expected": "0 kBtu",
+          "actual": "0 kBtu"
+        }
+      ]
     },
     {
       "id": "F2",
@@ -105,7 +127,7 @@
       "line_start": 120,
       "line_end": 156,
       "dimension": "algorithmic-correctness",
-      "severity": "medium",
+      "severity": "high",
       "summary": "The result cache key covers the inputs but not the search configuration or the code version.",
       "trigger": "Compute with SEARCH_GENERATIONS=5, change the setting, recompute with unchanged inputs",
       "wrong_output": "The cached result from the earlier configuration is returned as current",
@@ -125,7 +147,7 @@
           "line": 3
         }
       ],
-      "severity_capped": true
+      "extent": []
     }
   ],
   "design_questions": [
@@ -156,7 +178,7 @@
       "reach": "The schema version changes only in a release.",
       "possibly_intended_reason": "Keeping reports byte-identical across releases looks deliberate; no comment says so either way.",
       "value_corrections": [],
-      "severity_capped": false
+      "extent": []
     }
   ],
   "rejected": [],

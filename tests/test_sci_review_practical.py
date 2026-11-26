@@ -105,13 +105,13 @@ class TestSchemasAndRecords(unittest.TestCase):
 
     def test_earlier_finding_loads_with_defaults(self) -> None:
         earlier = read(GOLDEN / "full" / "expected-report.json")["findings"][0]
-        for field in ("headline", "context", "in_practice", "kind", "value_corrections", "severity_capped"):
+        for field in ("headline", "context", "in_practice", "kind", "value_corrections", "reproduction", "extent"):
             earlier.pop(field, None)
         finding = panel.Finding.from_json(earlier)
         self.assertIsNone(finding.headline)
         self.assertEqual(finding.kind, "defect")
         self.assertEqual(finding.value_corrections, ())
-        self.assertFalse(finding.severity_capped)
+        self.assertEqual(finding.extent, ())
         self.assertIsNone(finding.trigger_class)
 
     def test_earlier_verdict_loads(self) -> None:
@@ -208,34 +208,48 @@ class TestTriggerClass(unittest.TestCase):
         self.assertEqual(panel.combined_trigger_class(verdicts), ("release", "B"))
 
 
-class TestSeverityCap(unittest.TestCase):
-    """T022: research R5."""
+class TestSeverityIsTheReviewers(unittest.TestCase):
+    """Research R5 (revised): the trigger class is shown beside the severity and never changes it."""
 
-    def finding(self, finding: panel.MergedFinding, trigger_class: str | None) -> panel.Finding:
-        return adjudicate(finding, verdict(trigger_class=trigger_class)).findings[0]
-
-    def test_release_and_operator_change_are_capped(self) -> None:
-        for trigger_class in ("release", "operator-change"):
+    def test_no_class_changes_the_severity(self) -> None:
+        for trigger_class in (*panel.TriggerClass.FREQUENCY_ORDER, None):
             with self.subTest(trigger_class=trigger_class):
-                finding = self.finding(merged("high"), trigger_class)
-                self.assertEqual((finding.severity, finding.severity_capped), ("medium", True))
+                finding = adjudicate(merged("high"), verdict(trigger_class=trigger_class)).findings[0]
+                self.assertEqual(finding.severity, "high")
+                self.assertEqual(finding.trigger_class, trigger_class)
+                self.assertNotIn("severity_capped", finding.to_json())
 
-    def test_ordinary_use_is_not_capped(self) -> None:
-        for trigger_class in ("data-condition", "user-action"):
-            finding = self.finding(merged("high"), trigger_class)
-            self.assertEqual((finding.severity, finding.severity_capped), ("high", False))
 
-    def test_a_severity_reason_keeps_high(self) -> None:
-        finding = self.finding(merged("high", "A release happens every week."), "release")
-        self.assertEqual((finding.severity, finding.severity_capped), ("high", False))
+class TestEvidence(unittest.TestCase):
+    """Research R13: the runnable reproduction and the extent table."""
 
-    def test_medium_is_unchanged(self) -> None:
-        finding = self.finding(merged("medium"), "release")
-        self.assertEqual((finding.severity, finding.severity_capped), ("medium", False))
+    row = panel.ExtentRow(input="1,000 kWh", expected="3,412 kBtu", actual="293.1 kBtu")
 
-    def test_no_class_is_unchanged(self) -> None:
-        finding = self.finding(merged("high"), None)
-        self.assertEqual((finding.severity, finding.severity_capped), ("high", False))
+    def test_reproduced_verdict_requires_its_code(self) -> None:
+        case = read(MESSAGES / "invalid" / "verification-reproduced-without-code.json")
+        errors = panel.validate_message(case["schema"], case["message"])
+        self.assertTrue(any("required when evidence is reproduced" in e for e in errors), errors)
+
+    def test_reproduced_verdict_is_preferred(self) -> None:
+        traced = panel.dataclasses.replace(verdict(), reproduction="traced only", evidence="traced")
+        run = panel.dataclasses.replace(
+            verdict(verifier="v2"), reproduction="python3 -B repro.py", evidence="reproduced", extent=(self.row,)
+        )
+        finding = adjudicate(merged(), traced, run).findings[0]
+        self.assertEqual(finding.reproduction, "python3 -B repro.py")
+        self.assertEqual(finding.extent, (self.row,))
+
+    def test_refuting_verdicts_give_no_evidence(self) -> None:
+        refuting = panel.dataclasses.replace(
+            verdict("refute", verifier="v2", trigger_class="unreachable"), reproduction="x", extent=(self.row,)
+        )
+        finding = adjudicate(merged(), verdict(), verdict(verifier="v3"), refuting).findings[0]
+        self.assertIsNone(finding.reproduction)
+        self.assertEqual(finding.extent, ())
+
+    def test_code_fence_outlasts_backquotes(self) -> None:
+        self.assertEqual(panel.code_fence("print(1)"), "```")
+        self.assertEqual(panel.code_fence("s = '````'"), "`````")
 
 
 class TestUnreachable(unittest.TestCase):
@@ -368,13 +382,22 @@ class TestPracticalReport(PracticalRunMixin):
         positions = [block.index(text) for text in order]
         self.assertEqual(positions, sorted(positions))
 
-    def test_capped_release_finding(self) -> None:
+    def test_release_finding_keeps_its_severity(self) -> None:
         run_dir = self.practical_run()
         markdown = self.report(run_dir)
-        self.assertIn("`medium` (lowered from high) · consensus · algorithmic-correctness · trigger: release", markdown)
+        self.assertIn("`high` · consensus · algorithmic-correctness · trigger: release", markdown)
+        self.assertNotIn("lowered from high", markdown)
         self.assertIn("*(the finding quoted `SEARCH_GENERATIONS=5`; `.env:3` has `SEARCH_GENERATIONS=10`)*", markdown)
         f2 = next(f for f in read(run_dir / "adjudication.json")["findings"] if f["id"] == "F2")
         self.assertEqual(len(f2["value_corrections"]), 1)
+
+    def test_extent_and_reproduction_are_rendered(self) -> None:
+        markdown = self.report(self.practical_run())
+        block = markdown.split("#### F1. ", 1)[1].split("####", 1)[0]
+        self.assertIn("**Extent.**", block)
+        self.assertIn("| 1,000 kWh | 3,412 kBtu | 293.1 kBtu |", block)
+        self.assertIn("**Reproduction.**", block)
+        self.assertIn("from energy.totals import annual_total_kbtu", block)
 
     def test_design_question_section(self) -> None:
         run_dir = self.practical_run()
@@ -487,7 +510,7 @@ class TestIssue(PracticalRunMixin):
             "## Who hits this and when",
             "Trigger: a release of new code.",
             "## Bug or design question",
-            "Defect, medium, lowered from high because its only trigger is a release of new code.",
+            "Defect, high.",
             "## Where",
             "## Reproduction",
             "Note: the finding quoted `SEARCH_GENERATIONS=5`; `.env:3` has `SEARCH_GENERATIONS=10`.",
@@ -504,6 +527,16 @@ class TestIssue(PracticalRunMixin):
         _code, out, _err = self.issue(run_dir, "F3")
         self.assertTrue(out.startswith("# Confirm intended behaviour: Stored results are reused across schema"))
         self.assertIn("Please confirm which behaviour is wanted.", out)
+
+    def test_issue_carries_extent_and_reproduction(self) -> None:
+        run_dir = self.reported_run()
+        _code, out, _err = self.issue(run_dir, "F1")
+        who = out.split("## Who hits this and when", 1)[1].split("## Bug or design question", 1)[0]
+        self.assertIn("What the code gives for a few inputs:", who)
+        self.assertIn("| 0 kWh | 0 kBtu | 0 kBtu |", who)
+        reproduction = out.split("## Reproduction", 1)[1].split("## Proposed fix", 1)[0]
+        self.assertIn("To check it, run:", reproduction)
+        self.assertIn('```\nimport sys; sys.path.insert(0, "src")', reproduction)
 
     def test_contested_issue_gives_both_arguments(self) -> None:
         run_dir = self.reported_run()

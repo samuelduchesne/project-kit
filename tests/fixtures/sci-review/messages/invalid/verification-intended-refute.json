@@ -18,7 +18,9 @@
         "trigger_class": "release",
         "possibly_intended": true,
         "possibly_intended_reason": "Keeping reports byte-identical across releases looks deliberate; no comment says so either way.",
-        "value_corrections": []
+        "value_corrections": [],
+        "reproduction": null,
+        "extent": []
       }
     ]
   }
