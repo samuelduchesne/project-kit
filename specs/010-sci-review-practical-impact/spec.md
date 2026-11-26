@@ -111,7 +111,7 @@ A user who wants to file a finding in the reviewed project's tracker runs one co
 
 **Acceptance Scenarios**:
 
-1. **Given** a completed run and a finding id, **When** the user renders its issue, **Then** the body has, in order: a title phrased as the situation, not the code; Situation (context); Who hits this and when (in practice and reach); Bug or design question; Where (location); Reproduction (trigger and wrong output, with checked values); Proposed fix; Review provenance (label, raisers, verifiers, review commit).
+1. **Given** a completed run and a finding id, **When** the user renders its issue, **Then** the body has, in order: a title phrased as the situation, not the code; Situation (context); Who hits this and when (in practice and reach); Bug or design question; Where (location); Reproduction (trigger and wrong output, with checked values); Proposed fix; Suggested owners; Review provenance (label, raisers, verifiers, review commit). With `--supersedes`, a line naming the superseded issues follows the title (FR-019); the exact layout is in contracts/issue.md.
 2. **Given** the repository has an ownership file covering the finding's file, **When** the issue is rendered, **Then** it lists those owners as suggested owners; otherwise it lists the most frequent recent authors of the finding's lines, labelled as derived from history.
 3. **Given** a design question, **When** its issue is rendered, **Then** the title and body ask the owners to confirm the intended behaviour, not to fix a bug.
 4. **Given** the user renders an issue, **When** the command finishes, **Then** nothing is posted; the body is printed or written to the run directory for the user to file.
@@ -170,22 +170,23 @@ Added after the first validation (validation.md, sections 4 and 5). A user filin
 
 ### Key Entities
 
-- **Candidate finding** gains `context` and `in_practice`.
+- **Candidate finding** gains `headline`, `context` and `in_practice`.
 - **Merged finding** and **reported finding** gain `context`, `in_practice`, `trigger_class`, `reach` (the representative verifier's), `possibly_intended` (with reason) and `value_corrections`.
 - **Verdict** gains `reach`, `trigger_class`, `possibly_intended` and `possibly_intended_reason`, `value_corrections` (quoted value, actual value, file, line), `reproduction` and `extent` (rows of input, expected, actual).
-- **Reported finding** also gains `reproduction` and `extent`.
+- **Reported finding** also gains `kind` (defect or design question), `reproduction`, `extent` and `in_practice_original` (the finder's statement when a verifier revised it).
+- **Verdict** also gains `in_practice_revision` (research R14).
 - **Issue body**: a markdown file in the run directory, one per rendered finding.
 
 ## Success Criteria *(mandatory)*
 
-- **SC-001**: On the seeded fixture, 100% of reported findings have context and in-practice statements, and a reader shown only those two statements identifies the triggering actor correctly for every finding.
+- **SC-001**: On the seeded and practical fixtures, every delivered finding has a headline, context and in-practice statement. For a sample of 20 delivered findings across the runs, a blind judge shown only the headline, context and in-practice statement assigns a trigger class (user action, data condition, release, operator change), and its class matches the verifier's reported class for at least 16 of the 20.
 - **SC-002**: On the practical fixture, every finding with evidence `reproduced` shows the code it ran and its output, and the stored-result finding's in-practice statement names a release of new code among its triggers and cites the file the settings come from.
 - **SC-003**: On the fixture's deliberate-reuse case, the finding appears under design questions and not among defects in at least 4 of 5 runs.
 - **SC-004**: On the fixture's wrong-quoted-value case, the report never repeats the wrong value without a correction or notice.
 - **SC-005**: Recall of the 16 seeded defects at `medium` is unchanged (16 of 16), no look-alike is reported, and the number of panel agents is unchanged from feature 009.
-- **SC-006**: Re-reviewing the code behind the criticised issue and rendering that finding produces an issue whose first two sections a domain reader can understand without opening the code, that names the release as the realistic trigger, that presents the reuse as a design question or as a defect with checkable evidence, and that suggests the cache's owners, not the algorithm's author.
+- **SC-006**: For each case in the private case file (research R12), the issue rendered from the re-review passes C1, C3, C5 and C6 of the rubric, names the case's expected trigger (C2), and a blind judge prefers it to the issue originally filed. C4 and C7 are recorded but do not decide the criterion.
 - **SC-007**: Every existing sci-review test passes, updated only where it asserts the old severity wording or the old report layout.
-- **SC-008**: On the practical fixture's unit-conversion case, the reported in-practice statement names the converted units as a trigger in at least 4 of 5 runs, and no finding in any run cites a line beyond the end of its file.
+- **SC-008**: On the practical fixture's unit-conversion case, the defect is reported in 5 of 5 runs, its reported in-practice statement names the converted units as a trigger in at least 4 of 5, and no finding in any run cites a line beyond the end of its file.
 
 ## Assumptions
 

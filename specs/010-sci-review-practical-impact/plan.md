@@ -45,7 +45,7 @@ A quick evaluation closes the feature (research R12, [quickstart.md](./quickstar
 
 **Project Type**: Agent plugin (skills, helper script, generated workflow).
 
-**Performance Goals**: Panel agent count and the agent estimate are unchanged (FR-013). Verifier tokens may rise by the reach step's reading. The budget is no more than 15% more subagent tokens per verifier on the seeded fixture, measured in scenario 5. More than that is reported in `validation.md`, but it does not fail the feature.
+**Performance Goals**: Panel agent count and the agent estimate are unchanged (FR-013). Subagent tokens may rise by the reach step's reading: the budget is no more than 15% more subagent tokens for the whole panel on the seeded fixture than feature 009 (725,233), measured in scenario 5. More than that is reported in `validation.md`, but it does not fail the feature.
 
 **Constraints**: Read-only on the reviewed project, except under `--fix` (unchanged). `issue` never posts. Earlier runs keep rendering (FR-012).
 
