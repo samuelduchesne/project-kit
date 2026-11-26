@@ -4,21 +4,21 @@ Usage:
     python3 build.py --out DIR     create the git repository at DIR
     python3 build.py --check       verify manifest.json against the embedded sources only
 
-The fixture checks what spec 010 adds, not recall: whether findings say who hits them. It holds three cases,
-each beside a correct look-alike, in a small results service whose settings come from the environment:
+The fixture checks what spec 010 adds, not recall: whether findings say who hits them. Results, reports and
+tariffs live in a JSON store on disk that persists across processes and upgrades, so every case is reachable:
 
-- ``stale-config-cache``: a results cache keyed on the inputs but not on the search configuration, which
-  differs only between deployments (``.env`` against the defaults in ``settings.py``). Expected: severity at
-  most ``medium``, trigger class ``operator-change`` or ``release`` (SC-002).
-- ``frozen-report``: a report lookup that ignores the stored schema version, with nothing saying whether that
-  is deliberate. Expected: reported under "Design questions" (SC-003).
-- ``quoted-setting``: a defect whose obvious reproduction quotes the development setting from a docstring
-  (``SEARCH_GENERATIONS=5``) that ``.env`` contradicts (``10``). Expected: no report repeats the wrong value
-  without a correction (SC-004).
+- ``stored-plan``: plans are stored under a key of the building inputs only. The search settings (which differ
+  between deployments) and the search code (which changes in a release) are not in the key, so a plan computed
+  before a release or a settings change is served afterwards. Expected: in practice names a release (SC-002).
+- ``issued-report``: issued reports are served as stored, whatever schema they were written in, with nothing
+  saying whether that is deliberate. Expected: a design question (SC-003).
+- ``pound-lots``: offer bounds entered in pounds are converted to tonnes before whole-lot rounding, so about a
+  fifth of whole-lot bounds round to the wrong lot. Expected: in practice names pounds or converted units (SC-008).
+- ``quoted-setting``: the search's convergence window divides by zero below ten generations; its docstring quotes
+  a development setting (5) that ``.env`` contradicts (10) (SC-004).
 
-``main`` holds the baseline; ``feature`` adds the modules under review. The repository is left on ``feature``
-with no remote, so ``panel.py scope --mode branch`` resolves ``main`` as the base. Names are invented. Each
-manifest entry is located by ``anchor``, a substring on exactly one line of its file; every build verifies them.
+Each has a correct look-alike. ``main`` holds the baseline; ``feature`` adds the modules under review. Names are
+invented. Each manifest entry is located by ``anchor``, a substring on exactly one line of its file.
 Only the Python standard library is used.
 """
 
@@ -39,17 +39,22 @@ COMMIT_DATES = ("2026-02-02T10:00:00+00:00", "2026-02-09T14:30:00+00:00")
 README = """\
 # results-service
 
-Computes and serves optimised retrofit results for buildings. Each deployment (development, staging,
-production) runs its own service with its own results store; settings come from the environment.
+Computes and serves optimised retrofit plans, carbon-credit purchases and reports for buildings. Each deployment
+(development, staging, production) runs its own service with its own store file; settings come from the
+environment. The store persists across restarts and upgrades.
+
+Users enter carbon-credit offers in pounds, kilograms or tonnes of CO2e; quantities are converted to tonnes on entry.
 
 - `src/results/settings.py`: settings and their defaults.
-- `src/results/`: the search, the results cache and the report store.
+- `src/results/store.py`: the JSON store on disk.
+- `src/results/`: the search, the plan cache, the report store and credit purchasing.
 """
 
 ENV = """\
 # Development settings. Production uses the defaults in src/results/settings.py.
-SEARCH_POPULATION=200
+SEARCH_POPULATION=20
 SEARCH_GENERATIONS=10
+STORE_PATH=var/store.json
 """
 
 SETTINGS = '''\
@@ -57,9 +62,40 @@ SETTINGS = '''\
 
 import os
 
-SEARCH_POPULATION = int(os.environ.get("SEARCH_POPULATION", "10000"))
+SEARCH_POPULATION = int(os.environ.get("SEARCH_POPULATION", "100"))
 SEARCH_GENERATIONS = int(os.environ.get("SEARCH_GENERATIONS", "100"))
+STORE_PATH = os.environ.get("STORE_PATH", "/var/lib/results/store.json")
 REPORT_SCHEMA_VERSION = 3
+'''
+
+STORE = '''\
+"""A JSON store on disk, shared by every process of a deployment and kept across upgrades."""
+
+from __future__ import annotations
+
+import json
+import os
+from typing import Any
+
+from results import settings
+
+
+def load(table: str) -> dict[str, Any]:
+    if not os.path.exists(settings.STORE_PATH):
+        return {}
+    with open(settings.STORE_PATH, encoding="utf-8") as handle:
+        return json.load(handle).get(table, {})
+
+
+def save(table: str, rows: dict[str, Any]) -> None:
+    data: dict[str, Any] = {}
+    if os.path.exists(settings.STORE_PATH):
+        with open(settings.STORE_PATH, encoding="utf-8") as handle:
+            data = json.load(handle)
+    data[table] = rows
+    os.makedirs(os.path.dirname(settings.STORE_PATH) or ".", exist_ok=True)
+    with open(settings.STORE_PATH, "w", encoding="utf-8") as handle:
+        json.dump(data, handle)
 '''
 
 INIT = '"""Results service."""\n'
@@ -91,7 +127,7 @@ def search(score: Callable[[int], float], seed: int = 7) -> tuple[int, float]:
     generations = settings.SEARCH_GENERATIONS
     best, best_score, history = 0, float("-inf"), []
     for _ in range(generations):
-        for _ in range(settings.SEARCH_POPULATION // 100):
+        for _ in range(settings.SEARCH_POPULATION):
             candidate = rng.randrange(1_000_000)
             value = score(candidate)
             if value > best_score:
@@ -103,7 +139,7 @@ def search(score: Callable[[int], float], seed: int = 7) -> tuple[int, float]:
 '''
 
 CACHE = '''\
-"""Cache of search results, so that an unchanged building is not searched again."""
+"""Plans already searched, kept in the store so that an unchanged building is not searched again."""
 
 from __future__ import annotations
 
@@ -113,10 +149,7 @@ from collections.abc import Callable
 from typing import Any
 
 from results import search as search_module
-from results import settings
-
-_results: dict[str, tuple[int, float]] = {}
-_rates: dict[tuple[str, int], float] = {}
+from results import store
 
 
 def inputs_key(inputs: dict[str, Any]) -> str:
@@ -124,52 +157,89 @@ def inputs_key(inputs: dict[str, Any]) -> str:
 
 
 def best_plan(inputs: dict[str, Any], score: Callable[[int], float]) -> tuple[int, float]:
-    """The best plan for these building inputs, searched once and then served from the cache."""
+    """The best plan for these building inputs (which include the scoring objective), searched once."""
+    plans = store.load("plans")
     key = inputs_key(inputs)
-    if key not in _results:
-        _results[key] = search_module.search(score)
-    return _results[key]
+    if key not in plans:
+        plans[key] = list(search_module.search(score))
+        store.save("plans", plans)
+    best, score_value = plans[key]
+    return best, score_value
 
 
-def tariff_rate(region: str, year: int, table: Callable[[str, int], float]) -> float:
-    """The electricity tariff of a region in a year, cached on both."""
-    if (region, year) not in _rates:
-        _rates[(region, year)] = table(region, year)
-    return _rates[(region, year)]
-
-
-def search_settings() -> dict[str, int]:
-    return {"population": settings.SEARCH_POPULATION, "generations": settings.SEARCH_GENERATIONS}
+def tariff(region: str, year: int, table_version: str, table: Callable[[str, int], float]) -> float:
+    """The electricity tariff of a region in a year from a published, immutable table version."""
+    rates = store.load("tariffs")
+    key = f"{region}/{year}/{table_version}"
+    if key not in rates:
+        rates[key] = table(region, year)
+        store.save("tariffs", rates)
+    return rates[key]
 '''
 
 REPORTS = '''\
-"""Store of building reports that users download."""
+"""Reports that users download, and the dashboard summary built from the latest data."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
-from results import settings
-
-_store: dict[str, dict[str, Any]] = {}
+from results import settings, store
 
 
 def save_report(building_id: str, body: dict[str, Any]) -> None:
-    _store[building_id] = {"schema_version": settings.REPORT_SCHEMA_VERSION, "body": body}
+    reports = store.load("reports")
+    reports[building_id] = {"schema_version": settings.REPORT_SCHEMA_VERSION, "body": body}
+    store.save("reports", reports)
 
 
 def issued_report(building_id: str) -> dict[str, Any]:
-    """The report as issued for this building."""
-    return _store[building_id]["body"]
+    """The report issued for this building."""
+    return store.load("reports")[building_id]["body"]
 
 
-def current_summary(building_id: str, rebuild: Any) -> dict[str, Any]:
+def dashboard_summary(building_id: str, rebuild: Callable[[str], dict[str, Any]]) -> dict[str, Any]:
     """The dashboard summary, rebuilt when it was stored under an older schema."""
-    record = _store[building_id]
-    if record["schema_version"] != settings.REPORT_SCHEMA_VERSION:
+    summaries = store.load("summaries")
+    record = summaries.get(building_id)
+    if record is None or record["schema_version"] != settings.REPORT_SCHEMA_VERSION:
         record = {"schema_version": settings.REPORT_SCHEMA_VERSION, "body": rebuild(building_id)}
-        _store[building_id] = record
+        summaries[building_id] = record
+        store.save("summaries", summaries)
     return record["body"]
+'''
+
+CREDITS = '''\
+"""Carbon-credit offers sold in whole lots, with quantities converted to tonnes of CO2e on entry."""
+
+from __future__ import annotations
+
+import math
+
+TONNES_PER_UNIT = {"t": 1.0, "kg": 0.001, "lb": 0.00045359237}
+
+
+def to_tonnes(quantity: float, unit: str) -> float:
+    return quantity * TONNES_PER_UNIT[unit]
+
+
+def lot_bounds(minimum: float, maximum: float, step: float, unit: str) -> tuple[int, int]:
+    """The fewest and the most whole lots a buyer may purchase from an offer."""
+    low, high, lot = to_tonnes(minimum, unit), to_tonnes(maximum, unit), to_tonnes(step, unit)
+    first = max(math.ceil(low / lot), 1)
+    last = math.floor(high / lot)
+    return first, last
+
+
+def purchasable(minimum: float, maximum: float, step: float, unit: str) -> bool:
+    first, last = lot_bounds(minimum, maximum, step, unit)
+    return last >= first
+
+
+def whole_tonnes(quantity: float, unit: str) -> int:
+    """Tonnes of CO2e rounded to the nearest whole tonne, for display."""
+    return round(to_tonnes(quantity, unit))
 '''
 
 BASE = {
@@ -177,11 +247,13 @@ BASE = {
     ".env": ENV,
     "src/results/__init__.py": INIT,
     "src/results/settings.py": SETTINGS,
+    "src/results/store.py": STORE,
 }
 FEATURE = {
     "src/results/search.py": SEARCH,
     "src/results/cache.py": CACHE,
     "src/results/reports.py": REPORTS,
+    "src/results/credits.py": CREDITS,
 }
 
 
@@ -226,11 +298,11 @@ def build(out: Path) -> None:
     git(out, "init", "-q", "-b", "main")
     write(out, BASE)
     git(out, "add", "-A")
-    git(out, "commit", "-qm", "Baseline settings", date=COMMIT_DATES[0])
+    git(out, "commit", "-qm", "Baseline settings and store", date=COMMIT_DATES[0])
     git(out, "checkout", "-q", "-b", "feature")
     write(out, FEATURE)
     git(out, "add", "-A")
-    git(out, "commit", "-qm", "Search, results cache and report store", date=COMMIT_DATES[1])
+    git(out, "commit", "-qm", "Search, plan cache, report store and credit lots", date=COMMIT_DATES[1])
 
 
 def main(argv: list[str] | None = None) -> int:

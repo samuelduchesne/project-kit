@@ -18,7 +18,8 @@
       "possibly_intended_reason": null,
       "value_corrections": [],
       "reproduction": null,
-      "extent": []
+      "extent": [],
+      "in_practice_revision": null
     },
     {
       "finding_id": "F2",
@@ -43,7 +44,8 @@
         }
       ],
       "reproduction": null,
-      "extent": []
+      "extent": [],
+      "in_practice_revision": null
     },
     {
       "finding_id": "F3",
@@ -61,7 +63,8 @@
       "possibly_intended_reason": null,
       "value_corrections": [],
       "reproduction": null,
-      "extent": []
+      "extent": [],
+      "in_practice_revision": "After any release that bumps the schema version, every report stored earlier is served unchanged; the store is a file that persists across releases (store.py). Whether that is meant to keep issued reports stable is not documented."
     }
   ]
 }

@@ -347,6 +347,21 @@ description: "Task list for feature 010: findings that say who hits them"
 - [X] T062 Update `plugins/sci-review/README.md` and `CHANGELOG.md` for the removed cap and the added evidence; update spec.md (Story 2, FR-002 to FR-004, SC-002, Assumptions), research.md (R3, R5, R8, R12 C6, R13), data-model.md, contracts, quickstart.md and plan.md.
 - [X] T063 Add the second downstream issue to the private case file kept outside the repository, with its baseline body, the reviewer's comments and its expected trigger class (`data-condition`). Nothing about it enters this repository beyond generic wording.
 
+## Phase 10: Gaps found by the first validation (research R14)
+
+**Purpose**: Make the issue agree with the review's own evidence, then re-validate on a fixture that can fail, and render new issues that supersede the criticised ones.
+
+- [X] T064 [US6] Add `in_practice_revision` (string or null, required key) to the verdict in `SKILL_DIR/schemas/verification.schema.json` and `VerdictRecord`; add `in_practice_original` to `Finding` and `report.schema.json`. In `adjudicate_verified`, when a non-refuting verdict carries a revision, set `in_practice` to the first such revision and `in_practice_original` to the finder's statement.
+- [X] T065 [US6] Render "(Revised by the verifier.)" after a revised in-practice statement in `finding_block` and `render_issue`.
+- [X] T066 [US6] Owners: introduce history owners as "Last changed these lines (git blame)"; detect one commit for every cited line whose subject ends in `(#N)` or `!N` and add the merged-pull-request sentence (contracts/issue.md).
+- [X] T067 [US6] `panel.py issue --supersedes REF` (repeatable): open the body with "Supersedes REF, REF." after the title.
+- [X] T068 [US6] Tests in `PRACTICAL_TESTS` for T064 to T067; extend the golden practical run with a revised verdict; regenerate golden outputs.
+- [X] T069 [US6] Briefs: finders never drop a concrete defect on rarity, cite per-file line numbers, and consider code releases for cached or stored results; the verifier writes `in_practice_revision` when reach contradicts the statement, and treats rarity as no ground for refutation; the algorithmic-correctness stale-caching check names releases. Update `protocol.md` section 3.1. Regenerate the Workflow script.
+- [X] T070 Rebuild `tests/fixtures/sci-review/practical-repo/` (build.py, manifest.json) per research R14 item 7: a JSON-file store that persists across processes, a stored-result case triggered by a code release or a configuration change, a deliberate-reuse case, a unit-conversion rounding case, and a correct look-alike for each.
+- [X] T071 Update README, CHANGELOG, plan.md and quickstart.md for Phase 10.
+- [ ] T072 Re-run quickstart scenario 5 (five practical runs and one seeded run) and scenario 6 (both downstream cases); record SC-002, SC-003, SC-005 and SC-008 and the downstream table in validation.md, section 6, anonymised.
+- [ ] T073 Render the two downstream issues with `--supersedes`, unedited, and save them beside the private case file for the user to file.
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies

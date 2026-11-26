@@ -6,7 +6,7 @@ The cache returns stored results directly to the reports users download.
 
 ## Who hits this and when
 
-Only after a release that bumps the schema; the reuse may be deliberate, to keep reports stable across releases.
+After any release that bumps the schema version, every report stored earlier is served unchanged; the store is a file that persists across releases (store.py). Whether that is meant to keep issued reports stable is not documented. (Revised by the verifier.)
 
 Trigger: a release of new code. The schema version changes only in a release.
 

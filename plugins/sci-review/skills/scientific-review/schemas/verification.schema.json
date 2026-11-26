@@ -43,7 +43,8 @@
         "trigger_class",
         "value_corrections",
         "reproduction",
-        "extent"
+        "extent",
+        "in_practice_revision"
       ],
       "properties": {
         "finding_id": {
@@ -141,6 +142,13 @@
           "items": {
             "$ref": "#/$defs/ExtentRow"
           }
+        },
+        "in_practice_revision": {
+          "description": "A full replacement for the finding's in_practice statement, when your reach contradicts or omits part of it (for example a trigger the finder ruled out); null when the statement stands.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false

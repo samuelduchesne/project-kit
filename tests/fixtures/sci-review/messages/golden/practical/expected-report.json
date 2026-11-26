@@ -172,13 +172,14 @@
       "label": "majority",
       "headline": "Stored results are reused across schema versions",
       "context": "The cache returns stored results directly to the reports users download.",
-      "in_practice": "Only after a release that bumps the schema; the reuse may be deliberate, to keep reports stable across releases.",
+      "in_practice": "After any release that bumps the schema version, every report stored earlier is served unchanged; the store is a file that persists across releases (store.py). Whether that is meant to keep issued reports stable is not documented.",
       "kind": "design-question",
       "trigger_class": "release",
       "reach": "The schema version changes only in a release.",
       "possibly_intended_reason": "Keeping reports byte-identical across releases looks deliberate; no comment says so either way.",
       "value_corrections": [],
-      "extent": []
+      "extent": [],
+      "in_practice_original": "Only after a release that bumps the schema; the reuse may be deliberate, to keep reports stable across releases."
     }
   ],
   "rejected": [],

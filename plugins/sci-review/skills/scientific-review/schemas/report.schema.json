@@ -671,6 +671,12 @@
           "items": {
             "$ref": "#/$defs/ExtentRow"
           }
+        },
+        "in_practice_original": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false,

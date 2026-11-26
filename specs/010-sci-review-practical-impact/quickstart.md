@@ -61,13 +61,7 @@ Expected:
 
 ## 5. Practical fixture (live)
 
-The new fixture `tests/fixtures/sci-review/practical-repo/` holds three cases alongside correct code:
-
-- (a) a stale-cache defect whose only trigger is a configuration change between deployments;
-- (b) a cache that deliberately ignores a version field, with no comment saying so;
-- (c) a finding bait whose obvious reproduction quotes a setting that the fixture's `.env` sets differently.
-
-Each case has a manifest entry, as in `seeded-repo`. Build the fixture and run a `medium` review, as described in section 1 of `specs/009-sci-review-cost/validation.md`. Repeat five times for SC-003.
+The fixture `tests/fixtures/sci-review/practical-repo/` (rebuilt in Phase 10, research R14) holds four cases beside correct look-alikes, with a JSON store on disk so that every case is reachable: a stored plan keyed without the search settings or code version, issued reports served whatever their schema, offer lots rounded after converting pounds to tonnes, and a docstring quoting a development setting that `.env` contradicts. See its `manifest.json`. Build it and run a `medium` review as in section 1 of `specs/009-sci-review-cost/validation.md`, five times.
 
 Expected:
 

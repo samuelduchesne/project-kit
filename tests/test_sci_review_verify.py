@@ -72,6 +72,7 @@ def verification(batch: int, verifier: str, verdicts: dict[str, str]) -> dict:
                 "value_corrections": [],
                 "reproduction": f"python3 -B repro_{fid.lower()}.py  # prints the wrong output",
                 "extent": [],
+                "in_practice_revision": None,
             }
             for fid, kind in verdicts.items()
         ],

@@ -116,6 +116,24 @@ A user who wants to file a finding in the reviewed project's tracker runs one co
 3. **Given** a design question, **When** its issue is rendered, **Then** the title and body ask the owners to confirm the intended behaviour, not to fix a bug.
 4. **Given** the user renders an issue, **When** the command finishes, **Then** nothing is posted; the body is printed or written to the run directory for the user to file.
 
+### User Story 6 - What the review learned reaches the reader (Priority: P1)
+
+Added after the first validation (validation.md, sections 4 and 5). A user filing a finding gets an issue whose "who hits this" statement agrees with what the verifier established, that names every realistic way the trigger arises (a code release included), that was not silently dropped for seeming rare, and that says what the suggested owners actually are. The issue can say which earlier issue it supersedes.
+
+**Why this priority**: In the first validation the verifier recorded that quantities are converted between units before rounding, yet the finder's in-practice statement, written earlier, excluded the commonest way users hit the defect; a finder dropped a real defect as "unlikely to matter in practice"; a stale-result finding named only a configuration change, not a release of new code; and blame after a squash merge named the merger as owner. Each made a reviewed issue wrong in a way its own evidence could have prevented.
+
+**Independent Test**: On the rebuilt practical fixture, the unit-conversion case's reported in-practice statement names the converted units (revised by the verifier when the finder's did not), the stored-result case names a release of new code among its triggers, and every finding cites line numbers within its own file.
+
+**Acceptance Scenarios**:
+
+1. **Given** a verifier whose reach contradicts or omits part of a finding's in-practice statement, **When** it judges the finding, **Then** it records a revised statement, and the report and the issue show the revised statement, marked as revised by the verifier.
+2. **Given** a finder that establishes a concrete failure but judges it rare, **When** it writes its candidates, **Then** it reports the finding and states that the frequency is unknown or what it depends on, and does not drop it.
+3. **Given** a finding about a cached, stored or memoised result, **When** finders and verifiers describe its trigger, **Then** they consider a release of new code that changes how the result is computed, as well as configuration and inputs.
+4. **Given** owners suggested from history in which every cited line comes from one commit whose message ends in a pull request number, **When** the issue is rendered, **Then** it says that the lines come from one merged pull request and that history shows who last changed them, not who owns them.
+5. **Given** `--supersedes <ref>` (repeatable), **When** an issue is rendered, **Then** its body opens with a line saying it supersedes those issues.
+
+---
+
 ### Edge Cases
 
 - A finding with no concrete trigger (contested, no trigger reason): its in-practice statement says the trigger could not be established and why; it can still be rendered as an issue, marked contested.
@@ -143,6 +161,12 @@ A user who wants to file a finding in the reviewed project's tracker runs one co
 - **FR-011**: The issue command MUST suggest owners from the repository's ownership file when one covers the finding's file, and otherwise from the recent authors of the finding's lines, saying which source was used.
 - **FR-012**: Runs recorded before this feature MUST still render (report and issue), marking missing fields as not recorded.
 - **FR-013**: The agent count, the agent estimate and the read-only guarantee MUST be unchanged; the reach step runs inside the existing verifiers.
+- **FR-014**: A verdict MAY carry `in_practice_revision`, a replacement in-practice statement, when the verifier's reach contradicts or omits part of the finding's statement; the reported finding MUST use the first non-refuting verdict's revision, keep the finder's statement, and be marked as revised.
+- **FR-015**: Finder briefs MUST forbid dropping a concrete defect because it seems rare; the finding is reported with its frequency stated as unknown or as what it depends on. The verifier brief MUST state that rarity is not grounds for refutation.
+- **FR-016**: Finder and verifier briefs, and the algorithmic-correctness dimension, MUST ask for cached, stored or memoised results whether a release of new code that changes the computation is a trigger, alongside configuration and inputs.
+- **FR-017**: When owners come from history, the issue MUST say that history shows who last changed the lines; when every cited line comes from one commit whose subject ends in a pull request reference such as `(#123)`, it MUST say the lines come from that merged pull request.
+- **FR-018**: Every finding MUST cite line numbers within its own file; finder briefs MUST say so.
+- **FR-019**: `panel.py issue` MUST accept `--supersedes <ref>` (repeatable) and open the body with a line naming the superseded issues.
 
 ### Key Entities
 
@@ -155,12 +179,13 @@ A user who wants to file a finding in the reviewed project's tracker runs one co
 ## Success Criteria *(mandatory)*
 
 - **SC-001**: On the seeded fixture, 100% of reported findings have context and in-practice statements, and a reader shown only those two statements identifies the triggering actor correctly for every finding.
-- **SC-002**: On the practical fixture, every finding with evidence `reproduced` shows the code it ran and its output, and the operator-only stale-cache finding's in-practice statement names the release or the configuration change between deployments and cites the file the setting comes from.
-- **SC-003**: On the fixture's deliberate-cache case, the finding appears under design questions and not among defects in at least 4 of 5 runs.
+- **SC-002**: On the practical fixture, every finding with evidence `reproduced` shows the code it ran and its output, and the stored-result finding's in-practice statement names a release of new code among its triggers and cites the file the settings come from.
+- **SC-003**: On the fixture's deliberate-reuse case, the finding appears under design questions and not among defects in at least 4 of 5 runs.
 - **SC-004**: On the fixture's wrong-quoted-value case, the report never repeats the wrong value without a correction or notice.
 - **SC-005**: Recall of the 16 seeded defects at `medium` is unchanged (16 of 16), no look-alike is reported, and the number of panel agents is unchanged from feature 009.
 - **SC-006**: Re-reviewing the code behind the criticised issue and rendering that finding produces an issue whose first two sections a domain reader can understand without opening the code, that names the release as the realistic trigger, that presents the reuse as a design question or as a defect with checkable evidence, and that suggests the cache's owners, not the algorithm's author.
 - **SC-007**: Every existing sci-review test passes, updated only where it asserts the old severity wording or the old report layout.
+- **SC-008**: On the practical fixture's unit-conversion case, the reported in-practice statement names the converted units as a trigger in at least 4 of 5 runs, and no finding in any run cites a line beyond the end of its file.
 
 ## Assumptions
 

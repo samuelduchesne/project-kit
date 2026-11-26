@@ -39,7 +39,8 @@
           "expected": "0 kBtu",
           "actual": "0 kBtu"
         }
-      ]
+      ],
+      "in_practice_revision": null
     },
     {
       "finding_id": "F2",
@@ -64,7 +65,8 @@
         }
       ],
       "reproduction": null,
-      "extent": []
+      "extent": [],
+      "in_practice_revision": null
     },
     {
       "finding_id": "F3",
@@ -82,7 +84,8 @@
       "possibly_intended_reason": "Keeping reports byte-identical across releases looks deliberate; no comment says so either way.",
       "value_corrections": [],
       "reproduction": null,
-      "extent": []
+      "extent": [],
+      "in_practice_revision": null
     }
   ]
 }

@@ -1,47 +1,61 @@
 {
-  "description": "Cases and correct look-alikes of the practical fixture built by build.py (spec 010). Lines are 1-based and refer to the feature branch; each entry is located by anchor, a substring on exactly one line of its file. A finding matches an entry when the files are equal and the entry line lies within three lines of the finding range. Cases are scored by the criterion named in expect, not by recall.",
+  "description": "Cases and correct look-alikes of the practical fixture built by build.py (spec 010, research R14). Lines are 1-based and refer to the feature branch; each entry is located by anchor, a substring on exactly one line of its file. A finding matches an entry when the files are equal and the entry line lies within three lines of the finding range. Cases are scored by the criterion named in expect, not by recall.",
   "base_branch": "main",
   "feature_branch": "feature",
   "match_tolerance": 3,
   "cases": [
     {
-      "id": "stale-config-cache",
+      "id": "stored-plan",
       "file": "src/results/cache.py",
-      "line": 23,
+      "line": 21,
       "anchor": "key = inputs_key(inputs)",
-      "expect": "SC-002: reported with severity at most medium and trigger class operator-change or release; in_practice names a release or a configuration change between deployments."
+      "expect": "SC-002: reported; in_practice names a release of new code (search code changes) among its triggers, and cites where the settings come from (.env or settings.py)."
     },
     {
-      "id": "frozen-report",
+      "id": "issued-report",
       "file": "src/results/reports.py",
-      "line": 18,
-      "anchor": "return _store[building_id][\"body\"]",
+      "line": 19,
+      "anchor": "return store.load(\"reports\")[building_id][\"body\"]",
       "expect": "SC-003: reported under Design questions (kind design-question), not among defects, in at least 4 of 5 runs."
+    },
+    {
+      "id": "pound-lots",
+      "file": "src/results/credits.py",
+      "line": 17,
+      "anchor": "first = max(math.ceil(low / lot), 1)",
+      "expect": "SC-008: reported; in_practice names offers entered in pounds (or kilograms, or converted units) as a trigger in at least 4 of 5 runs. Example: minimum = maximum = 9500 lb, step 500 lb gives 19.000000000000004 lots, so first = 20 > last = 19 and the offer is unusable."
     },
     {
       "id": "quoted-setting",
       "file": "src/results/search.py",
       "line": 16,
       "anchor": "window = generations // 10",
-      "expect": "SC-004: any finding here that quotes SEARCH_GENERATIONS=5 carries a value correction to .env line 3 (SEARCH_GENERATIONS=10), or is refuted as unreachable in the shipped configurations.",
+      "expect": "SC-004: any finding here that quotes SEARCH_GENERATIONS=5 as configured carries a value correction to .env line 3 (SEARCH_GENERATIONS=10), or attributes it to the docstring.",
       "quoted": "SEARCH_GENERATIONS=5",
       "actual": {"file": ".env", "line": 3, "value": "SEARCH_GENERATIONS=10"}
     }
   ],
   "lookalikes": [
     {
-      "id": "complete-cache-key",
+      "id": "versioned-tariff",
       "file": "src/results/cache.py",
-      "line": 31,
-      "anchor": "if (region, year) not in _rates",
-      "expect": "Not reported: the cache key holds every input of the cached value."
+      "line": 32,
+      "anchor": "key = f\"{region}/{year}/{table_version}\"",
+      "expect": "Not reported: the key holds every input, and table versions are documented as immutable."
     },
     {
-      "id": "versioned-summary",
+      "id": "rebuilt-summary",
       "file": "src/results/reports.py",
-      "line": 24,
-      "anchor": "if record[\"schema_version\"] != settings.REPORT_SCHEMA_VERSION",
-      "expect": "Not reported: the lookup rebuilds a summary stored under an older schema."
+      "line": 26,
+      "anchor": "if record is None or record[\"schema_version\"]",
+      "expect": "Not reported: summaries stored under an older schema are rebuilt, in their own table."
+    },
+    {
+      "id": "display-tonnes",
+      "file": "src/results/credits.py",
+      "line": 29,
+      "anchor": "return round(to_tonnes(quantity, unit))",
+      "expect": "Not reported: rounding to the nearest tonne for display is insensitive to conversion error."
     }
   ]
 }

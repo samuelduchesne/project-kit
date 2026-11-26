@@ -97,7 +97,7 @@ The reviewers marked these as possibly intended: the behaviour may be a delibera
 
 The cache returns stored results directly to the reports users download.
 
-**In practice.** Only after a release that bumps the schema; the reuse may be deliberate, to keep reports stable across releases.
+**In practice.** After any release that bumps the schema version, every report stored earlier is served unchanged; the store is a file that persists across releases (store.py). Whether that is meant to keep issued reports stable is not documented. (Revised by the verifier.)
 
 **Why it may be intended.** Keeping reports byte-identical across releases looks deliberate; no comment says so either way.
 

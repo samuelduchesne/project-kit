@@ -31,6 +31,7 @@ Gains `headline`, `context` and `in_practice`. The moderator chooses or combines
 | `value_corrections` | array of ValueCorrection, may be empty | One entry per quoted value that the repository contradicts. |
 | `reproduction` | string or null | The code or command run and its observed output; required when `evidence` is `reproduced`. |
 | `extent` | array of ExtentRow, may be empty | A few runs, input by input, including ordinary inputs. |
+| `in_practice_revision` | string or null | A replacement in-practice statement when reach contradicts or omits part of the finding's (research R14). |
 
 ### ExtentRow
 
@@ -67,6 +68,7 @@ Gains optional `possibly_intended` and `possibly_intended_reason` with the same 
 | `value_corrections` | array of ValueCorrection, optional | The union over verdicts, deduplicated on (`quoted`, `file`, `line`). |
 | `reproduction` | string or null, optional | The first non-refuting verdict's, preferring a reproduced one (research R13). |
 | `extent` | array of ExtentRow, optional | The same verdict's table, or the first non-refuting one recorded. |
+| `in_practice_original` | string or null, optional | The finder's statement, kept when a verifier revised it; `in_practice` then holds the revision. |
 
 The severity is the merged finding's; adjudication never changes it (research R5).
 

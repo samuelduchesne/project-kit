@@ -654,6 +654,73 @@ class TestOwners(unittest.TestCase):
                 self.assertEqual(panel.codeowners_owners(text, path), expected)
 
 
+class TestPhase10(PracticalRunMixin):
+    """Research R14: verifier revision, superseded issues and what blame shows."""
+
+    def test_revision_replaces_and_keeps_the_original(self) -> None:
+        revised = panel.dataclasses.replace(verdict(verifier="v2"), in_practice_revision="Also users entering pounds.")
+        finding = adjudicate(merged(), verdict(), revised).findings[0]
+        self.assertEqual(finding.in_practice, "Also users entering pounds.")
+        self.assertEqual(finding.in_practice_original, "Any user with an empty building.")
+
+    def test_refuting_verdict_does_not_revise(self) -> None:
+        refuting = panel.dataclasses.replace(
+            verdict("refute", verifier="v2", trigger_class="unreachable"), in_practice_revision="Nobody."
+        )
+        finding = adjudicate(merged(), verdict(), verdict(verifier="v3"), refuting).findings[0]
+        self.assertEqual(finding.in_practice, "Any user with an empty building.")
+        self.assertIsNone(finding.in_practice_original)
+
+    def test_revision_is_marked_in_report_and_issue(self) -> None:
+        run_dir = self.practical_run()
+        markdown = self.report(run_dir)
+        self.assertIn("the store is a file that persists across releases (store.py). Whether that is meant to keep "
+                      "issued reports stable is not documented. (Revised by the verifier.)", markdown)  # fmt: skip
+        self.report(run_dir, "json")
+        result = run_panel(
+            "issue", "--run", str(run_dir), "--finding", "F3", "--supersedes", "#7", "--supersedes", "#8"
+        )
+        self.assertEqual(result.code, 0, result.err)
+        self.assertIn("(Revised by the verifier.)", result.out)
+        lines = result.out.splitlines()
+        self.assertEqual(lines[2], "Supersedes #7, #8.")
+
+    def test_no_supersedes_line_by_default(self) -> None:
+        run_dir = self.practical_run()
+        self.report(run_dir, "json")
+        result = run_panel("issue", "--run", str(run_dir), "--finding", "F1")
+        self.assertNotIn("Supersedes", result.out)
+
+
+class TestMergedPullRequestOwners(unittest.TestCase):
+    """Research R14 item 4: blame after a squash merge names the merger."""
+
+    def setUp(self) -> None:
+        self.project = Path(tempfile.mkdtemp(prefix="sci-review-squash-"))
+        self.addCleanup(shutil.rmtree, self.project, True)
+        git(self.project, "init", "-q")
+        (self.project / "a.py").write_text("x = 1\ny = 2\n", encoding="utf-8")
+        git(self.project, "add", ".")
+        commit_as(self.project, "merger", "2026-01-01T00:00:00Z", "Add the solver (#799)")
+
+    def head(self) -> str:
+        return git(self.project, "rev-parse", "HEAD").strip()
+
+    def test_single_merged_commit_is_named(self) -> None:
+        owners = panel.suggest_owners(self.project, self.head(), "a.py", 1, 2)
+        self.assertEqual(owners.merged_pull_request, "#799")
+        text = panel.owners_text(owners)
+        self.assertTrue(text.startswith("Last changed these lines (git blame): merger (2 of 2 lines"))
+        self.assertIn("All of them come from one merged pull request (#799)", text)
+
+    def test_several_commits_are_not_called_a_pull_request(self) -> None:
+        (self.project / "a.py").write_text("x = 1\ny = 3\n", encoding="utf-8")
+        commit_as(self.project, "other", "2026-02-01T00:00:00Z", "Tweak y (#800)")
+        owners = panel.suggest_owners(self.project, self.head(), "a.py", 1, 2)
+        self.assertIsNone(owners.merged_pull_request)
+        self.assertNotIn("merged pull request", panel.owners_text(owners))
+
+
 class TestPracticalFixture(unittest.TestCase):
     """T050: the live fixture's manifest matches its embedded sources."""
 

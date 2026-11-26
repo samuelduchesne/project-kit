@@ -17,6 +17,7 @@ Verifiers gain a reach step. They read configuration, environment, deployment an
 `panel.py` turns these into deterministic outcomes:
 
 - evidence a reader can check: the verifier's runnable reproduction and a short table of inputs with expected and actual results;
+- a verifier revision of the in-practice statement when its reach contradicts it, and owner text that says what blame shows (research R14);
 - a "Design questions" section for marked findings;
 - a report that leads with prose;
 - a new `issue` command that renders a finding as an issue body, in the order a domain reader needs, with owners from CODEOWNERS or `git blame`. Nothing is posted.

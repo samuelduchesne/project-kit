@@ -169,3 +169,19 @@ The in-practice statement (R1) must state the triggering conditions in the users
 **Alternatives considered**:
 - Merging the extent tables of all verifiers (rows from different runs and set-ups read as one experiment);
 - A required extent table (some defects, such as a wrong unit everywhere, have no meaningful input dependence).
+
+## R14. Closing the gaps the first validation found (validation.md section 5)
+
+**Decision**:
+
+1. **The verifier revises the in-practice statement.** A verdict may carry `in_practice_revision`: a full replacement statement, written when the verifier's reach contradicts or omits part of the finder's. The reported finding uses the first non-refuting verdict's revision, keeps the finder's text as `in_practice_original`, and is marked revised. The report and the issue say "(revised by the verifier)".
+2. **No dropping on rarity.** Finder briefs: a concrete defect is reported even when it seems rare; its frequency is stated as unknown or as what it depends on. Verifier brief: rarity is not grounds for refutation; unreachability is.
+3. **Releases as a trigger.** For a cached, stored or memoised result, finders and verifiers ask whether a release of new code that changes how the result is computed is a trigger, as well as configuration and inputs. The algorithmic-correctness dimension's stale-caching check says so.
+4. **What blame shows.** History-based owners are introduced as "Last changed these lines". When every cited line comes from one commit whose subject ends in a pull request reference (`(#123)` or `!123`), the issue says the lines come from that merged pull request, so the suggestion names its author or merger, not necessarily the owner.
+5. **Line numbers per file.** Finder briefs: line numbers are those of the file itself (as `grep -n` on that file shows), never counted across the files of a part. The first validation's cross-file numbers came from finders reading several files as one text.
+6. **Superseding issues.** `panel.py issue --supersedes <ref>` (repeatable) opens the body with "Supersedes <ref>, <ref>." The user decides which issues a new one replaces.
+7. **A fixture that can fail.** `practical-repo` is rebuilt with results and reports stored in a JSON file on disk that persists across processes and releases, so the stored-result and deliberate-reuse cases are reachable, and gains a unit-conversion case: quantities entered in pounds are converted to tonnes before whole-lot rounding.
+
+**Rationale**: Each closes a failure observed in the first validation where the review's own evidence could have prevented a wrong issue. The revision is a verifier field, not a new agent (FR-013). Items 2, 3 and 5 are brief text; items 1, 4 and 6 are deterministic and live in `panel.py` (Principle II).
+
+**Alternatives considered**: having the finders write in-practice after verification (a second finder pass, one more agent per finder); merging finder and verifier statements automatically (two partly contradictory statements cannot be merged without judgement); detecting squash merges from the hosting API (needs a network client; the commit subject is enough).

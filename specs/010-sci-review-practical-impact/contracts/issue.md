@@ -3,7 +3,7 @@
 ## Synopsis
 
 ```
-panel.py issue --run RUN --finding Fn [--dry-run]
+panel.py issue --run RUN --finding Fn [--supersedes REF ...] [--dry-run]
 ```
 
 - `--finding` names a delivered finding or design question in `report.json`. An id that was withheld by the finding cap, rejected or unknown is a usage error (exit 2). The error message lists the delivered ids.
@@ -19,13 +19,15 @@ Sections appear in this order. A missing field (a run from an earlier version) p
 ```markdown
 # <headline>                       ← design question: "Confirm intended behaviour: <headline>"
 
+Supersedes <ref>, <ref>.          ← only with --supersedes
+
 ## Situation
 
 <context>
 
 ## Who hits this and when
 
-<in_practice>
+<in_practice>                      ← followed by "(Revised by the verifier.)" when revised
 
 Trigger: <trigger class in words, e.g. "a release of new code">. <reach, first two sentences>
 
@@ -81,7 +83,7 @@ Rules:
 | Source | Output |
 |--------|--------|
 | `codeowners` | `From <ownership file>: <owner>, <owner>` (as written, teams included) |
-| `blame` | `From the history of these lines: <author> (<n> of <m> lines, last <date>), ...`, up to three; plus `History is truncated (shallow clone); older authors may be missing.` when boundary commits were seen |
+| `blame` | `Last changed these lines (git blame): <author> (<n> of <m> lines, last <date>), ...`, up to three; plus `All of them come from one merged pull request (<ref>), so this names its author or merger, not necessarily the owner.` when every line comes from one commit whose subject ends in a pull request reference; plus `History is truncated (shallow clone); older authors may be missing.` when boundary commits were seen |
 | `none` | `No owners found: <reason>` (no ownership file and git unavailable, or the file has no history at the head) |
 
 ## Exit codes

@@ -41,7 +41,8 @@
             "expected": "0 kBtu",
             "actual": "0 kBtu"
           }
-        ]
+        ],
+        "in_practice_revision": null
       }
     ]
   }

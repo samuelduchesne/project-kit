@@ -40,7 +40,7 @@ A verifier may also read configuration, environment, deployment and release file
 
 ### 3.1 Finding prose
 
-Every finding is written for a reader who has not opened the code (spec 010). Finders write three statements on each candidate; the moderator chooses or combines them for a cluster under the rule that applies to `summary`, and the automatic merge copies them. Verifiers check them through reach.
+Every finding is written for a reader who has not opened the code (spec 010). Finders write three statements on each candidate; the moderator chooses or combines them for a cluster under the rule that applies to `summary`, and the automatic merge copies them. Verifiers check them through reach, and a verifier whose reach contradicts or omits part of the in-practice statement writes a replacement (`in_practice_revision`); the report uses the first non-refuting verdict's replacement, keeps the finder's text, and marks it revised. Finders never drop a concrete defect because it seems rare, and cite line numbers within each file.
 
 - **`headline`**: at most 90 characters, plain words, naming the situation, not the code. It is the finding's heading in the report and the title of its issue.
 - **`context`**: one or two sentences on what the code does for its users and the situation in which the finding arises.

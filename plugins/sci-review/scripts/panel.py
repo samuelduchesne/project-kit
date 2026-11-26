@@ -779,6 +779,8 @@ class VerdictRecord(Record):
     # Evidence a reader can check (spec 010, research R13): what was run, and a few runs input by input.
     reproduction: str | None = None
     extent: tuple[ExtentRow, ...] = ()
+    # A replacement in-practice statement when reach contradicts or omits part of the finder's (research R14).
+    in_practice_revision: str | None = None
     _records: ClassVar[dict[str, str]] = {"value_corrections": "ValueCorrection", "extent": "ExtentRow"}
     _enums: ClassVar[dict[str, Sequence[str]]] = {
         "verdict": Verdict.VALUES,
@@ -848,6 +850,7 @@ class Finding(Record):
     value_corrections: tuple[ValueCorrection, ...] = ()
     reproduction: str | None = None
     extent: tuple[ExtentRow, ...] = ()
+    in_practice_original: str | None = None
     _records: ClassVar[dict[str, str]] = {"value_corrections": "ValueCorrection", "extent": "ExtentRow"}
     _enums: ClassVar[dict[str, Sequence[str]]] = {
         "dimension": Dimension.VALUES,
@@ -868,6 +871,7 @@ class Finding(Record):
         "reach",
         "possibly_intended_reason",
         "reproduction",
+        "in_practice_original",
     )
 
     def to_json(self) -> dict[str, Any]:
@@ -3894,6 +3898,14 @@ def adjudicate_verified(
                 extra["possibly_intended_reason"] = marked.possibly_intended_reason
             trigger_class, reach = combined_trigger_class(verdicts)
             reproduction, extent = representative_evidence(verdicts)
+            prose = prose_fields(merged)
+            revision = next(
+                (v.in_practice_revision for v in verdicts if v.verdict != Verdict.REFUTE and v.in_practice_revision),
+                None,
+            )
+            if revision is not None:
+                prose["in_practice_original"] = merged.in_practice
+                prose["in_practice"] = revision
             findings.append(
                 Finding(
                     id=merged.id,
@@ -3910,7 +3922,7 @@ def adjudicate_verified(
                     extent=extent,
                     reach=reach,
                     value_corrections=combined_value_corrections(verdicts),
-                    **prose_fields(merged),
+                    **prose,
                     summary=merged.summary,
                     trigger=merged.trigger,
                     wrong_output=merged.wrong_output,
@@ -4173,11 +4185,18 @@ def badges(finding: Finding) -> str:
     return " · ".join(parts)
 
 
+def in_practice_text(finding: Finding) -> str:
+    """The in-practice statement, marked when a verifier revised the finder's (research R14)."""
+    if not finding.in_practice:
+        return NOT_RECORDED
+    return finding.in_practice + (" (Revised by the verifier.)" if finding.in_practice_original else "")
+
+
 def finding_block(finding: Finding) -> list[str]:
     """One finding of the markdown report: plain words first, then the technical details (spec 010)."""
     heading = finding.headline or finding.summary
     lines = [f"#### {finding.id}. {heading}", "", badges(finding), "", finding.context or NOT_RECORDED, ""]
-    lines += [f"**In practice.** {finding.in_practice or NOT_RECORDED}", ""]
+    lines += [f"**In practice.** {in_practice_text(finding)}", ""]
     if finding.kind == FindingKind.DESIGN_QUESTION:
         lines += [f"**Why it may be intended.** {finding.possibly_intended_reason or NOT_RECORDED}", ""]
         lines += [f"**If it is not intended.** {finding.wrong_output or NOT_RECORDED}", ""]
@@ -4410,9 +4429,11 @@ class IssueOwners(Record):
     origin: str | None = None
     truncated: bool = False
     reason: str | None = None
+    # The pull request every cited line comes from, when one merged commit wrote them all (research R14).
+    merged_pull_request: str | None = None
     _records: ClassVar[dict[str, str]] = {"owners": "Owner"}
     _enums: ClassVar[dict[str, Sequence[str]]] = {"source": OwnerSource.VALUES}
-    _optional: ClassVar[tuple[str, ...]] = ("origin", "reason")
+    _optional: ClassVar[tuple[str, ...]] = ("origin", "reason", "merged_pull_request")
 
 
 def codeowners_regex(pattern: str) -> re.Pattern[str]:
@@ -4473,8 +4494,17 @@ def read_at_head(project: Path, head: str | None, relative: str, in_git: bool) -
     return path.read_text(encoding="utf-8", errors="replace") if path.is_file() else None
 
 
-def blame_owners(project: Path, head: str | None, file: str, line_start: int, line_end: int) -> list[Owner]:
-    """Up to three authors of the lines, by number of lines and then by their latest commit (research R9)."""
+PULL_REQUEST_SUBJECT = re.compile(r"(\(#\d+\)|![0-9]+)\s*$")
+
+
+def blame_owners(
+    project: Path, head: str | None, file: str, line_start: int, line_end: int
+) -> tuple[list[Owner], str | None]:
+    """Up to three authors of the lines, by number of lines and then by their latest commit (research R9).
+
+    Also returns the pull request reference when every line comes from one commit whose subject ends in one, such
+    as `(#123)` or `!123`: blame then names that pull request's author or merger (research R14).
+    """
     rev = [head] if head else []
     out = git(
         project, "blame", "--root", "--line-porcelain", "-L", f"{line_start},{line_end}", *rev, "--", file, check=False
@@ -4482,8 +4512,17 @@ def blame_owners(project: Path, head: str | None, file: str, line_start: int, li
     counts: dict[str, int] = {}
     latest: dict[str, int] = {}
     author, when = None, 0
+    commits: set[str] = set()
+    subjects: dict[str, str] = {}
+    commit = ""
     for line in out.splitlines():
-        if line.startswith("author "):
+        header = re.match(r"^([0-9a-f]{40}) \d+ \d+", line)
+        if header:
+            commit = header.group(1)
+            commits.add(commit)
+        elif line.startswith("summary "):
+            subjects[commit] = line[len("summary ") :]
+        elif line.startswith("author "):
             author = line[len("author ") :]
         elif line.startswith("author-time "):
             when = int(line.split()[1])
@@ -4492,7 +4531,11 @@ def blame_owners(project: Path, head: str | None, file: str, line_start: int, li
             latest[author] = max(latest.get(author, 0), when)
             author = None
     ranked = sorted(counts, key=lambda a: (-counts[a], -latest[a], a))[:MAX_OWNERS]
-    return [
+    merged = None
+    if len(commits) == 1:
+        match = PULL_REQUEST_SUBJECT.search(subjects.get(next(iter(commits)), ""))
+        merged = match.group(1).strip("()") if match else None
+    owners = [
         Owner(
             name=a,
             lines=counts[a],
@@ -4500,6 +4543,7 @@ def blame_owners(project: Path, head: str | None, file: str, line_start: int, li
         )
         for a in ranked
     ]
+    return owners, merged
 
 
 def suggest_owners(project: Path, head: str | None, file: str, line_start: int, line_end: int) -> IssueOwners:
@@ -4520,11 +4564,11 @@ def suggest_owners(project: Path, head: str | None, file: str, line_start: int, 
             source=OwnerSource.NONE,
             reason="the project is not a git repository and has no ownership file covering this file",
         )
-    owners = blame_owners(project, head, file, line_start, line_end)
+    owners, merged = blame_owners(project, head, file, line_start, line_end)
     if not owners:
         return IssueOwners(source=OwnerSource.NONE, reason=f"{file} has no history at the reviewed head")
     shallow = git(project, "rev-parse", "--is-shallow-repository", check=False).strip() == "true"
-    return IssueOwners(source=OwnerSource.BLAME, owners=tuple(owners), truncated=shallow)
+    return IssueOwners(source=OwnerSource.BLAME, owners=tuple(owners), truncated=shallow, merged_pull_request=merged)
 
 
 def owners_text(owners: IssueOwners) -> str:
@@ -4533,7 +4577,12 @@ def owners_text(owners: IssueOwners) -> str:
     if owners.source == OwnerSource.BLAME:
         total = sum(o.lines or 0 for o in owners.owners)
         listed = ", ".join(f"{o.name} ({o.lines} of {total} lines, last {o.last_date})" for o in owners.owners)
-        text = f"From the history of these lines: {listed}"
+        text = f"Last changed these lines (git blame): {listed}"
+        if owners.merged_pull_request:
+            text += (
+                f". All of them come from one merged pull request ({owners.merged_pull_request}), so this names its "
+                "author or merger, not necessarily the owner."
+            )
         if owners.truncated:
             text += "\n\nHistory is truncated (shallow clone); older authors may be missing."
         return text
@@ -4545,13 +4594,23 @@ def first_sentences(text: str, count: int = 2) -> str:
     return " ".join(sentences[:count])
 
 
-def render_issue(finding: Finding, owners: IssueOwners, head: str | None, level: str, verifiers: str) -> str:
+def render_issue(
+    finding: Finding,
+    owners: IssueOwners,
+    head: str | None,
+    level: str,
+    verifiers: str,
+    supersedes: Sequence[str] = (),
+) -> str:
     """The issue body of contracts/issue.md, in the order a domain reader needs it."""
     design = finding.kind == FindingKind.DESIGN_QUESTION
     headline = finding.headline or finding.summary
     title = f"Confirm intended behaviour: {headline}" if design else headline
-    lines = [f"# {title}", "", "## Situation", "", finding.context or NOT_RECORDED, ""]
-    lines += ["## Who hits this and when", "", finding.in_practice or NOT_RECORDED, ""]
+    lines = [f"# {title}", ""]
+    if supersedes:
+        lines += [f"Supersedes {', '.join(supersedes)}.", ""]
+    lines += ["## Situation", "", finding.context or NOT_RECORDED, ""]
+    lines += ["## Who hits this and when", "", in_practice_text(finding), ""]
     if finding.trigger_class:
         trigger = f"Trigger: {TriggerClass.WORDS[finding.trigger_class]}."
         if finding.reach:
@@ -4611,7 +4670,7 @@ def cmd_issue(args: argparse.Namespace) -> int:
         verifiers = "debate panel"
     head = (data.get("scope") or {}).get("head")
     owners = suggest_owners(Path(info.project), head, finding.file, finding.line_start, finding.line_end)
-    body = render_issue(finding, owners, head, data.get("level", Level.DEFAULT), verifiers)
+    body = render_issue(finding, owners, head, data.get("level", Level.DEFAULT), verifiers, args.supersedes or ())
     path = run_dir / "issues" / f"{finding.id}.md"
     if args.dry_run:
         print(f"[dry-run] would write {path}")
@@ -4721,6 +4780,7 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("--format", choices=("json", "markdown"), default="markdown")
     issue = add("issue", cmd_issue, "render one delivered finding as an issue body in the run directory")
     issue.add_argument("--finding", required=True, help="the id of a delivered finding or design question")
+    issue.add_argument("--supersedes", action="append", help="an issue this one supersedes, e.g. #818 (repeatable)")
     add("clean", cmd_clean, "remove the run directory")
     notice = add("notice", cmd_notice, "add a notice for the report (for example, a missing tool)")
     notice.add_argument("text")
