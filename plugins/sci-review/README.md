@@ -107,9 +107,11 @@ Every panel message conforms to a JSON Schema under `skills/scientific-review/sc
 
 | Severity | Definition |
 |----------|------------|
-| High | Produces a wrong result under realistic inputs. |
-| Medium | Produces a wrong result only under plausible edge-case inputs, or prevents reproduction of a result. |
+| High | Produces a wrong result in ordinary use of the software. |
+| Medium | Produces a wrong result only in plausible edge cases, or only after a rare operational event (a release, an operator changing configuration), or prevents reproduction of a result. |
 | Low | A latent risk that does not currently produce a wrong result. |
+
+Verifiers establish how each finding's trigger comes about: a user action, a data condition, a release, an operator changing configuration, or not at all. They read the project's settings, environment, deployment and release files to do so, and check every value the finding quotes against the repository. The trigger class is shown beside the severity and never changes it. When a verifier's reading contradicts or omits part of the finder's "In practice" statement (for example, a trigger the finder ruled out), it writes a replacement, which the report and the issue show marked "Revised by the verifier". Finders report a concrete defect even when it seems rare, stating that its frequency is unknown, and consider a release of new code as a trigger for cached or stored results. When a verifier runs the trigger, it records what it ran and the output, and may add a short table of inputs with the expected and actual results; the report and the issue carry them, so that a reader can check a finding rather than trust it.
 
 ### 4.4 Agreement labels
 
@@ -216,13 +218,15 @@ The report contains eight sections, in this order:
 1. **Scope.** What was reviewed (with the pull request or branch named as the target), the runner, whether the perspectives were independent agents, and the number of review parts.
 2. **Panel.** The effort level and whether it was given, reused or defaulted, the perspectives used (with their source), the rebuttal rounds and the batches, and any parameter overridden from the level.
 3. **Extensions.** Domain extensions selected, not applicable, failed (with the reason) and recommended (with what each would add).
-4. **Findings.** The finding cap and the number of findings it withheld, then the findings, ordered consensus, majority, contested, and within each label high, medium, low. Each finding gives its location, dimension, severity, summary, trigger, wrong output, fix, raisers and label.
+4. **Findings.** The finding cap and the number of findings it withheld, then the findings, ordered consensus, majority, contested, and within each label high, medium, low. Each finding opens in plain words, for a reader who has not seen the code: a headline, what the code does for its users and when the problem arises, and "In practice": who or what triggers it, how often, and whether anyone would notice. Then come its severity, label, dimension and trigger class, location, trigger (with any value the repository contradicts), wrong output, fix and raisers, and, when a verifier ran it, the extent table and the reproduction. After the defects, **Design questions** lists findings that a verifier marked as possibly intended: behaviour that may be a deliberate trade-off the code does not document, put to the code's owners as a question rather than reported as a defect.
 5. **Rejected findings.** Identifier, summary, raisers and reason.
 6. **Checked and found correct.** Locations the panel examined and confirmed, with the dimension and a note.
 7. **Not reviewed.** Paths outside the review, with the reason (outside the named paths, generated or vendored, or a review part that did not complete).
 8. **Notices.** Reduced independence, languages without worked examples, missing tools, and messages dropped after failed validation.
 
-When no reviewable scientific code changed, the report contains sections 1 to 3 and the sentence "No reviewable scientific code changed in this scope." In Claude Code the findings are delivered through `ReportFindings` and the other sections as Markdown; on other hosts the whole report is Markdown, with one table per label.
+When no reviewable scientific code changed, the report contains sections 1 to 3 and the sentence "No reviewable scientific code changed in this scope." In Claude Code the findings are delivered through `ReportFindings` and the other sections as Markdown; on other hosts the whole report is Markdown.
+
+Any delivered finding or design question can be rendered as an issue body with `panel.py issue --run <run> --finding <id>`, before the run directory is cleaned. The body reads in the order a domain reader needs it: the situation, who hits it and when (with the extent table), whether it is a bug or a design question, then the location, the reproduction (with the code to run) and the proposed fix. It suggests owners from the repository's CODEOWNERS file, or else from `git blame` of the finding's lines, introduced as the people who last changed them; when every line comes from one merged pull request, it says so, since blame then names that pull request's author or merger rather than the owner. `--supersedes <ref>` opens the body with the issues it replaces. The command writes the body to the run directory and prints it; it never posts anything, and filing the issue is left to you.
 
 ## 8. Read-only guarantee
 

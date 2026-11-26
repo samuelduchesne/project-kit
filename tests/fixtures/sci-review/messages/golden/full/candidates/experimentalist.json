@@ -13,7 +13,10 @@
       "trigger": "T = 25 (Celsius) passed to radiate()",
       "wrong_output": "418.7 W/m2 expected, 9.07e-3 W/m2 returned",
       "fix": "Fix for temperature in celsius is used where kelvin is required.",
-      "evidence": "Read the code and evaluated the expression at the trigger."
+      "evidence": "Read the code and evaluated the expression at the trigger.",
+      "headline": "Temperature in Celsius is used where kelvin is required",
+      "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+      "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning."
     }
   ],
   "checked_items": [],

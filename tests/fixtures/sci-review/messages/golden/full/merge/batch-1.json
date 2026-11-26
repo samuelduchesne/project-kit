@@ -19,7 +19,10 @@
       "summary": "Temperature in Celsius is used where kelvin is required.",
       "trigger": "T = 25 (Celsius) passed to radiate()",
       "wrong_output": "418.7 W/m2 expected, 9.07e-3 W/m2 returned",
-      "fix": "Fix for temperature in celsius is used where kelvin is required."
+      "fix": "Fix for temperature in celsius is used where kelvin is required.",
+      "headline": "Temperature in Celsius is used where kelvin is required",
+      "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+      "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning."
     },
     {
       "id": "F2",
@@ -38,7 +41,10 @@
       "summary": "The small-angle approximation is used without a stated range.",
       "trigger": null,
       "wrong_output": null,
-      "fix": "Fix for the small-angle approximation is used without a stated range."
+      "fix": "Fix for the small-angle approximation is used without a stated range.",
+      "headline": "The small-angle approximation is used without a stated range",
+      "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+      "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning."
     },
     {
       "id": "F5",
@@ -57,7 +63,10 @@
       "summary": "The scaler is fitted on the full data set before the split.",
       "trigger": "x = [1, 2, 3, 4, 100]",
       "wrong_output": "the first training row scales to -0.538 instead of -1.342",
-      "fix": "Fix for the scaler is fitted on the full data set before the split."
+      "fix": "Fix for the scaler is fitted on the full data set before the split.",
+      "headline": "The scaler is fitted on the full data set before the split",
+      "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+      "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning."
     },
     {
       "id": "F6",
@@ -76,7 +85,10 @@
       "summary": "Float equality is used against the sentinel -9999.0.",
       "trigger": "a reading of -9999.0",
       "wrong_output": "the reading is treated as missing",
-      "fix": "Fix for float equality is used against the sentinel -9999.0."
+      "fix": "Fix for float equality is used against the sentinel -9999.0.",
+      "headline": "Float equality is used against the sentinel -9999.0",
+      "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+      "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning."
     }
   ]
 }

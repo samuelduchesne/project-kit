@@ -276,7 +276,9 @@ def load_report(path: Path) -> Report:
     if not isinstance(data, dict) or not isinstance(data.get("findings"), list):
         raise UnreadableInput(f"{path} has no findings list")
     findings: list[ReportFinding] = []
-    for index, raw in enumerate(data["findings"], start=1):
+    # Spec 010: design questions are delivered findings too, reported after the defects.
+    delivered = data["findings"] + list(data.get("design_questions") or [])
+    for index, raw in enumerate(delivered, start=1):
         if not isinstance(raw, dict):
             raise UnreadableInput(f"{path}: finding {index} is not an object")
         raised = raw.get("raised_by")

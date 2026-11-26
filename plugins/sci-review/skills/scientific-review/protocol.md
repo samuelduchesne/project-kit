@@ -36,15 +36,29 @@ Each role receives exactly the inputs below and nothing else (SC-011). Besides i
 | Debate round k > 0 | each perspective and defender | its brief; the batch's merged findings; all positions from rounds 0 to k-1 | positions from round k |
 | Moderator notes | moderator | its brief; the batch's merged findings; all positions of the batch | labels (they are computed afterwards) |
 
+A verifier may also read configuration, environment, deployment and release files outside the scope, to establish how a trigger state comes about (its reach).
+
+### 3.1 Finding prose
+
+Every finding is written for a reader who has not opened the code (spec 010). Finders write three statements on each candidate; the moderator chooses or combines them for a cluster under the rule that applies to `summary`, and the automatic merge copies them. Verifiers check them through reach, and a verifier whose reach contradicts or omits part of the in-practice statement writes a replacement (`in_practice_revision`); the report uses the first non-refuting verdict's replacement, keeps the finder's text, and marks it revised. Finders never drop a concrete defect because it seems rare, and cite line numbers within each file.
+
+- **`headline`**: at most 90 characters, plain words, naming the situation, not the code. It is the finding's heading in the report and the title of its issue.
+- **`context`**: one or two sentences on what the code does for its users and the situation in which the finding arises.
+- **`in_practice`**: who or what triggers the finding (a user action, a deploy or release, an operator changing configuration, a data condition), roughly how often, and whether anyone would notice the wrong result. It states the triggering conditions in the users' terms, leads with the most common way the defect shows, and cites where the triggering inputs come from, or says that their frequency is unknown.
+
+Each verdict that ran the trigger records the **reproduction** (the code or command and its output) and may record an **extent** table (a few runs, input by input, expected against actual); the report and the issue carry the first non-refuting verdict's, preferring a reproduced one, so that a reader can check the finding rather than trust it. Each verdict records a **trigger class**: `user-action`, `data-condition`, `release`, `operator-change` or `unreachable`, summarising how the trigger state comes about. `unreachable` is only allowed with `refute`.
+
 ## 4. Severity
 
 Each finding carries one of three severities (FR-018):
 
-- **High**: produces a wrong result under realistic inputs.
-- **Medium**: produces a wrong result only under plausible edge-case inputs, or prevents reproduction of a result.
+- **High**: produces a wrong result in ordinary use of the software.
+- **Medium**: produces a wrong result only in plausible edge cases, or prevents reproduction of a result.
 - **Low**: a latent risk that does not currently produce a wrong result.
 
 A merged finding takes the highest severity among its members unless the moderator records a `severity_reason` for a lower one.
+
+Severity is the reviewers' judgement, made from what they read about where the inputs come from and how the project is configured and deployed. The trigger class (section 5.1) is reported beside it and never changes it: how often a release or a configuration change happens differs between projects, and a guess about how rare an input is must not lower a finding.
 
 ## 5. Adjudication
 
@@ -54,12 +68,15 @@ For each merged finding, count the verdicts of its batch's verifiers: `confirm` 
 
 1. **Not verified**: no verifier recorded a verdict. Label `contested`, with a notice.
 2. **Refuted**: more verifiers refute than confirm. The finding is rejected, with the first refuting verifier's reason.
+2a. **Design question**: at least one verdict is marked possibly intended. The finding is not rejected; its label is computed by the remaining rules with the marked verdicts counted as uncertain, and it is reported with `kind: design-question`, under "Design questions" after the defects.
 3. **No concrete failure scenario**: `trigger` or `wrong_output` is null. Label `contested`.
 4. **Consensus**: every verifier confirms, and the raisers plus the confirming verifiers number at least two, so that no finding is reported as consensus on one agent's word (FR-013).
 5. **Majority**: more verifiers confirm than refute.
 6. **Otherwise** (a tie, or every verdict uncertain): label `contested`.
 
 A contested finding carries the strongest `argument_for` of a verifier that did not refute it, the `argument_against` of one that did not confirm it, and the first `deciding_assumption` recorded, preferring an uncertain verdict's. A finding without a concrete scenario carries the first `no_trigger_reason` recorded.
+
+**Trigger class and reach.** The reported trigger class is the most frequent class among the verdicts that do not refute the finding; a tie goes to the more frequent trigger, in the order `user-action`, `data-condition`, `release`, `operator-change`. The reported reach is that of the first such verdict with the reported class. The value corrections of all verdicts are combined, without duplicates, and shown next to the trigger.
 
 ### 5.2 Debate protocol
 
@@ -68,6 +85,8 @@ A contested finding carries the strongest `argument_for` of a verifier that did 
 **Position identifiers.** A position is identified as `<member>:<finding_id>:<round>`, for example `defender:F3:0`. The `answers` field of a position lists the identifiers of the positions it responds to.
 
 **Answered objection.** A defender objection is a defender position with stance `challenge`. It is answered when a later position by any perspective reviewer lists it in `answers` and the defender does not challenge again in a subsequent round. A defender objection is therefore unanswered when the defender's latest stance on the finding is `challenge` and either no perspective position has answered any earlier defender position on the finding, or the defender challenged again in a round after the latest such answer. A challenge the defender repeats in the same round as the answer does not reopen the objection, because the defender had not yet seen the answer.
+
+**Design questions.** When the defender's latest position on a finding is marked possibly intended, the finding is reported with `kind: design-question`, under "Design questions" after the defects; its label is computed by the rules below unchanged. Only the defender may mark a position. A debate finding carries no trigger class or reach, so the severity cap does not apply.
 
 **Undebated findings.** A merged finding on which no member recorded a position, and a candidate finding that no merge ruling includes, are reported as notices.
 

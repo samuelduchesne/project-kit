@@ -128,6 +128,13 @@ class TestModelAndValidate(RunDirMixin):
             "unknown-dimension": "'style' is not one of",
             "empty-members": "fewer than 1 items",
             "empty-reason": "shorter than 1 characters",
+            # Spec 010: practical reach and design questions.
+            "verification-unreachable-confirm": "unreachable requires verdict refute",
+            "verification-intended-refute": "not allowed with verdict refute",
+            "verification-intended-no-reason": "required when possibly_intended is true",
+            "verification-correction-line-zero": "0 is less than 1",
+            "debate-intended-non-defender": "only the defender may mark",
+            "verification-reproduced-without-code": "required when evidence is reproduced",
         }
         for path in sorted((MESSAGES / "invalid").glob("*.json")):
             with self.subTest(path=path.name):
@@ -391,6 +398,9 @@ class TestMerge(unittest.TestCase):
                 "wrong_output": "3412 instead of 293",
                 "fix": "divide",
                 "evidence": "line",
+                "headline": "A unit conversion is inverted",
+                "context": "Energy totals shown to users are converted between units here.",
+                "in_practice": "Every user who views a total in the other unit sees a wrong value.",
             }
 
         for part, line in (("p1", 40), ("p2", 41)):
@@ -412,7 +422,8 @@ class TestMerge(unittest.TestCase):
         (run_dir / "candidates").mkdir()
         finding = {"id": "theorist-1", "raised_by": "theorist", "file": "a.py", "line_start": 1, "line_end": 1,
                    "dimension": "numerical-stability", "severity": "low", "summary": "s", "trigger": None,
-                   "wrong_output": None, "fix": "f", "evidence": "e"}  # fmt: skip
+                   "wrong_output": None, "fix": "f", "evidence": "e", "headline": "h", "context": "c",
+                   "in_practice": "p"}  # fmt: skip
         for part in ("p1", "p2"):
             message = {"perspective": "theorist", "part": part, "findings": [finding], "checked_items": [], "notes": ""}
             (run_dir / "candidates" / f"theorist--{part}.json").write_text(json.dumps(message))
@@ -598,15 +609,19 @@ class TestReport(GoldenMixin):
         mapping = {(r["file"], r["line"]): r for r in data["report_findings"]}
         consensus = mapping[("src/sci/train.py", 40)]
         self.assertEqual(consensus["verdict"], "CONFIRMED")
-        self.assertEqual(
-            consensus["failure_scenario"],
-            "x = [1, 2, 3, 4, 100] produces the first training row scales to -0.538 instead of -1.342",
+        # Spec 010: the situation and its practical reach come before the technical scenario.
+        self.assertTrue(consensus["failure_scenario"].startswith("The function at this location computes"))
+        self.assertIn(" In practice: Triggered by ordinary inputs", consensus["failure_scenario"])
+        self.assertTrue(
+            consensus["failure_scenario"].endswith(
+                "Trigger: x = [1, 2, 3, 4, 100] Wrong output: the first training row scales to -0.538 instead of -1.342"
+            )
         )
-        self.assertTrue(consensus["short_summary"].startswith("Consensus: "))
+        finding = next(f for f in data["findings"] if f["file"] == "src/sci/train.py" and f["line_start"] == 40)
+        self.assertEqual(consensus["short_summary"], finding["headline"][:60])
+        self.assertTrue(consensus["summary"].startswith(finding["headline"] + ". "))
         self.assertLessEqual(len(consensus["short_summary"]), 60)
         self.assertEqual(consensus["category"], "statistical-integrity")
-        majority = mapping[("src/sci/model.py", 10)]
-        self.assertTrue(majority["short_summary"].startswith("Majority: "))
         self.assertEqual([r["verdict"] for r in data["report_findings"]][:3], ["CONFIRMED"] * 3)
 
     def test_report_dry_run(self) -> None:
@@ -791,9 +806,10 @@ class TestDisagreement(GoldenMixin):
         data = json.loads(output)
         mapping = {r["line"]: r for r in data["report_findings"]}
         null_trigger = mapping[14]
-        self.assertEqual(
-            null_trigger["failure_scenario"],
-            "No concrete trigger established: No member could establish an amplitude that callers actually use.",
+        self.assertTrue(
+            null_trigger["failure_scenario"].endswith(
+                "No concrete trigger established: No member could establish an amplitude that callers actually use."
+            )
         )
         self.assertEqual(null_trigger["verdict"], "PLAUSIBLE")
         self.assertIn(" Contested. For: ", null_trigger["summary"])
@@ -1119,13 +1135,15 @@ class TestSequential(GoldenMixin):
         self.assertIn(panel.REDUCED_INDEPENDENCE_NOTICE, notices)
         self.assertIn("not independent agents", result.out.split("## Panel", 1)[0])
 
-    def test_tables_per_label_with_every_field(self) -> None:
+    def test_blocks_per_label_with_every_field(self) -> None:
         _run_dir, markdown = self.render("full")
         for label in ("### Consensus", "### Majority", "### Contested"):
             self.assertIn(label, markdown)
-        header = "| Location | Dimension | Severity | Summary | Trigger | Wrong output | Fix | Raised by | Label |"
-        self.assertEqual(markdown.splitlines().count(header), 2)
-        self.assertIn(header + " Argument for | Argument against | Deciding assumption | No-trigger reason |", markdown)
+        # Spec 010: one block per finding, plain words first, then every technical field.
+        for field in ("**In practice.**", "- **Where:**", "- **Trigger:**", "- **Wrong output:**", "- **Fix:**",
+                      "- **Raised by:**", "- **Argument for:**", "- **Argument against:**",
+                      "- **Deciding assumption:**"):  # fmt: skip
+            self.assertIn(field, markdown)
 
     def test_dropped_message_notice(self) -> None:
         run_dir = self.sequential_run()

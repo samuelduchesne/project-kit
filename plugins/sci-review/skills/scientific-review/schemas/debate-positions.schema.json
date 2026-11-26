@@ -68,6 +68,17 @@
           "items": {
             "type": "string"
           }
+        },
+        "possibly_intended": {
+          "description": "Defender only: the behaviour looks like a deliberate, undocumented trade-off (spec 010).",
+          "type": "boolean"
+        },
+        "possibly_intended_reason": {
+          "description": "Defender only; required and non-empty when possibly_intended is true.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false

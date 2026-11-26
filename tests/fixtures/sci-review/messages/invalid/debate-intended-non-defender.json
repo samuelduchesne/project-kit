@@ -1,0 +1,19 @@
+{
+  "schema": "debate-positions",
+  "message": {
+    "member": "theorist",
+    "round": 0,
+    "positions": [
+      {
+        "finding_id": "F1",
+        "member": "theorist",
+        "round": 0,
+        "stance": "accept",
+        "reason": "Holds.",
+        "answers": [],
+        "possibly_intended": true,
+        "possibly_intended_reason": "Looks deliberate."
+      }
+    ]
+  }
+}

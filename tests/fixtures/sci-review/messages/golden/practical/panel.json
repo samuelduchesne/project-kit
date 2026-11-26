@@ -1,0 +1,29 @@
+{
+  "panel": {
+    "perspectives": [
+      {
+        "id": "theorist",
+        "name": "Theorist",
+        "brief_path": "roles/theorist.md",
+        "source": "sci-review",
+        "reference_paths": []
+      },
+      {
+        "id": "computer-scientist",
+        "name": "Computer scientist",
+        "brief_path": "roles/computer-scientist.md",
+        "source": "sci-review",
+        "reference_paths": []
+      }
+    ],
+    "rebuttal_rounds": 0,
+    "max_batches": 1,
+    "runner": "claude-workflow",
+    "independent": true,
+    "models": [],
+    "protocol": "verify",
+    "verifiers": 2
+  },
+  "extensions": [],
+  "notices": []
+}

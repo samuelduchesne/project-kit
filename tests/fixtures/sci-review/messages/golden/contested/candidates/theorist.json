@@ -13,7 +13,10 @@
       "trigger": null,
       "wrong_output": null,
       "fix": "Fix for the pendulum period uses the small-angle form without a stated amplitude limit.",
-      "evidence": "Read the code and evaluated the expression at the trigger."
+      "evidence": "Read the code and evaluated the expression at the trigger.",
+      "headline": "The pendulum period uses the small-angle form without a stated amplitude limit",
+      "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+      "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning."
     }
   ],
   "checked_items": [],

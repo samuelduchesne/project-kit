@@ -1,0 +1,24 @@
+{
+  "perspective": "theorist",
+  "findings": [
+    {
+      "id": "theorist-1",
+      "raised_by": "theorist",
+      "file": "src/energy/totals.py",
+      "line_start": 20,
+      "line_end": 22,
+      "dimension": "physical-modelling-and-units",
+      "severity": "high",
+      "summary": "The annual total converts kWh to kBtu by dividing by 3.412 instead of multiplying.",
+      "trigger": "annual_total_kbtu(1000) with a meter in kWh",
+      "wrong_output": "293.1 kBtu instead of 3412 kBtu",
+      "fix": "Multiply by 3.412 kBtu/kWh.",
+      "evidence": "Read the function and its callers.",
+      "headline": "Annual energy totals shown in kBtu are about 12 times too small",
+      "context": "This function converts each building's metered electricity into the annual total shown on its dashboard.",
+      "in_practice": "Every user who views a total in kBtu for an electric meter sees it; nothing flags the value as wrong."
+    }
+  ],
+  "checked_items": [],
+  "notes": ""
+}

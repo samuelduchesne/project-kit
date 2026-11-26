@@ -38,7 +38,13 @@
         "argument_for",
         "argument_against",
         "deciding_assumption",
-        "no_trigger_reason"
+        "no_trigger_reason",
+        "reach",
+        "trigger_class",
+        "value_corrections",
+        "reproduction",
+        "extent",
+        "in_practice_revision"
       ],
       "properties": {
         "finding_id": {
@@ -89,6 +95,113 @@
             "string",
             "null"
           ]
+        },
+        "reach": {
+          "description": "Files read to establish how the trigger state arises (configuration, environment, deployment, release) and what each showed; 'none present' when the project has none.",
+          "type": "string",
+          "minLength": 1
+        },
+        "trigger_class": {
+          "description": "How the trigger state comes about. unreachable only with verdict refute.",
+          "enum": [
+            "user-action",
+            "data-condition",
+            "release",
+            "operator-change",
+            "unreachable"
+          ]
+        },
+        "possibly_intended": {
+          "description": "The behaviour looks like a deliberate, undocumented trade-off. Not allowed with refute; counts as uncertain.",
+          "type": "boolean"
+        },
+        "possibly_intended_reason": {
+          "description": "Required and non-empty when possibly_intended is true; null otherwise.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value_corrections": {
+          "description": "Quoted values the repository contradicts; empty when none.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValueCorrection"
+          }
+        },
+        "reproduction": {
+          "description": "The code or command run to reproduce the failure, with its observed output, so that a reader can run it; required when evidence is reproduced, null otherwise.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "extent": {
+          "description": "A few runs, input by input, including ordinary inputs that are handled correctly, so that a reader sees which inputs fail; empty when the verifier ran none.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ExtentRow"
+          }
+        },
+        "in_practice_revision": {
+          "description": "A full replacement for the finding's in_practice statement, when your reach contradicts or omits part of it (for example a trigger the finder ruled out); null when the statement stands.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueCorrection": {
+      "description": "A value quoted in the finding that the repository contradicts.",
+      "type": "object",
+      "required": [
+        "quoted",
+        "actual",
+        "file",
+        "line"
+      ],
+      "properties": {
+        "quoted": {
+          "type": "string",
+          "minLength": 1
+        },
+        "actual": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "ExtentRow": {
+      "description": "One run: an input, the result it should give and the result the code gives.",
+      "type": "object",
+      "required": [
+        "input",
+        "expected",
+        "actual"
+      ],
+      "properties": {
+        "input": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected": {
+          "type": "string",
+          "minLength": 1
+        },
+        "actual": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "additionalProperties": false
