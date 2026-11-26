@@ -15,7 +15,7 @@ Each check states what to look for and what evidence establishes a defect. Evide
 7. **Order dependence.** Look for results that depend on iteration order: floating-point reductions over unordered collections, iteration over Python `set` values or over string-keyed hashes, JavaScript object keys that reorder integer-like keys, unsorted directory listings, and "first match wins" logic over unordered data. Evidence: two orderings of the same input that produce different outputs.
 8. **Concurrency dependence.** Look for shared mutable state updated from threads, processes, async tasks or workers, and for accumulation in completion order rather than submission order (for example a parallel floating-point sum). Evidence: an input and two schedules that yield different results, or a race that loses an update.
 9. **Nondeterminism across runs or platforms.** Look for unseeded random generators whose output feeds a reported result, hash randomisation, wall-clock time, thread-count-dependent reductions in BLAS or GPU libraries, and platform-dependent defaults (integer width on Windows NumPy before 2.0, locale-dependent parsing). Evidence: two runs or two platforms with identical inputs and different outputs.
-10. **Stale caching.** For every cache or memoisation, list the inputs the cached value depends on and compare them with the cache key. Look for keys that omit a parameter, a mutable global, a file's contents or a configuration value, and for caches keyed on object identity of mutable objects. Evidence: a sequence of calls in which a dependency changes and the cache returns the value computed under the old dependency.
+10. **Stale caching.** For every cache or memoisation, list the inputs the cached value depends on and compare them with the cache key. Look for keys that omit a parameter, a mutable global, a file's contents or a configuration value, and for caches keyed on object identity of mutable objects. Evidence: a sequence of calls in which a dependency changes and the cache returns the value computed under the old dependency. Then say how the dependency changes in practice (a user action, a release, an operator changing configuration) and whether the reuse looks intended, for example to keep results stable across releases. When it might be, say so in `in_practice`, so that a verifier can mark the finding as a design question.
 
 ## Severity guidance
 
@@ -30,6 +30,7 @@ Typical mappings for this dimension:
 | Defect | Typical severity |
 |---|---|
 | Cache key omits a parameter that callers vary in normal use | High |
+| Cache key omits the configuration or code version that produced the value, which changes only with a release or an operator's change | Medium |
 | Iterative method returns an unconverged value as a result for inputs in the documented range | High |
 | Off-by-one boundary that drops or double-counts an element on every call | High |
 | Overflow of an `int32` counter at input sizes the project processes | High |

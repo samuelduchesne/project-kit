@@ -1362,9 +1362,7 @@ def semantic_errors(name: str, value: Any) -> list[str]:
             if position.get("member") != Role.DEFENDER:
                 errors.append(f"$.positions[{index}].possibly_intended: only the defender may mark a position")
             if not (position.get("possibly_intended_reason") or "").strip():
-                errors.append(
-                    f"$.positions[{index}].possibly_intended_reason: required when possibly_intended is true"
-                )
+                errors.append(f"$.positions[{index}].possibly_intended_reason: required when possibly_intended is true")
     if name == "report" and isinstance(value, dict):
         for index, finding in enumerate([*value.get("findings", []), *value.get("design_questions", [])]):
             if (finding.get("trigger") is None or finding.get("wrong_output") is None) and not finding.get(
@@ -4437,14 +4435,15 @@ def read_at_head(project: Path, head: str | None, relative: str, in_git: bool) -
 def blame_owners(project: Path, head: str | None, file: str, line_start: int, line_end: int) -> list[Owner]:
     """Up to three authors of the lines, by number of lines and then by their latest commit (research R9)."""
     rev = [head] if head else []
-    out = git(project, "blame", "--root", "--line-porcelain", "-L", f"{line_start},{line_end}", *rev, "--", file,
-              check=False)
+    out = git(
+        project, "blame", "--root", "--line-porcelain", "-L", f"{line_start},{line_end}", *rev, "--", file, check=False
+    )
     counts: dict[str, int] = {}
     latest: dict[str, int] = {}
     author, when = None, 0
     for line in out.splitlines():
         if line.startswith("author "):
-            author = line[len("author "):]
+            author = line[len("author ") :]
         elif line.startswith("author-time "):
             when = int(line.split()[1])
         elif line.startswith("\t") and author is not None:
@@ -4476,8 +4475,10 @@ def suggest_owners(project: Path, head: str | None, file: str, line_start: int, 
             )
         break  # the first ownership file found is the one the host uses
     if not in_git:
-        return IssueOwners(source=OwnerSource.NONE, reason="the project is not a git repository and has no "
-                           "ownership file covering this file")
+        return IssueOwners(
+            source=OwnerSource.NONE,
+            reason="the project is not a git repository and has no ownership file covering this file",
+        )
     owners = blame_owners(project, head, file, line_start, line_end)
     if not owners:
         return IssueOwners(source=OwnerSource.NONE, reason=f"{file} has no history at the reviewed head")

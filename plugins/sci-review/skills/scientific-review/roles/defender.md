@@ -45,8 +45,9 @@ Apply the following questions to each finding before deciding your stance.
 3. `stance` is `accept` or `challenge`. Never use `withdraw`; it is reserved for the reviewer who raised the finding.
 4. `reason` is required and MUST NOT be empty. State the ground of the defence or the reason for accepting, with a file and line where one applies.
 5. `answers` lists the ids of the positions that this position responds to, each of the form `<member>:<finding_id>:<round>`, for example `theorist:F1:0`. In round 0 it is normally empty.
-6. A challenge is an objection that the perspective reviewers must answer. State it so that an answer is possible: name the assumption, the precondition or the convention on which it rests.
-7. In round 0 you receive the batch's merged findings only. In a later round k you also receive all positions from rounds 0 to k-1. In a later round, keep challenging a finding only if the answers to your objection do not resolve it; list those answers in `answers` and state why they fail. If the answers resolve the objection, change your stance to `accept` and say which answer resolved it.
+6. When the behaviour looks like a deliberate trade-off (stability, caching, tolerance, cost) that the code and its documentation neither state nor rule out, you may set `possibly_intended: true` on your position with a one-sentence `possibly_intended_reason`. The finding is then reported to the code's owners as a design question, not as a defect. When the documentation states the trade-off, challenge instead and cite it. Your latest position on a finding decides; leave the mark off to withdraw it.
+7. A challenge is an objection that the perspective reviewers must answer. State it so that an answer is possible: name the assumption, the precondition or the convention on which it rests.
+8. In round 0 you receive the batch's merged findings only. In a later round k you also receive all positions from rounds 0 to k-1. In a later round, keep challenging a finding only if the answers to your objection do not resolve it; list those answers in `answers` and state why they fail. If the answers resolve the objection, change your stance to `accept` and say which answer resolved it.
 
 ## Rules
 

@@ -185,7 +185,10 @@ class TestTriggerClass(unittest.TestCase):
         self.assertEqual(panel.combined_trigger_class(verdicts)[0], "release")
 
     def test_tie_goes_to_the_more_frequent_trigger(self) -> None:
-        verdicts = [verdict(trigger_class="release", verifier="v1"), verdict(trigger_class="user-action", verifier="v2")]
+        verdicts = [
+            verdict(trigger_class="release", verifier="v1"),
+            verdict(trigger_class="user-action", verifier="v2"),
+        ]
         self.assertEqual(panel.combined_trigger_class(verdicts)[0], "user-action")
 
     def test_refuting_verdicts_are_ignored(self) -> None:
@@ -280,9 +283,9 @@ class TestDesignQuestions(unittest.TestCase):
         self.assertEqual(result.findings, ())
 
     def test_first_recorded_reason(self) -> None:
-        finding = adjudicate(
-            merged(), verdict(intended="First."), verdict(verifier="v2", intended="Second.")
-        ).findings[0]
+        finding = adjudicate(merged(), verdict(intended="First."), verdict(verifier="v2", intended="Second.")).findings[
+            0
+        ]
         self.assertEqual(finding.possibly_intended_reason, "First.")
 
 
@@ -369,9 +372,7 @@ class TestPracticalReport(PracticalRunMixin):
         run_dir = self.practical_run()
         markdown = self.report(run_dir)
         self.assertIn("`medium` (lowered from high) · consensus · algorithmic-correctness · trigger: release", markdown)
-        self.assertIn(
-            "*(the finding quoted `SEARCH_GENERATIONS=5`; `.env:3` has `SEARCH_GENERATIONS=10`)*", markdown
-        )
+        self.assertIn("*(the finding quoted `SEARCH_GENERATIONS=5`; `.env:3` has `SEARCH_GENERATIONS=10`)*", markdown)
         f2 = next(f for f in read(run_dir / "adjudication.json")["findings"] if f["id"] == "F2")
         self.assertEqual(len(f2["value_corrections"]), 1)
 
@@ -618,6 +619,15 @@ class TestOwners(unittest.TestCase):
         for text, path, expected in cases:
             with self.subTest(text=text, path=path):
                 self.assertEqual(panel.codeowners_owners(text, path), expected)
+
+
+class TestPracticalFixture(unittest.TestCase):
+    """T050: the live fixture's manifest matches its embedded sources."""
+
+    def test_manifest_is_verified(self) -> None:
+        build = Path(__file__).parent / "fixtures" / "sci-review" / "practical-repo" / "build.py"
+        result = subprocess.run(["python3", "-B", str(build), "--check"], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":
