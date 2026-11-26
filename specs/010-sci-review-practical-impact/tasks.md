@@ -359,8 +359,8 @@ description: "Task list for feature 010: findings that say who hits them"
 - [X] T069 [US6] Briefs: finders never drop a concrete defect on rarity, cite per-file line numbers, and consider code releases for cached or stored results; the verifier writes `in_practice_revision` when reach contradicts the statement, and treats rarity as no ground for refutation; the algorithmic-correctness stale-caching check names releases. Update `protocol.md` section 3.1. Regenerate the Workflow script.
 - [X] T070 Rebuild `tests/fixtures/sci-review/practical-repo/` (build.py, manifest.json) per research R14 item 7: a JSON-file store that persists across processes, a stored-result case triggered by a code release or a configuration change, a deliberate-reuse case, a unit-conversion rounding case, and a correct look-alike for each.
 - [X] T071 Update README, CHANGELOG, plan.md and quickstart.md for Phase 10.
-- [ ] T072 Re-run quickstart scenario 5 (five practical runs and one seeded run) and scenario 6 (both downstream cases); record SC-002, SC-003, SC-005 and SC-008 and the downstream table in validation.md, section 6, anonymised.
-- [ ] T073 Render the two downstream issues with `--supersedes`, unedited, and save them beside the private case file for the user to file.
+- [X] T072 Re-run quickstart scenario 5 (five practical runs and one seeded run) and scenario 6 (both downstream cases); record SC-002, SC-003, SC-005 and SC-008 and the downstream table in validation.md, section 6, anonymised.
+- [X] T073 Render the two downstream issues with `--supersedes`, unedited, and save them beside the private case file for the user to file.
 
 ## Dependencies & Execution Order
 

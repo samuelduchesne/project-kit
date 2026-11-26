@@ -69,3 +69,59 @@ Observations:
 4. Prefer CODEOWNERS, and when only blame is available, say that blame shows who last changed the lines, which after a squash merge is the merger (observation 5).
 5. Rebuild the practical fixture with a persistent store and re-run SC-002 and SC-003 (section 3).
 6. Investigate the cross-file line numbering (observation 6).
+
+## 6. Second round (Phase 10, research R14)
+
+Measured on 2026-11-26 with the Phase 10 plugin (`c73eab0` and later), the same set-up as section 1, the rebuilt practical fixture, and the criteria as tightened after `/speckit-analyze` (SC-001, SC-006, SC-008; whole-panel token budget).
+
+### 6.1 Runs
+
+| Run | Agents | Subagent tokens | Delivered (design questions) | Rejected |
+|-----|--------|-----------------|------------------------------|----------|
+| practical 1 | 7 | 682,789 | 8 (1) | 0 |
+| practical 2 | 7 | 682,406 | 5 (1) | 0 |
+| practical 3 | 7 | 685,244 | 6 (0) | 0 |
+| practical 4 | 7 | 694,840 | 7 (0) | 0 |
+| practical 5 | 7 | 706,674 | 7 (0) | 0 |
+| seeded | 7 | 754,006 | 17 (1) | 0 |
+| downstream A | 5 | 707,502 | 8 (4) | 0 |
+| downstream B | 4 | 455,741 | 2 (0) | 0 |
+
+Seeded tokens: 754,006 against 725,233 in feature 009 (+4%, inside the +15% whole-panel budget). One launch of the seeded run was malformed by the orchestrator (arguments pasted twice; the script started no agent) and was relaunched; it is not counted.
+
+Across the 60 delivered findings: 60 carry the three prose fields, 54 a reproduction, 54 an extent table, 8 a verifier revision of the in-practice statement, and 4 value corrections were recorded. No finding cited a line beyond the end of its file (4 in the first round).
+
+### 6.2 Success criteria
+
+- **SC-001**: **fail**. Prose fields: 60 of 60. Blind classification: 13 of 20 matched the verifier's trigger class (16 required). All 7 mismatches are between `user-action` and `data-condition`, in both directions; every `operator-change` item matched. The prose tells the reader who triggers a defect; the two classes overlap, since a user entering a value is both. See 6.4, item 1.
+- **SC-002**: pass. The stored-plan case names a release among its triggers in 5 of 5 runs, citing the settings files; every reproduced verdict carries its code (enforced by validation).
+- **SC-003**: **fail**, 0 of 5. The reviewers consistently treat serving an issued report as issued as plainly correct, so the planted case is not a real design question. The mark fired on other constructs (the stored plan in one run, a display-rounding tie rule, the contested small-angle construct, and four energy-basis and scheduling choices downstream).
+- **SC-004**: pass. Two runs recorded a correction of the docstring's development setting; no report repeats it uncorrected.
+- **SC-005**: pass. 16 of 16, 0 look-alikes, contested construct labelled contested with its deciding assumption, 7 agents. The fixture's scorer read defects only and missed the construct when it was routed to design questions; it now reads both (`tests/fixtures/sci-review/seeded-repo/score.py`).
+- **SC-006**: **fail** on one criterion per case, with the new issue preferred in both. Table below.
+- **SC-007**: pass.
+- **SC-008**: pass. The unit-conversion case is reported in 5 of 5 runs, its in-practice statement names pounds or kilograms in 5 of 5, and no line is beyond the end of its file.
+
+### 6.3 Downstream cases (anonymised)
+
+| Criterion | Case A: original | Case A: round 2 | Case B: original | Case B: round 2 |
+|-----------|------------------|-----------------|------------------|-----------------|
+| C1 Orientation | fail | pass | fail | pass |
+| C2 Who triggers it | fail | pass (names a release) | fail | **fail** (omits the converted-unit route) |
+| C3 How often, who notices | fail | pass | fail | pass |
+| C4 Intent / proportion (recorded) | fail | pass (design question) | partial | mostly pass |
+| C5 Quoted values | fail | pass (one correction) | n/a | n/a |
+| C6 Checkable evidence | fail | **fail** (traced, not run) | pass | pass |
+| C7 Owner (recorded) | fail | pass (merged PR named) | pass (by hand) | fail (merged PR named) |
+| Judge's preference | | round 2 | | round 2 |
+
+Case B's verifier added the most useful context of either round, checked against the code: the application does not yet send the inputs that reach the defect, so only direct callers of the library can hit it today.
+
+### 6.4 Observations and follow-ups
+
+1. **The trigger classes overlap.** `user-action` and `data-condition` both describe "a user enters a value", which accounts for every SC-001 mismatch. Either merge them, or define `data-condition` as a property of values from any source and `user-action` as an action other than entering values.
+2. **A single trigger class loses information.** Several findings name both a release and a configuration change; the reported class is one of them (case A's "Trigger:" line says configuration while its text names a release). Allow a list.
+3. **A revision does not reach the rest of the finding.** In case B the verifier revised the in-practice statement but the finder's reproduction kept an older rate (1 in 10 against 1 in 8); in case A the correction note says a quoted value does not exist while the reproduction still uses it. Let the verifier flag other fields its evidence contradicts.
+4. **Traced findings have no checkable evidence.** Where code cannot run (a database, a GPU library), the verifier traces it; C6 then fails. A short excerpt of the traced lines with their values would give the reader something to check.
+5. **Two of the fixture's look-alikes were not correct.** The dashboard summary is stale by its own docstring, and the display rounding has an unexplained tie rule. Fix both, and replace the design-question case with one that is plausibly deliberate.
+6. **Contested findings can render "Decided by: n/a".** The verify protocol leaves the deciding assumption empty when no verifier names one; the issue should omit the line.
