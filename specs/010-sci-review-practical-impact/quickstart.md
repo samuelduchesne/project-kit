@@ -65,9 +65,10 @@ The fixture `tests/fixtures/sci-review/practical-repo/` (rebuilt in Phase 10, re
 
 Expected:
 
-- (a) has trigger class `operator-change` or `release`, and its in-practice statement names the configuration difference between deployments and cites `.env` or `settings.py`; every reproduced finding shows its code and output (SC-002).
-- (b) is under "Design questions" in at least 4 of 5 runs (SC-003).
-- No report repeats (c)'s wrong value without a correction (SC-004).
+- `stored-plan` is reported, and its in-practice statement names a release of new code among its triggers and cites where the settings come from; every reproduced finding shows its code and output (SC-002).
+- `issued-report` is under "Design questions" in at least 4 of 5 runs (SC-003).
+- No report repeats `quoted-setting`'s docstring value as the configured one without a correction (SC-004).
+- `pound-lots` is reported, and its in-practice statement (or the verifier's revision) names pounds or converted units in at least 4 of 5 runs; no finding cites a line beyond the end of its file (SC-008).
 
 Then run the seeded fixture once at `medium`. Expected: 16 of 16, no look-alike, and 7 agents at most, as in feature 009 (SC-005).
 
