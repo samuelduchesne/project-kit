@@ -1,0 +1,175 @@
+{
+  "scope": {
+    "mode": "paths",
+    "base": null,
+    "head": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+    "files": [
+      {
+        "path": "src/energy/totals.py",
+        "language": "python",
+        "line_ranges": [
+          [
+            1,
+            80
+          ]
+        ]
+      },
+      {
+        "path": "src/services/results_cache.py",
+        "language": "python",
+        "line_ranges": [
+          [
+            1,
+            200
+          ]
+        ]
+      }
+    ],
+    "excluded": [],
+    "note": "<scope note>",
+    "target": null,
+    "total_lines": 0,
+    "pull_request_ref": null
+  },
+  "panel": {
+    "perspectives": [
+      {
+        "id": "theorist",
+        "name": "Theorist",
+        "brief_path": "roles/theorist.md",
+        "source": "sci-review",
+        "reference_paths": [],
+        "dimensions": []
+      },
+      {
+        "id": "computer-scientist",
+        "name": "Computer scientist",
+        "brief_path": "roles/computer-scientist.md",
+        "source": "sci-review",
+        "reference_paths": [],
+        "dimensions": []
+      }
+    ],
+    "rebuttal_rounds": 0,
+    "max_batches": 1,
+    "runner": "claude-workflow",
+    "independent": true,
+    "models": [],
+    "level": "medium",
+    "level_source": "default",
+    "overrides": [],
+    "parts": 1,
+    "protocol": "verify",
+    "verifiers": 2
+  },
+  "extensions": [],
+  "findings": [
+    {
+      "id": "F1",
+      "members": [
+        "theorist-1"
+      ],
+      "raised_by": [
+        "theorist"
+      ],
+      "batch": 1,
+      "file": "src/energy/totals.py",
+      "line_start": 20,
+      "line_end": 22,
+      "dimension": "physical-modelling-and-units",
+      "severity": "high",
+      "summary": "The annual total converts kWh to kBtu by dividing by 3.412 instead of multiplying.",
+      "trigger": "annual_total_kbtu(1000) with a meter in kWh",
+      "wrong_output": "293.1 kBtu instead of 3412 kBtu",
+      "fix": "Multiply by 3.412 kBtu/kWh.",
+      "label": "consensus",
+      "headline": "Annual energy totals shown in kBtu are about 12 times too small",
+      "context": "This function converts each building's metered electricity into the annual total shown on its dashboard.",
+      "in_practice": "Every user who views a total in kBtu for an electric meter sees it; nothing flags the value as wrong.",
+      "kind": "defect",
+      "trigger_class": "user-action",
+      "reach": "Meters are entered by users; no setting changes the unit.",
+      "value_corrections": [],
+      "severity_capped": false
+    },
+    {
+      "id": "F2",
+      "members": [
+        "computer-scientist-1"
+      ],
+      "raised_by": [
+        "computer-scientist"
+      ],
+      "batch": 1,
+      "file": "src/services/results_cache.py",
+      "line_start": 120,
+      "line_end": 156,
+      "dimension": "algorithmic-correctness",
+      "severity": "medium",
+      "summary": "The result cache key covers the inputs but not the search configuration or the code version.",
+      "trigger": "Compute with SEARCH_GENERATIONS=5, change the setting, recompute with unchanged inputs",
+      "wrong_output": "The cached result from the earlier configuration is returned as current",
+      "fix": "Add a digest of the search configuration and the code version to the cache key.",
+      "label": "consensus",
+      "headline": "Cached results are not recomputed after a release",
+      "context": "Optimised results are cached and reused while a building's inputs are unchanged, so users get answers without waiting.",
+      "in_practice": "After a release that changes the optimiser, users keep seeing results from the old code until their inputs change; nobody is told.",
+      "kind": "defect",
+      "trigger_class": "release",
+      "reach": "settings.py reads SEARCH_GENERATIONS from the environment; .env sets 10 and production uses the default 100. Each deployment has its own store, so the setting does not change under a cache; a release of new optimiser code does.",
+      "value_corrections": [
+        {
+          "quoted": "SEARCH_GENERATIONS=5",
+          "actual": "SEARCH_GENERATIONS=10",
+          "file": ".env",
+          "line": 3
+        }
+      ],
+      "severity_capped": true
+    }
+  ],
+  "design_questions": [
+    {
+      "id": "F3",
+      "members": [
+        "computer-scientist-2"
+      ],
+      "raised_by": [
+        "computer-scientist"
+      ],
+      "batch": 1,
+      "file": "src/services/results_cache.py",
+      "line_start": 170,
+      "line_end": 180,
+      "dimension": "algorithmic-correctness",
+      "severity": "medium",
+      "summary": "Cache lookup ignores the schema_version field of stored results.",
+      "trigger": "Read a result stored under schema_version 1 after the schema moves to 2",
+      "wrong_output": "A result in the old schema is served without migration",
+      "fix": "Include schema_version in the lookup, or migrate stored results.",
+      "label": "majority",
+      "headline": "Stored results are reused across schema versions",
+      "context": "The cache returns stored results directly to the reports users download.",
+      "in_practice": "Only after a release that bumps the schema; the reuse may be deliberate, to keep reports stable across releases.",
+      "kind": "design-question",
+      "trigger_class": "release",
+      "reach": "The schema version changes only in a release.",
+      "possibly_intended_reason": "Keeping reports byte-identical across releases looks deliberate; no comment says so either way.",
+      "value_corrections": [],
+      "severity_capped": false
+    }
+  ],
+  "rejected": [],
+  "checked_items": [],
+  "unreviewed": [],
+  "notices": [
+    "F2: a value quoted in the finding is contradicted by the repository; see the correction under its trigger."
+  ],
+  "level": "medium",
+  "level_source": "default",
+  "max_findings": null,
+  "withheld": 0,
+  "parts": 1,
+  "incomplete_parts": [],
+  "notes": []
+}

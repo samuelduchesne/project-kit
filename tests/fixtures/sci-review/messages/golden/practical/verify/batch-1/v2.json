@@ -1,0 +1,61 @@
+{
+  "batch": 1,
+  "verifier": "v2",
+  "verdicts": [
+    {
+      "finding_id": "F1",
+      "verdict": "confirm",
+      "evidence": "traced",
+      "refutation_search": "Read the function, its callers and the settings module.",
+      "reason": "v2 traced F1.",
+      "argument_for": "v2: the scenario follows from the code.",
+      "argument_against": "v2: none found.",
+      "deciding_assumption": null,
+      "no_trigger_reason": null,
+      "reach": "Meters are entered by users; no setting changes the unit.",
+      "trigger_class": "user-action",
+      "possibly_intended": false,
+      "possibly_intended_reason": null,
+      "value_corrections": []
+    },
+    {
+      "finding_id": "F2",
+      "verdict": "confirm",
+      "evidence": "traced",
+      "refutation_search": "Read the function, its callers and the settings module.",
+      "reason": "v2 traced F2.",
+      "argument_for": "v2: the scenario follows from the code.",
+      "argument_against": "v2: none found.",
+      "deciding_assumption": null,
+      "no_trigger_reason": null,
+      "reach": "settings.py reads SEARCH_GENERATIONS from the environment; .env sets 10 and production uses the default 100. Each deployment has its own store, so the setting does not change under a cache; a release of new optimiser code does.",
+      "trigger_class": "release",
+      "possibly_intended": false,
+      "possibly_intended_reason": null,
+      "value_corrections": [
+        {
+          "quoted": "SEARCH_GENERATIONS=5",
+          "actual": "SEARCH_GENERATIONS=10",
+          "file": ".env",
+          "line": 3
+        }
+      ]
+    },
+    {
+      "finding_id": "F3",
+      "verdict": "confirm",
+      "evidence": "traced",
+      "refutation_search": "Read the function, its callers and the settings module.",
+      "reason": "v2 traced F3.",
+      "argument_for": "v2: the scenario follows from the code.",
+      "argument_against": "v2: none found.",
+      "deciding_assumption": null,
+      "no_trigger_reason": null,
+      "reach": "The schema version changes only in a release.",
+      "trigger_class": "release",
+      "possibly_intended": false,
+      "possibly_intended_reason": null,
+      "value_corrections": []
+    }
+  ]
+}

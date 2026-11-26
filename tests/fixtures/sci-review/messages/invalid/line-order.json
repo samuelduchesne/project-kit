@@ -15,7 +15,10 @@
         "trigger": null,
         "wrong_output": null,
         "fix": "Fix for the small-angle approximation is used without a stated range.",
-        "evidence": "Read the code and evaluated the expression at the trigger."
+        "evidence": "Read the code and evaluated the expression at the trigger.",
+        "headline": "The small-angle approximation is used without a stated range",
+        "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+        "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning."
       },
       {
         "id": "theorist-1",
@@ -29,7 +32,10 @@
         "trigger": "y = [1, 1, 1], h = 1",
         "wrong_output": "3 instead of 2",
         "fix": "Fix for the trapezoidal sum counts the last interior point twice.",
-        "evidence": "Read the code and evaluated the expression at the trigger."
+        "evidence": "Read the code and evaluated the expression at the trigger.",
+        "headline": "The trapezoidal sum counts the last interior point twice",
+        "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+        "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning."
       }
     ],
     "checked_items": [

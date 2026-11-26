@@ -31,23 +31,91 @@ Finding cap: none (the usual limit); 0 findings were withheld by it.
 
 ### Consensus
 
-| Location | Dimension | Severity | Summary | Trigger | Wrong output | Fix | Raised by | Label |
-|---|---|---|---|---|---|---|---|---|
-| src/sci/train.py:40-41 | statistical-integrity | high | F5: The scaler is fitted on the full data set before the split. | x = [1, 2, 3, 4, 100] | the first training row scales to -0.538 instead of -1.342 | Fix for the scaler is fitted on the full data set before the split. | methodologist | consensus |
-| src/sci/heat.ts:5 | physical-modelling-and-units | medium | F1: Temperature in Celsius is used where kelvin is required. | T = 25 (Celsius) passed to radiate() | 418.7 W/m2 expected, 9.07e-3 W/m2 returned | Fix for temperature in celsius is used where kelvin is required. | experimentalist | consensus |
+#### F5. The scaler is fitted on the full data set before the split
+
+`high` · consensus · statistical-integrity
+
+The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.
+
+**In practice.** Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning.
+
+- **Where:** `src/sci/train.py:40-41`
+- **Summary:** The scaler is fitted on the full data set before the split.
+- **Trigger:** x = [1, 2, 3, 4, 100]
+- **Wrong output:** the first training row scales to -0.538 instead of -1.342
+- **Fix:** Fix for the scaler is fitted on the full data set before the split.
+- **Raised by:** methodologist
+
+#### F1. Temperature in Celsius is used where kelvin is required
+
+`medium` · consensus · physical-modelling-and-units
+
+The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.
+
+**In practice.** Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning.
+
+- **Where:** `src/sci/heat.ts:5`
+- **Summary:** Temperature in Celsius is used where kelvin is required.
+- **Trigger:** T = 25 (Celsius) passed to radiate()
+- **Wrong output:** 418.7 W/m2 expected, 9.07e-3 W/m2 returned
+- **Fix:** Fix for temperature in celsius is used where kelvin is required.
+- **Raised by:** experimentalist
 
 ### Majority
 
-| Location | Dimension | Severity | Summary | Trigger | Wrong output | Fix | Raised by | Label |
-|---|---|---|---|---|---|---|---|---|
-| src/sci/model.py:10-13 | mathematical-derivations | high | F3: The trapezoidal sum counts the last interior point twice. | y = [1, 1, 1], h = 1 | 3 instead of 2 | Fix for the trapezoidal sum counts the last interior point twice. | theorist, numerical-analyst | majority |
+#### F3. The trapezoidal sum counts the last interior point twice
+
+`high` · majority · mathematical-derivations
+
+The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.
+
+**In practice.** Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning.
+
+- **Where:** `src/sci/model.py:10-13`
+- **Summary:** The trapezoidal sum counts the last interior point twice.
+- **Trigger:** y = [1, 1, 1], h = 1
+- **Wrong output:** 3 instead of 2
+- **Fix:** Fix for the trapezoidal sum counts the last interior point twice.
+- **Raised by:** theorist, numerical-analyst
 
 ### Contested
 
-| Location | Dimension | Severity | Summary | Trigger | Wrong output | Fix | Raised by | Label | Argument for | Argument against | Deciding assumption | No-trigger reason |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| src/sci/heat.ts:30-31 | mathematical-derivations | medium | F2: The small-angle approximation is used without a stated range. | n/a | n/a | Fix for the small-angle approximation is used without a stated range. | theorist | contested | The failure scenario of F2 holds at the stated trigger. | The approximation is accurate to 1% below 0.24 rad, which may be the intended range. | Whether input angles are bounded below 0.24 rad. | No member could name an input range the callers actually use. |
-| src/sci/model.py:80 | algorithmic-correctness | low | F4: The cache key omits the reference year. | calls with year 2020 then 2021 | the 2020 value is returned for 2021 | Fix for the cache key omits the reference year. | computer-scientist | contested | The failure scenario of F4 holds at the stated trigger. | The reference year is fixed for the lifetime of the process in production. | Whether the reference year can change while the process runs. | n/a |
+#### F2. The small-angle approximation is used without a stated range
+
+`medium` · contested · mathematical-derivations
+
+The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.
+
+**In practice.** Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning.
+
+- **Where:** `src/sci/heat.ts:30-31`
+- **Summary:** The small-angle approximation is used without a stated range.
+- **Trigger:** None established.
+- **Wrong output:** n/a
+- **Fix:** Fix for the small-angle approximation is used without a stated range.
+- **Raised by:** theorist
+- **Argument for:** The failure scenario of F2 holds at the stated trigger.
+- **Argument against:** The approximation is accurate to 1% below 0.24 rad, which may be the intended range.
+- **Deciding assumption:** Whether input angles are bounded below 0.24 rad.
+- **No-trigger reason:** No member could name an input range the callers actually use.
+
+#### F4. The cache key omits the reference year
+
+`low` · contested · algorithmic-correctness
+
+The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.
+
+**In practice.** Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning.
+
+- **Where:** `src/sci/model.py:80`
+- **Summary:** The cache key omits the reference year.
+- **Trigger:** calls with year 2020 then 2021
+- **Wrong output:** the 2020 value is returned for 2021
+- **Fix:** Fix for the cache key omits the reference year.
+- **Raised by:** computer-scientist
+- **Argument for:** The failure scenario of F4 holds at the stated trigger.
+- **Argument against:** The reference year is fixed for the lifetime of the process in production.
+- **Deciding assumption:** Whether the reference year can change while the process runs.
 
 ## Rejected findings
 

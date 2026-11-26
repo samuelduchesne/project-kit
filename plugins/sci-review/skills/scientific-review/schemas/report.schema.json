@@ -19,7 +19,8 @@
     "withheld",
     "parts",
     "incomplete_parts",
-    "notes"
+    "notes",
+    "design_questions"
   ],
   "properties": {
     "scope": {
@@ -100,6 +101,13 @@
       "type": "array",
       "items": {
         "type": "string"
+      }
+    },
+    "design_questions": {
+      "description": "Findings with kind design-question (spec 010); findings holds defects only. The finding cap counts both, design questions after defects.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Finding"
       }
     }
   },
@@ -608,6 +616,52 @@
             "string",
             "null"
           ]
+        },
+        "headline": {
+          "type": "string"
+        },
+        "context": {
+          "type": "string"
+        },
+        "in_practice": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "defect",
+            "design-question"
+          ]
+        },
+        "trigger_class": {
+          "enum": [
+            "user-action",
+            "data-condition",
+            "release",
+            "operator-change",
+            "unreachable",
+            null
+          ]
+        },
+        "reach": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "possibly_intended_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value_corrections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValueCorrection"
+          }
+        },
+        "severity_capped": {
+          "type": "boolean"
         }
       },
       "additionalProperties": false,
@@ -799,6 +853,35 @@
         },
         "text": {
           "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueCorrection": {
+      "description": "A value quoted in the finding that the repository contradicts.",
+      "type": "object",
+      "required": [
+        "quoted",
+        "actual",
+        "file",
+        "line"
+      ],
+      "properties": {
+        "quoted": {
+          "type": "string",
+          "minLength": 1
+        },
+        "actual": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
         }
       },
       "additionalProperties": false

@@ -26,7 +26,10 @@
     "summary": "S",
     "trigger": "x = 0",
     "wrong_output": "inf",
-    "fix": "Fix for s"
+    "fix": "Fix for s",
+    "headline": "S",
+    "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+    "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning."
   },
   "rounds": [
     [

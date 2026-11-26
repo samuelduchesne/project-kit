@@ -13,7 +13,10 @@
       "trigger": "y = [1, 1, 1], h = 1",
       "wrong_output": "3 instead of 2",
       "fix": "Fix for the integration loop overruns the interior points by one.",
-      "evidence": "Read the code and evaluated the expression at the trigger."
+      "evidence": "Read the code and evaluated the expression at the trigger.",
+      "headline": "The integration loop overruns the interior points by one",
+      "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+      "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning."
     },
     {
       "id": "numerical-analyst-2",
@@ -27,7 +30,10 @@
       "trigger": "a reading of -9999.0",
       "wrong_output": "the reading is treated as missing",
       "fix": "Fix for float equality is used against the sentinel -9999.0.",
-      "evidence": "Read the code and evaluated the expression at the trigger."
+      "evidence": "Read the code and evaluated the expression at the trigger.",
+      "headline": "Float equality is used against the sentinel -9999.0",
+      "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+      "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning."
     }
   ],
   "checked_items": [

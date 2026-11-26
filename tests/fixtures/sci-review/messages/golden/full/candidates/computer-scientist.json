@@ -13,7 +13,10 @@
       "trigger": "calls with year 2020 then 2021",
       "wrong_output": "the 2020 value is returned for 2021",
       "fix": "Fix for the cache key omits the reference year.",
-      "evidence": "Read the code and evaluated the expression at the trigger."
+      "evidence": "Read the code and evaluated the expression at the trigger.",
+      "headline": "The cache key omits the reference year",
+      "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+      "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning."
     }
   ],
   "checked_items": [],

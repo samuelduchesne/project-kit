@@ -13,7 +13,10 @@
       "trigger": "t",
       "wrong_output": "w",
       "fix": "Fix for s",
-      "evidence": "Read the code and evaluated the expression at the trigger."
+      "evidence": "Read the code and evaluated the expression at the trigger.",
+      "headline": "S",
+      "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+      "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning."
     },
     {
       "id": "theorist-2",
@@ -27,7 +30,10 @@
       "trigger": "t",
       "wrong_output": "w",
       "fix": "Fix for s",
-      "evidence": "Read the code and evaluated the expression at the trigger."
+      "evidence": "Read the code and evaluated the expression at the trigger.",
+      "headline": "S",
+      "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+      "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning."
     },
     {
       "id": "theorist-3",
@@ -41,7 +47,10 @@
       "trigger": "t",
       "wrong_output": "w",
       "fix": "Fix for s",
-      "evidence": "Read the code and evaluated the expression at the trigger."
+      "evidence": "Read the code and evaluated the expression at the trigger.",
+      "headline": "S",
+      "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+      "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning."
     },
     {
       "id": "theorist-4",
@@ -55,7 +64,10 @@
       "trigger": "t",
       "wrong_output": "w",
       "fix": "Fix for s",
-      "evidence": "Read the code and evaluated the expression at the trigger."
+      "evidence": "Read the code and evaluated the expression at the trigger.",
+      "headline": "S",
+      "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+      "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning."
     }
   ],
   "expected": {

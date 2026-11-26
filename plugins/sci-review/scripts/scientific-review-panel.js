@@ -114,7 +114,10 @@ const SCHEMAS = {
           "trigger",
           "wrong_output",
           "fix",
-          "evidence"
+          "evidence",
+          "headline",
+          "context",
+          "in_practice"
         ],
         "properties": {
           "id": {
@@ -163,6 +166,21 @@ const SCHEMAS = {
           },
           "evidence": {
             "type": "string"
+          },
+          "headline": {
+            "description": "Plain words; names the situation, not the code. At most 90 characters (checked by panel.py).",
+            "type": "string",
+            "minLength": 1
+          },
+          "context": {
+            "description": "One or two sentences: what the code does for its users and when the problem arises.",
+            "type": "string",
+            "minLength": 1
+          },
+          "in_practice": {
+            "description": "Who or what triggers it, how often, whether anyone would notice; for a cache, whether reuse looks intended.",
+            "type": "string",
+            "minLength": 1
           }
         },
         "additionalProperties": false
@@ -270,6 +288,17 @@ const SCHEMAS = {
             "items": {
               "type": "string"
             }
+          },
+          "possibly_intended": {
+            "description": "Defender only: the behaviour looks like a deliberate, undocumented trade-off (spec 010).",
+            "type": "boolean"
+          },
+          "possibly_intended_reason": {
+            "description": "Defender only; required and non-empty when possibly_intended is true.",
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "additionalProperties": false
@@ -354,7 +383,10 @@ const SCHEMAS = {
           "summary",
           "trigger",
           "wrong_output",
-          "fix"
+          "fix",
+          "headline",
+          "context",
+          "in_practice"
         ],
         "properties": {
           "id": {
@@ -418,6 +450,21 @@ const SCHEMAS = {
           },
           "severity_reason": {
             "type": "string"
+          },
+          "headline": {
+            "description": "Plain words; names the situation, not the code. At most 90 characters (checked by panel.py).",
+            "type": "string",
+            "minLength": 1
+          },
+          "context": {
+            "description": "One or two sentences: what the code does for its users and when the problem arises.",
+            "type": "string",
+            "minLength": 1
+          },
+          "in_practice": {
+            "description": "Who or what triggers it, how often, whether anyone would notice; for a cache, whether reuse looks intended.",
+            "type": "string",
+            "minLength": 1
           }
         },
         "additionalProperties": false
@@ -513,7 +560,8 @@ const SCHEMAS = {
       "withheld",
       "parts",
       "incomplete_parts",
-      "notes"
+      "notes",
+      "design_questions"
     ],
     "properties": {
       "scope": {
@@ -594,6 +642,13 @@ const SCHEMAS = {
         "type": "array",
         "items": {
           "type": "string"
+        }
+      },
+      "design_questions": {
+        "description": "Findings with kind design-question (spec 010); findings holds defects only. The finding cap counts both, design questions after defects.",
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Finding"
         }
       }
     },
@@ -1102,6 +1157,52 @@ const SCHEMAS = {
               "string",
               "null"
             ]
+          },
+          "headline": {
+            "type": "string"
+          },
+          "context": {
+            "type": "string"
+          },
+          "in_practice": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "defect",
+              "design-question"
+            ]
+          },
+          "trigger_class": {
+            "enum": [
+              "user-action",
+              "data-condition",
+              "release",
+              "operator-change",
+              "unreachable",
+              null
+            ]
+          },
+          "reach": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "possibly_intended_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "value_corrections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ValueCorrection"
+            }
+          },
+          "severity_capped": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false,
@@ -1296,6 +1397,35 @@ const SCHEMAS = {
           }
         },
         "additionalProperties": false
+      },
+      "ValueCorrection": {
+        "description": "A value quoted in the finding that the repository contradicts.",
+        "type": "object",
+        "required": [
+          "quoted",
+          "actual",
+          "file",
+          "line"
+        ],
+        "properties": {
+          "quoted": {
+            "type": "string",
+            "minLength": 1
+          },
+          "actual": {
+            "type": "string",
+            "minLength": 1
+          },
+          "file": {
+            "type": "string",
+            "minLength": 1
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
       }
     }
   },
@@ -1339,7 +1469,10 @@ const SCHEMAS = {
           "argument_for",
           "argument_against",
           "deciding_assumption",
-          "no_trigger_reason"
+          "no_trigger_reason",
+          "reach",
+          "trigger_class",
+          "value_corrections"
         ],
         "properties": {
           "finding_id": {
@@ -1390,6 +1523,68 @@ const SCHEMAS = {
               "string",
               "null"
             ]
+          },
+          "reach": {
+            "description": "Files read to establish how the trigger state arises (configuration, environment, deployment, release) and what each showed; 'none present' when the project has none.",
+            "type": "string",
+            "minLength": 1
+          },
+          "trigger_class": {
+            "description": "How the trigger state comes about. unreachable only with verdict refute.",
+            "enum": [
+              "user-action",
+              "data-condition",
+              "release",
+              "operator-change",
+              "unreachable"
+            ]
+          },
+          "possibly_intended": {
+            "description": "The behaviour looks like a deliberate, undocumented trade-off. Not allowed with refute; counts as uncertain.",
+            "type": "boolean"
+          },
+          "possibly_intended_reason": {
+            "description": "Required and non-empty when possibly_intended is true; null otherwise.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "value_corrections": {
+            "description": "Quoted values the repository contradicts; empty when none.",
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ValueCorrection"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ValueCorrection": {
+        "description": "A value quoted in the finding that the repository contradicts.",
+        "type": "object",
+        "required": [
+          "quoted",
+          "actual",
+          "file",
+          "line"
+        ],
+        "properties": {
+          "quoted": {
+            "type": "string",
+            "minLength": 1
+          },
+          "actual": {
+            "type": "string",
+            "minLength": 1
+          },
+          "file": {
+            "type": "string",
+            "minLength": 1
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
           }
         },
         "additionalProperties": false
@@ -1538,6 +1733,10 @@ function autoRuling(batch, clusters, candidatesById) {
       trigger: c.trigger,
       wrong_output: c.wrong_output,
       fix: c.fix,
+      // Finding prose (spec 010), copied as panel.py copies it; omitted when the candidate has none.
+      ...Object.fromEntries(
+        ['headline', 'context', 'in_practice'].filter(k => c[k] != null).map(k => [k, c[k]]),
+      ),
     })
   }
   return { batch: batch.batch, findings, split: [] }

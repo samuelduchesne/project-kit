@@ -76,7 +76,10 @@
         "summary",
         "trigger",
         "wrong_output",
-        "fix"
+        "fix",
+        "headline",
+        "context",
+        "in_practice"
       ],
       "properties": {
         "id": {
@@ -140,6 +143,21 @@
         },
         "severity_reason": {
           "type": "string"
+        },
+        "headline": {
+          "description": "Plain words; names the situation, not the code. At most 90 characters (checked by panel.py).",
+          "type": "string",
+          "minLength": 1
+        },
+        "context": {
+          "description": "One or two sentences: what the code does for its users and when the problem arises.",
+          "type": "string",
+          "minLength": 1
+        },
+        "in_practice": {
+          "description": "Who or what triggers it, how often, whether anyone would notice; for a cache, whether reuse looks intended.",
+          "type": "string",
+          "minLength": 1
         }
       },
       "additionalProperties": false

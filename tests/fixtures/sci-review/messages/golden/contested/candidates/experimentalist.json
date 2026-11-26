@@ -13,7 +13,10 @@
       "trigger": "v = 30 m/s, d = 0.1 m",
       "wrong_output": "drag force 2.1 N instead of 11.0 N",
       "fix": "Fix for drag is linear in velocity although the reynolds number exceeds 1000.",
-      "evidence": "Read the code and evaluated the expression at the trigger."
+      "evidence": "Read the code and evaluated the expression at the trigger.",
+      "headline": "Drag is linear in velocity although the Reynolds number exceeds 1000",
+      "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+      "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning."
     }
   ],
   "checked_items": [],

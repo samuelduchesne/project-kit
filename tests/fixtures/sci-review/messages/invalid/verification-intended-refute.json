@@ -1,0 +1,25 @@
+{
+  "schema": "verification",
+  "message": {
+    "batch": 1,
+    "verifier": "v1",
+    "verdicts": [
+      {
+        "finding_id": "F3",
+        "verdict": "refute",
+        "evidence": "traced",
+        "refutation_search": "Read the function, its callers and the settings module.",
+        "reason": "v1 traced F3.",
+        "argument_for": "v1: the scenario follows from the code.",
+        "argument_against": "v1: none found.",
+        "deciding_assumption": null,
+        "no_trigger_reason": null,
+        "reach": "The schema version changes only in a release.",
+        "trigger_class": "release",
+        "possibly_intended": true,
+        "possibly_intended_reason": "Keeping reports byte-identical across releases looks deliberate; no comment says so either way.",
+        "value_corrections": []
+      }
+    ]
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "mode": "paths",
+  "base": null,
+  "head": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+  "files": [
+    {
+      "path": "src/energy/totals.py",
+      "language": "python",
+      "line_ranges": [
+        [
+          1,
+          80
+        ]
+      ]
+    },
+    {
+      "path": "src/services/results_cache.py",
+      "language": "python",
+      "line_ranges": [
+        [
+          1,
+          200
+        ]
+      ]
+    }
+  ],
+  "excluded": [],
+  "note": "Paths: src/energy/totals.py, src/services/results_cache.py (2 files, 280 lines)."
+}

@@ -1,0 +1,41 @@
+{
+  "perspective": "computer-scientist",
+  "findings": [
+    {
+      "id": "computer-scientist-1",
+      "raised_by": "computer-scientist",
+      "file": "src/services/results_cache.py",
+      "line_start": 120,
+      "line_end": 156,
+      "dimension": "algorithmic-correctness",
+      "severity": "high",
+      "summary": "The result cache key covers the inputs but not the search configuration or the code version.",
+      "trigger": "Compute with SEARCH_GENERATIONS=5, change the setting, recompute with unchanged inputs",
+      "wrong_output": "The cached result from the earlier configuration is returned as current",
+      "fix": "Add a digest of the search configuration and the code version to the cache key.",
+      "evidence": "Read the function and its callers.",
+      "headline": "Cached results are not recomputed after a release",
+      "context": "Optimised results are cached and reused while a building's inputs are unchanged, so users get answers without waiting.",
+      "in_practice": "After a release that changes the optimiser, users keep seeing results from the old code until their inputs change; nobody is told."
+    },
+    {
+      "id": "computer-scientist-2",
+      "raised_by": "computer-scientist",
+      "file": "src/services/results_cache.py",
+      "line_start": 170,
+      "line_end": 180,
+      "dimension": "algorithmic-correctness",
+      "severity": "medium",
+      "summary": "Cache lookup ignores the schema_version field of stored results.",
+      "trigger": "Read a result stored under schema_version 1 after the schema moves to 2",
+      "wrong_output": "A result in the old schema is served without migration",
+      "fix": "Include schema_version in the lookup, or migrate stored results.",
+      "evidence": "Read the function and its callers.",
+      "headline": "Stored results are reused across schema versions",
+      "context": "The cache returns stored results directly to the reports users download.",
+      "in_practice": "Only after a release that bumps the schema; the reuse may be deliberate, to keep reports stable across releases."
+    }
+  ],
+  "checked_items": [],
+  "notes": ""
+}

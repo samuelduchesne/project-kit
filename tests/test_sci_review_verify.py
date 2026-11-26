@@ -67,6 +67,9 @@ def verification(batch: int, verifier: str, verdicts: dict[str, str]) -> dict:
                 "argument_against": f"{verifier}: none found.",
                 "deciding_assumption": "Whether inputs stay small." if kind == "uncertain" else None,
                 "no_trigger_reason": "No trigger was established." if fid == "F2" else None,
+                "reach": "Read the settings module and the environment file; the inputs come from users.",
+                "trigger_class": "unreachable" if kind == "refute" else "user-action",
+                "value_corrections": [],
             }
             for fid, kind in verdicts.items()
         ],

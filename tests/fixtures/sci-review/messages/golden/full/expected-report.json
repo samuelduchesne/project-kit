@@ -121,7 +121,13 @@
       "trigger": "x = [1, 2, 3, 4, 100]",
       "wrong_output": "the first training row scales to -0.538 instead of -1.342",
       "fix": "Fix for the scaler is fitted on the full data set before the split.",
-      "label": "consensus"
+      "label": "consensus",
+      "headline": "The scaler is fitted on the full data set before the split",
+      "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+      "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning.",
+      "kind": "defect",
+      "value_corrections": [],
+      "severity_capped": false
     },
     {
       "id": "F1",
@@ -141,7 +147,13 @@
       "trigger": "T = 25 (Celsius) passed to radiate()",
       "wrong_output": "418.7 W/m2 expected, 9.07e-3 W/m2 returned",
       "fix": "Fix for temperature in celsius is used where kelvin is required.",
-      "label": "consensus"
+      "label": "consensus",
+      "headline": "Temperature in Celsius is used where kelvin is required",
+      "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+      "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning.",
+      "kind": "defect",
+      "value_corrections": [],
+      "severity_capped": false
     },
     {
       "id": "F3",
@@ -163,7 +175,13 @@
       "trigger": "y = [1, 1, 1], h = 1",
       "wrong_output": "3 instead of 2",
       "fix": "Fix for the trapezoidal sum counts the last interior point twice.",
-      "label": "majority"
+      "label": "majority",
+      "headline": "The trapezoidal sum counts the last interior point twice",
+      "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+      "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning.",
+      "kind": "defect",
+      "value_corrections": [],
+      "severity_capped": false
     },
     {
       "id": "F2",
@@ -187,7 +205,13 @@
       "argument_for": "The failure scenario of F2 holds at the stated trigger.",
       "argument_against": "The approximation is accurate to 1% below 0.24 rad, which may be the intended range.",
       "deciding_assumption": "Whether input angles are bounded below 0.24 rad.",
-      "no_trigger_reason": "No member could name an input range the callers actually use."
+      "no_trigger_reason": "No member could name an input range the callers actually use.",
+      "headline": "The small-angle approximation is used without a stated range",
+      "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+      "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning.",
+      "kind": "defect",
+      "value_corrections": [],
+      "severity_capped": false
     },
     {
       "id": "F4",
@@ -210,9 +234,16 @@
       "label": "contested",
       "argument_for": "The failure scenario of F4 holds at the stated trigger.",
       "argument_against": "The reference year is fixed for the lifetime of the process in production.",
-      "deciding_assumption": "Whether the reference year can change while the process runs."
+      "deciding_assumption": "Whether the reference year can change while the process runs.",
+      "headline": "The cache key omits the reference year",
+      "context": "The function at this location computes a value that callers report to users; the problem arises in the situation the trigger describes.",
+      "in_practice": "Triggered by ordinary inputs that match the trigger; a user would see a wrong result with no warning.",
+      "kind": "defect",
+      "value_corrections": [],
+      "severity_capped": false
     }
   ],
+  "design_questions": [],
   "rejected": [
     {
       "finding_id": "F6",

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import datetime
 import fnmatch
 import json
 import os
@@ -194,6 +195,41 @@ class Verdict:
     VALUES = (CONFIRM, REFUTE, UNCERTAIN)
 
 
+class TriggerClass:
+    """How a finding's trigger state comes about, as a verifier establishes it (spec 010, research R3)."""
+
+    USER_ACTION = "user-action"
+    DATA_CONDITION = "data-condition"
+    RELEASE = "release"
+    OPERATOR_CHANGE = "operator-change"
+    UNREACHABLE = "unreachable"
+    VALUES = (USER_ACTION, DATA_CONDITION, RELEASE, OPERATOR_CHANGE, UNREACHABLE)
+    # Tie order when verifiers disagree: the more frequent trigger first.
+    FREQUENCY_ORDER = (USER_ACTION, DATA_CONDITION, RELEASE, OPERATOR_CHANGE)
+    # Classes whose findings are capped at medium unless a severity_reason is recorded (research R5).
+    RARE = (RELEASE, OPERATOR_CHANGE)
+    WORDS: ClassVar[dict[str, str]] = {
+        USER_ACTION: "a user action",
+        DATA_CONDITION: "a data condition in ordinary inputs",
+        RELEASE: "a release of new code",
+        OPERATOR_CHANGE: "an operator changing configuration",
+        UNREACHABLE: "nothing: the trigger cannot occur",
+    }
+
+
+class FindingKind:
+    DEFECT = "defect"
+    DESIGN_QUESTION = "design-question"
+    VALUES = (DEFECT, DESIGN_QUESTION)
+
+
+class OwnerSource:
+    CODEOWNERS = "codeowners"
+    BLAME = "blame"
+    NONE = "none"
+    VALUES = (CODEOWNERS, BLAME, NONE)
+
+
 class Runner:
     CLAUDE_WORKFLOW = "claude-workflow"
     CODEX_SUBAGENTS = "codex-subagents"
@@ -337,8 +373,17 @@ KNOWN_EXTENSIONS: tuple[KnownExtension, ...] = (
 
 
 def _check_enum(owner: str, name: str, value: Any, allowed: Sequence[str]) -> None:
+    if value is None and name in OPTIONAL_ENUMS:
+        return
     if value not in allowed:
         raise ValidationFailure(f"{owner}.{name}: {value!r} is not one of {', '.join(allowed)}")
+
+
+# The longest headline a finding may carry (spec 010, data-model.md).
+MAX_HEADLINE = 90
+
+# Enumerated fields that may be null (spec 010: a run from an earlier version, or a debate finding).
+OPTIONAL_ENUMS = frozenset({"trigger_class"})
 
 
 class Record:
@@ -585,7 +630,12 @@ class CandidateFinding(Record):
     wrong_output: str | None
     fix: str
     evidence: str
+    # Finding prose (spec 010): required in new messages, absent from runs of earlier versions.
+    headline: str | None = None
+    context: str | None = None
+    in_practice: str | None = None
     _enums: ClassVar[dict[str, Sequence[str]]] = {"dimension": Dimension.VALUES, "severity": Severity.VALUES}
+    _optional: ClassVar[tuple[str, ...]] = ("headline", "context", "in_practice")
 
 
 @dataclass(frozen=True)
@@ -625,8 +675,11 @@ class MergedFinding(Record):
     wrong_output: str | None
     fix: str
     severity_reason: str | None = None
+    headline: str | None = None
+    context: str | None = None
+    in_practice: str | None = None
     _enums: ClassVar[dict[str, Sequence[str]]] = {"dimension": Dimension.VALUES, "severity": Severity.VALUES}
-    _optional: ClassVar[tuple[str, ...]] = ("severity_reason",)
+    _optional: ClassVar[tuple[str, ...]] = ("severity_reason", "headline", "context", "in_practice")
 
 
 @dataclass(frozen=True)
@@ -651,7 +704,11 @@ class Position(Record):
     stance: str
     reason: str
     answers: tuple[str, ...] = ()
+    # The defender may mark a position possibly intended (spec 010, research R6).
+    possibly_intended: bool = False
+    possibly_intended_reason: str | None = None
     _enums: ClassVar[dict[str, Sequence[str]]] = {"stance": Stance.VALUES}
+    _optional: ClassVar[tuple[str, ...]] = ("possibly_intended_reason",)
 
     @property
     def position_id(self) -> str:
@@ -684,6 +741,16 @@ class NotesMessage(Record):
 
 
 @dataclass(frozen=True)
+class ValueCorrection(Record):
+    """A value quoted in a finding that the repository contradicts (spec 010, data-model.md)."""
+
+    quoted: str
+    actual: str
+    file: str
+    line: int
+
+
+@dataclass(frozen=True)
 class VerdictRecord(Record):
     finding_id: str
     verdict: str
@@ -696,15 +763,29 @@ class VerdictRecord(Record):
     evidence: str = "traced"
     refutation_search: str = ""
     verifier: str = ""
+    # Practical reach (spec 010): how the trigger state comes about, and quoted values the repository contradicts.
+    reach: str = ""
+    trigger_class: str | None = None
+    possibly_intended: bool = False
+    possibly_intended_reason: str | None = None
+    value_corrections: tuple[ValueCorrection, ...] = ()
+    _records: ClassVar[dict[str, str]] = {"value_corrections": "ValueCorrection"}
     _enums: ClassVar[dict[str, Sequence[str]]] = {
         "verdict": Verdict.VALUES,
         "evidence": ("reproduced", "traced", "none"),
+        "trigger_class": TriggerClass.VALUES,
     }
 
     @property
     def effective(self) -> str:
-        """The verdict as adjudicated: a confirmation with no evidence counts as uncertain (spec 009)."""
+        """The verdict as adjudicated.
+
+        A confirmation with no evidence counts as uncertain (spec 009), and so does a verdict marked possibly
+        intended (spec 010, research R6).
+        """
         if self.verdict == Verdict.CONFIRM and self.evidence == "none":
+            return Verdict.UNCERTAIN
+        if self.possibly_intended and self.verdict != Verdict.REFUTE:
             return Verdict.UNCERTAIN
         return self.verdict
 
@@ -746,16 +827,35 @@ class Finding(Record):
     argument_against: str | None = None
     deciding_assumption: str | None = None
     no_trigger_reason: str | None = None
+    # Spec 010: finding prose, practical reach, design questions and the severity cap.
+    headline: str | None = None
+    context: str | None = None
+    in_practice: str | None = None
+    kind: str = FindingKind.DEFECT
+    trigger_class: str | None = None
+    reach: str | None = None
+    possibly_intended_reason: str | None = None
+    value_corrections: tuple[ValueCorrection, ...] = ()
+    severity_capped: bool = False
+    _records: ClassVar[dict[str, str]] = {"value_corrections": "ValueCorrection"}
     _enums: ClassVar[dict[str, Sequence[str]]] = {
         "dimension": Dimension.VALUES,
         "severity": Severity.VALUES,
         "label": AgreementLabel.VALUES,
+        "kind": FindingKind.VALUES,
+        "trigger_class": TriggerClass.VALUES,
     }
     _optional: ClassVar[tuple[str, ...]] = (
         "severity_reason",
         "argument_for",
         "argument_against",
         "no_trigger_reason",
+        "headline",
+        "context",
+        "in_practice",
+        "trigger_class",
+        "reach",
+        "possibly_intended_reason",
     )
 
     def to_json(self) -> dict[str, Any]:
@@ -1084,6 +1184,13 @@ class ReviewReport:
     parts: int = 1
     incomplete_parts: tuple[str, ...] = ()
     notes: tuple[str, ...] = ()
+    # Findings marked possibly intended (spec 010): reported after the defects, as questions for the owners.
+    design_questions: tuple[Finding, ...] = ()
+
+    @property
+    def delivered(self) -> tuple[Finding, ...]:
+        """Every delivered finding: the defects, then the design questions."""
+        return self.findings + self.design_questions
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -1091,6 +1198,7 @@ class ReviewReport:
             "panel": self.panel.to_json(),
             "extensions": [e.to_report_json() for e in self.extensions],
             "findings": [f.to_json() for f in self.findings],
+            "design_questions": [f.to_json() for f in self.design_questions],
             "rejected": [r.to_json() for r in self.rejected],
             "checked_items": [c.to_json() for c in self.checked_items],
             "unreviewed": [u.to_json() for u in self.unreviewed],
@@ -1229,8 +1337,36 @@ def semantic_errors(name: str, value: Any) -> list[str]:
         for index, finding in enumerate(value.get("findings", [])):
             if finding.get("raised_by") != value.get("perspective"):
                 errors.append(f"$.findings[{index}]: raised_by differs from the message perspective")
-    if name == "report" and isinstance(value, dict):
+    if name in ("candidate-findings", "merge-ruling") and isinstance(value, dict):
         for index, finding in enumerate(value.get("findings", [])):
+            headline = finding.get("headline")
+            if isinstance(headline, str) and len(headline) > MAX_HEADLINE:
+                errors.append(
+                    f"$.findings[{index}].headline: {len(headline)} characters; a headline has at most {MAX_HEADLINE}"
+                )
+    if name == "verification" and isinstance(value, dict):
+        for index, verdict in enumerate(value.get("verdicts", [])):
+            path = f"$.verdicts[{index}]"
+            kind = verdict.get("verdict")
+            if verdict.get("trigger_class") == TriggerClass.UNREACHABLE and kind != Verdict.REFUTE:
+                errors.append(f"{path}.trigger_class: unreachable requires verdict refute (the trigger cannot occur)")
+            if verdict.get("possibly_intended"):
+                if kind == Verdict.REFUTE:
+                    errors.append(f"{path}.possibly_intended: not allowed with verdict refute")
+                if not (verdict.get("possibly_intended_reason") or "").strip():
+                    errors.append(f"{path}.possibly_intended_reason: required when possibly_intended is true")
+    if name == "debate-positions" and isinstance(value, dict):
+        for index, position in enumerate(value.get("positions", [])):
+            if not position.get("possibly_intended"):
+                continue
+            if position.get("member") != Role.DEFENDER:
+                errors.append(f"$.positions[{index}].possibly_intended: only the defender may mark a position")
+            if not (position.get("possibly_intended_reason") or "").strip():
+                errors.append(
+                    f"$.positions[{index}].possibly_intended_reason: required when possibly_intended is true"
+                )
+    if name == "report" and isinstance(value, dict):
+        for index, finding in enumerate([*value.get("findings", []), *value.get("design_questions", [])]):
             if (finding.get("trigger") is None or finding.get("wrong_output") is None) and not finding.get(
                 "no_trigger_reason"
             ):
@@ -3196,6 +3332,9 @@ def auto_ruling(
                 trigger=candidate.trigger,
                 wrong_output=candidate.wrong_output,
                 fix=candidate.fix,
+                headline=candidate.headline,
+                context=candidate.context,
+                in_practice=candidate.in_practice,
             )
         )
     return MergeRuling(batch=batch.batch, findings=tuple(findings))
@@ -3548,6 +3687,13 @@ def adjudicate(
                     if note and note.no_trigger_reason
                     else "No member supplied a concrete trigger."
                 )
+            # Spec 010: the defender's latest position, when marked possibly intended, makes a design question.
+            defender = [p for p in positions if p.member == Role.DEFENDER]
+            latest = max(defender, key=lambda p: p.round) if defender else None
+            if latest is not None and latest.possibly_intended:
+                extra["kind"] = FindingKind.DESIGN_QUESTION
+                extra["possibly_intended_reason"] = latest.possibly_intended_reason
+            extra.update(prose_fields(merged))
             findings.append(
                 Finding(
                     id=merged.id,
@@ -3598,6 +3744,45 @@ def load_verifications(run_dir: Path) -> dict[int, list[VerdictRecord]]:
             dataclasses.replace(v, verifier=message.verifier) for v in message.verdicts
         )
     return verdicts
+
+
+def combined_trigger_class(verdicts: Sequence[VerdictRecord]) -> tuple[str | None, str | None]:
+    """The reported trigger class and reach of a finding (spec 010, research R3).
+
+    The most frequent class among non-refuting verdicts; a tie goes to the more frequent trigger, in the order
+    of `TriggerClass.FREQUENCY_ORDER`. The reach is that of the first non-refuting verdict with the reported
+    class. A finding with no non-refuting classified verdict has neither.
+    """
+    supporting = [v for v in verdicts if v.verdict != Verdict.REFUTE and v.trigger_class is not None]
+    if not supporting:
+        return None, None
+    counts: dict[str, int] = {}
+    for verdict in supporting:
+        counts[verdict.trigger_class] = counts.get(verdict.trigger_class, 0) + 1  # type: ignore[index]
+    order = {c: i for i, c in enumerate(TriggerClass.FREQUENCY_ORDER)}
+    chosen = min(counts, key=lambda c: (-counts[c], order.get(c, len(order))))
+    reach = next((v.reach for v in supporting if v.trigger_class == chosen and v.reach), None)
+    return chosen, reach
+
+
+def combined_value_corrections(verdicts: Sequence[VerdictRecord]) -> tuple[ValueCorrection, ...]:
+    """Every verifier's value corrections, deduplicated on (quoted, file, line) in first-seen order."""
+    seen: dict[tuple[str, str, int], ValueCorrection] = {}
+    for verdict in verdicts:
+        for correction in verdict.value_corrections:
+            seen.setdefault((correction.quoted, correction.file, correction.line), correction)
+    return tuple(seen.values())
+
+
+def capped_severity(severity: str, trigger_class: str | None, severity_reason: str | None) -> tuple[str, bool]:
+    """Lower `high` to `medium` when the only trigger is a release or an operator change (spec 010, research R5)."""
+    if severity == Severity.HIGH and trigger_class in TriggerClass.RARE and not severity_reason:
+        return Severity.MEDIUM, True
+    return severity, False
+
+
+def prose_fields(merged: MergedFinding) -> dict[str, Any]:
+    return {"headline": merged.headline, "context": merged.context, "in_practice": merged.in_practice}
 
 
 def verify_outcome(finding: MergedFinding, verdicts: Sequence[VerdictRecord]) -> Outcome:
@@ -3685,6 +3870,13 @@ def adjudicate_verified(
                     (v.no_trigger_reason for v in verdicts if v.no_trigger_reason),
                     "No member supplied a concrete trigger.",
                 )
+            # Rule 2a (spec 010): a finding marked possibly intended by any verifier is a design question.
+            marked = next((v for v in verdicts if v.possibly_intended and v.verdict != Verdict.REFUTE), None)
+            if marked is not None:
+                extra["kind"] = FindingKind.DESIGN_QUESTION
+                extra["possibly_intended_reason"] = marked.possibly_intended_reason
+            trigger_class, reach = combined_trigger_class(verdicts)
+            severity, capped = capped_severity(merged.severity, trigger_class, merged.severity_reason)
             findings.append(
                 Finding(
                     id=merged.id,
@@ -3695,7 +3887,12 @@ def adjudicate_verified(
                     line_start=merged.line_start,
                     line_end=merged.line_end,
                     dimension=merged.dimension,
-                    severity=merged.severity,
+                    severity=severity,
+                    severity_capped=capped,
+                    trigger_class=trigger_class,
+                    reach=reach,
+                    value_corrections=combined_value_corrections(verdicts),
+                    **prose_fields(merged),
                     summary=merged.summary,
                     trigger=merged.trigger,
                     wrong_output=merged.wrong_output,
@@ -3836,9 +4033,17 @@ def build_report(
         rejected = list(adjudication.rejected)
     checked = [item for message in candidates for item in message.checked_items]
     checked.sort(key=lambda c: (c.file, c.line_start, c.line_end, c.dimension))
-    ordered = order_findings(findings)
+    # Defects first, then design questions; the cap counts both, in that order (spec 010, data-model.md).
+    ordered = order_findings(f for f in findings if f.kind == FindingKind.DEFECT)
+    ordered += order_findings(f for f in findings if f.kind == FindingKind.DESIGN_QUESTION)
     cap = context.cap
     delivered = ordered if cap is None else ordered[:cap]
+    for finding in delivered:
+        if finding.value_corrections:
+            notices.append(
+                f"{finding.id}: a value quoted in the finding is contradicted by the repository; "
+                "see the correction under its trigger."
+            )
     unreviewed = list(scope.excluded)
     incomplete = [part for part in context.parts if part.status == PartStatus.INCOMPLETE]
     for part in incomplete:
@@ -3856,7 +4061,8 @@ def build_report(
         scope=scope,
         panel=panel,
         extensions=state.extensions,
-        findings=tuple(delivered),
+        findings=tuple(f for f in delivered if f.kind == FindingKind.DEFECT),
+        design_questions=tuple(f for f in delivered if f.kind == FindingKind.DESIGN_QUESTION),
         rejected=tuple(rejected),
         checked_items=tuple(checked),
         unreviewed=tuple(unreviewed),
@@ -3873,27 +4079,35 @@ def build_report(
 
 def failure_scenario(finding: Finding) -> str:
     if finding.trigger is not None and finding.wrong_output is not None:
-        return f"{finding.trigger} produces {finding.wrong_output}"
-    return f"No concrete trigger established: {finding.no_trigger_reason or 'no reason was recorded.'}"
+        technical = f"Trigger: {trigger_text(finding, markdown=False)} Wrong output: {finding.wrong_output}"
+        if finding.context is None and finding.in_practice is None:
+            return f"{finding.trigger} produces {finding.wrong_output}"
+    else:
+        technical = f"No concrete trigger established: {finding.no_trigger_reason or 'no reason was recorded.'}"
+        if finding.context is None and finding.in_practice is None:
+            return technical
+    # Spec 010: the situation and its practical reach come before the technical scenario.
+    return f"{finding.context or NOT_RECORDED} In practice: {finding.in_practice or NOT_RECORDED} {technical}"
 
 
 def report_findings(findings: Sequence[Finding]) -> list[ReportFinding]:
     """The ReportFindings mapping of contracts/report.md section 3."""
     out = []
     for finding in findings:
-        summary = finding.summary
+        summary = f"{finding.headline}. {finding.summary}" if finding.headline else finding.summary
         if finding.label == AgreementLabel.CONTESTED:
             summary += f" Contested. For: {finding.argument_for} Against: {finding.argument_against}"
             if finding.deciding_assumption:
                 summary += f" Decided by: {finding.deciding_assumption}"
-        short = f"{finding.label.capitalize()}: {finding.summary}"
+        short = finding.headline or f"{finding.label.capitalize()}: {finding.summary}"
+        design = finding.kind == FindingKind.DESIGN_QUESTION
         out.append(
             ReportFinding(
                 file=finding.file,
                 line=finding.line_start,
                 summary=summary,
                 failure_scenario=failure_scenario(finding),
-                category=finding.dimension,
+                category=FindingKind.DESIGN_QUESTION if design else finding.dimension,
                 verdict="PLAUSIBLE" if finding.label == AgreementLabel.CONTESTED else "CONFIRMED",
                 short_summary=short[:60],
             )
@@ -3912,6 +4126,58 @@ def _cell(value: Any) -> str:
 def _table(headers: Sequence[str], rows: Sequence[Sequence[Any]]) -> list[str]:
     lines = ["| " + " | ".join(headers) + " |", "|" + "|".join("---" for _ in headers) + "|"]
     lines += ["| " + " | ".join(_cell(v) for v in row) + " |" for row in rows]
+    return lines
+
+
+NOT_RECORDED = "Not recorded by this review."
+
+
+def location(finding: Finding) -> str:
+    end = f"-{finding.line_end}" if finding.line_end != finding.line_start else ""
+    return f"{finding.file}:{finding.line_start}{end}"
+
+
+def trigger_text(finding: Finding, markdown: bool = True) -> str:
+    """The trigger, followed by each value the repository contradicts (spec 010, contracts/report-layout.md)."""
+    text = finding.trigger if finding.trigger is not None else "None established."
+    for c in finding.value_corrections:
+        if markdown:
+            text += f" *(the finding quoted `{c.quoted}`; `{c.file}:{c.line}` has `{c.actual}`)*"
+        else:
+            text += f" (the finding quoted {c.quoted}; {c.file}:{c.line} has {c.actual})"
+    return text
+
+
+def badges(finding: Finding) -> str:
+    severity = f"`{finding.severity}`" + (" (lowered from high)" if finding.severity_capped else "")
+    parts = [severity, finding.label, finding.dimension]
+    if finding.trigger_class:
+        parts.append(f"trigger: {finding.trigger_class}")
+    return " · ".join(parts)
+
+
+def finding_block(finding: Finding) -> list[str]:
+    """One finding of the markdown report: plain words first, then the technical details (spec 010)."""
+    heading = finding.headline or finding.summary
+    lines = [f"#### {finding.id}. {heading}", "", badges(finding), "", finding.context or NOT_RECORDED, ""]
+    lines += [f"**In practice.** {finding.in_practice or NOT_RECORDED}", ""]
+    if finding.kind == FindingKind.DESIGN_QUESTION:
+        lines += [f"**Why it may be intended.** {finding.possibly_intended_reason or NOT_RECORDED}", ""]
+        lines += [f"**If it is not intended.** {finding.wrong_output or NOT_RECORDED}", ""]
+    lines.append(f"- **Where:** `{location(finding)}`")
+    if finding.headline:
+        lines.append(f"- **Summary:** {finding.summary}")
+    lines.append(f"- **Trigger:** {trigger_text(finding)}")
+    lines.append(f"- **Wrong output:** {finding.wrong_output if finding.wrong_output is not None else 'n/a'}")
+    lines.append(f"- **Fix:** {finding.fix}")
+    lines.append(f"- **Raised by:** {', '.join(finding.raised_by)}")
+    if finding.label == AgreementLabel.CONTESTED:
+        lines.append(f"- **Argument for:** {finding.argument_for or 'n/a'}")
+        lines.append(f"- **Argument against:** {finding.argument_against or 'n/a'}")
+        lines.append(f"- **Deciding assumption:** {finding.deciding_assumption or 'n/a'}")
+    if finding.no_trigger_reason:
+        lines.append(f"- **No-trigger reason:** {finding.no_trigger_reason}")
+    lines.append("")
     return lines
 
 
@@ -3976,34 +4242,23 @@ def render_markdown(report: ReviewReport) -> str:
         return "\n".join(lines)
 
     lines += ["", "## Findings", "", finding_cap_sentence(report), ""]
-    headers = ["Location", "Dimension", "Severity", "Summary", "Trigger", "Wrong output", "Fix", "Raised by", "Label"]
     for label in AgreementLabel.VALUES:
         lines += [f"### {label.capitalize()}", ""]
         subset = [f for f in report.findings if f.label == label]
         if not subset:
             lines += ["None.", ""]
             continue
-        table_headers = list(headers)
-        if label == AgreementLabel.CONTESTED:
-            table_headers += ["Argument for", "Argument against", "Deciding assumption", "No-trigger reason"]
-        rows = []
-        for f in subset:
-            row: list[Any] = [
-                f"{f.file}:{f.line_start}" + (f"-{f.line_end}" if f.line_end != f.line_start else ""),
-                f.dimension,
-                f.severity,
-                f"{f.id}: {f.summary}",
-                f.trigger,
-                f.wrong_output,
-                f.fix,
-                f.raised_by,
-                f.label,
-            ]
-            if label == AgreementLabel.CONTESTED:
-                row += [f.argument_for, f.argument_against, f.deciding_assumption, f.no_trigger_reason]
-            rows.append(row)
-        lines += [*_table(table_headers, rows), ""]
-
+        for finding in subset:
+            lines += finding_block(finding)
+    if report.design_questions:
+        lines += ["## Design questions", ""]
+        lines.append(
+            "The reviewers marked these as possibly intended: the behaviour may be a deliberate trade-off that the "
+            "code does not document. They are questions for the code's owners, not defects."
+        )
+        lines.append("")
+        for finding in report.design_questions:
+            lines += finding_block(finding)
     lines += ["## Rejected findings", ""]
     if report.rejected:
         lines += _table(
@@ -4085,10 +4340,242 @@ class ToolDelivery:
 
 
 def tool_delivery(report: ReviewReport) -> ToolDelivery:
-    mapped = report_findings(report.findings)
+    mapped = report_findings(report.delivered)
     clamped = mapped[:REPORT_TOOL_LIMIT]
     withheld = len(mapped) - len(clamped)
     return ToolDelivery(tuple(clamped), withheld, REPORT_TOOL_NOTICE if withheld else None)
+
+
+# ---------------------------------------------------------------------------
+# issue (spec 010): one delivered finding as an issue body, with suggested owners
+# ---------------------------------------------------------------------------
+
+CODEOWNERS_PATHS = (".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS", ".gitlab/CODEOWNERS")
+MAX_OWNERS = 3
+
+
+@dataclass(frozen=True)
+class Owner(Record):
+    name: str
+    lines: int | None = None
+    last_date: str | None = None
+    _optional: ClassVar[tuple[str, ...]] = ("lines", "last_date")
+
+
+@dataclass(frozen=True)
+class IssueOwners(Record):
+    """Suggested owners of a finding's lines and where they came from (contracts/issue.md)."""
+
+    source: str
+    owners: tuple[Owner, ...] = ()
+    origin: str | None = None
+    truncated: bool = False
+    reason: str | None = None
+    _records: ClassVar[dict[str, str]] = {"owners": "Owner"}
+    _enums: ClassVar[dict[str, Sequence[str]]] = {"source": OwnerSource.VALUES}
+    _optional: ClassVar[tuple[str, ...]] = ("origin", "reason")
+
+
+def codeowners_regex(pattern: str) -> re.Pattern[str]:
+    """A CODEOWNERS pattern as a regular expression, for the gitignore subset the hosts document (research R9).
+
+    A leading `/` anchors the pattern at the repository root, as does a `/` inside it; otherwise it matches at any
+    depth. A trailing `/` matches a directory and everything under it. `**` spans directories, `*` and `?` do not.
+    """
+    directory = pattern.endswith("/")
+    body = pattern.strip("/")
+    anchored = pattern.startswith("/") or "/" in body
+    out = []
+    i = 0
+    while i < len(body):
+        if body.startswith("**", i):
+            out.append(".*")
+            i += 2
+            if body.startswith("/", i):
+                out.append("/?")
+                i += 1
+            continue
+        char = body[i]
+        out.append("[^/]*" if char == "*" else "[^/]" if char == "?" else re.escape(char))
+        i += 1
+    core = "".join(out)
+    prefix = "^" if anchored else "^(?:.*/)?"
+    # `docs/*` covers the files directly in docs/, not deeper ones (GitHub's documented exception).
+    suffix = "/.*$" if directory else "$" if body.endswith("/*") else "(?:/.*)?$"
+    return re.compile(prefix + core + suffix)
+
+
+def codeowners_owners(text: str, path: str) -> tuple[str, ...] | None:
+    """The owners of `path` under a CODEOWNERS file: the last matching rule wins; None when no rule matches."""
+    owners: tuple[str, ...] | None = None
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line or (line.startswith("[") or line.startswith("^[")):
+            continue  # blank, comment, or a GitLab section header
+        fields = line.split()
+        if codeowners_regex(fields[0]).match(path):
+            owners = tuple(fields[1:])
+    return owners
+
+
+def _git_available(project: Path) -> bool:
+    try:
+        return git(project, "rev-parse", "--is-inside-work-tree", check=False).strip() == "true"
+    except OSError:
+        return False
+
+
+def read_at_head(project: Path, head: str | None, relative: str, in_git: bool) -> str | None:
+    if in_git and head:
+        text = git(project, "show", f"{head}:{relative}", check=False)
+        if text:
+            return text
+    path = project / relative
+    return path.read_text(encoding="utf-8", errors="replace") if path.is_file() else None
+
+
+def blame_owners(project: Path, head: str | None, file: str, line_start: int, line_end: int) -> list[Owner]:
+    """Up to three authors of the lines, by number of lines and then by their latest commit (research R9)."""
+    rev = [head] if head else []
+    out = git(project, "blame", "--root", "--line-porcelain", "-L", f"{line_start},{line_end}", *rev, "--", file,
+              check=False)
+    counts: dict[str, int] = {}
+    latest: dict[str, int] = {}
+    author, when = None, 0
+    for line in out.splitlines():
+        if line.startswith("author "):
+            author = line[len("author "):]
+        elif line.startswith("author-time "):
+            when = int(line.split()[1])
+        elif line.startswith("\t") and author is not None:
+            counts[author] = counts.get(author, 0) + 1
+            latest[author] = max(latest.get(author, 0), when)
+            author = None
+    ranked = sorted(counts, key=lambda a: (-counts[a], -latest[a], a))[:MAX_OWNERS]
+    return [
+        Owner(
+            name=a,
+            lines=counts[a],
+            last_date=datetime.datetime.fromtimestamp(latest[a], datetime.timezone.utc).date().isoformat(),
+        )
+        for a in ranked
+    ]
+
+
+def suggest_owners(project: Path, head: str | None, file: str, line_start: int, line_end: int) -> IssueOwners:
+    """Owners from an ownership file, else from blame, else none with the reason (contracts/issue.md)."""
+    in_git = _git_available(project)
+    for relative in CODEOWNERS_PATHS:
+        text = read_at_head(project, head, relative, in_git)
+        if text is None:
+            continue
+        owners = codeowners_owners(text, file)
+        if owners:
+            return IssueOwners(
+                source=OwnerSource.CODEOWNERS, owners=tuple(Owner(name=o) for o in owners), origin=relative
+            )
+        break  # the first ownership file found is the one the host uses
+    if not in_git:
+        return IssueOwners(source=OwnerSource.NONE, reason="the project is not a git repository and has no "
+                           "ownership file covering this file")
+    owners = blame_owners(project, head, file, line_start, line_end)
+    if not owners:
+        return IssueOwners(source=OwnerSource.NONE, reason=f"{file} has no history at the reviewed head")
+    shallow = git(project, "rev-parse", "--is-shallow-repository", check=False).strip() == "true"
+    return IssueOwners(source=OwnerSource.BLAME, owners=tuple(owners), truncated=shallow)
+
+
+def owners_text(owners: IssueOwners) -> str:
+    if owners.source == OwnerSource.CODEOWNERS:
+        return f"From `{owners.origin}`: " + ", ".join(o.name for o in owners.owners)
+    if owners.source == OwnerSource.BLAME:
+        total = sum(o.lines or 0 for o in owners.owners)
+        listed = ", ".join(f"{o.name} ({o.lines} of {total} lines, last {o.last_date})" for o in owners.owners)
+        text = f"From the history of these lines: {listed}"
+        if owners.truncated:
+            text += "\n\nHistory is truncated (shallow clone); older authors may be missing."
+        return text
+    return f"No owners found: {owners.reason}."
+
+
+def first_sentences(text: str, count: int = 2) -> str:
+    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
+    return " ".join(sentences[:count])
+
+
+def render_issue(finding: Finding, owners: IssueOwners, head: str | None, level: str, verifiers: str) -> str:
+    """The issue body of contracts/issue.md, in the order a domain reader needs it."""
+    design = finding.kind == FindingKind.DESIGN_QUESTION
+    headline = finding.headline or finding.summary
+    title = f"Confirm intended behaviour: {headline}" if design else headline
+    lines = [f"# {title}", "", "## Situation", "", finding.context or NOT_RECORDED, ""]
+    lines += ["## Who hits this and when", "", finding.in_practice or NOT_RECORDED, ""]
+    if finding.trigger_class:
+        trigger = f"Trigger: {TriggerClass.WORDS[finding.trigger_class]}."
+        if finding.reach:
+            trigger += " " + first_sentences(finding.reach)
+        lines += [trigger, ""]
+    lines += ["## Bug or design question", ""]
+    if design:
+        lines += [f"Possibly intended: {finding.possibly_intended_reason or NOT_RECORDED}", ""]
+        lines += [f"If it is not intended: {finding.wrong_output or NOT_RECORDED}", ""]
+        lines.append("Please confirm which behaviour is wanted.")
+    else:
+        sentence = f"Defect, {finding.severity}"
+        if finding.severity_capped and finding.trigger_class:
+            sentence += f", lowered from high because its only trigger is {TriggerClass.WORDS[finding.trigger_class]}"
+        lines.append(sentence + ".")
+    if finding.label == AgreementLabel.CONTESTED:
+        lines += ["", "The reviewers disagreed on this finding.", ""]
+        lines += [f"- For: {finding.argument_for or 'n/a'}"]
+        lines += [f"- Against: {finding.argument_against or 'n/a'}"]
+        lines += [f"- Decided by: {finding.deciding_assumption or 'n/a'}"]
+    short = (head or "the working tree")[:12]
+    lines += ["", "## Where", "", f"`{location(finding)}` at `{short}`", ""]
+    lines += ["## Reproduction", "", finding.trigger or f"No concrete trigger: {finding.no_trigger_reason or 'n/a'}"]
+    for c in finding.value_corrections:
+        lines += ["", f"Note: the finding quoted `{c.quoted}`; `{c.file}:{c.line}` has `{c.actual}`."]
+    lines += ["", f"Result: {finding.wrong_output or 'n/a'}", ""]
+    lines += ["## Proposed fix", "", finding.fix, ""]
+    lines += ["## Suggested owners", "", owners_text(owners), ""]
+    lines += [
+        "---",
+        "",
+        f"<sub>Found by a {level} sci-review ({finding.label}; raised by {', '.join(finding.raised_by)}; "
+        f"{verifiers}) on `{short}`.</sub>",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def cmd_issue(args: argparse.Namespace) -> int:
+    run_dir, info = load_run(args.run)
+    report_path = run_dir / "report.json"
+    if not report_path.is_file():
+        raise PreconditionFailure("report.json does not exist; run `panel.py report` first")
+    data = read_json(report_path)
+    delivered = [Finding.from_json(f) for f in [*data.get("findings", []), *data.get("design_questions", [])]]
+    finding = next((f for f in delivered if f.id == args.finding), None)
+    if finding is None:
+        ids = ", ".join(f.id for f in delivered) or "none"
+        raise UsageFailure(f"{args.finding} is not a delivered finding of this run; delivered: {ids}")
+    panel_data = data.get("panel", {})
+    if panel_data.get("protocol", Protocol.VERIFY) == Protocol.VERIFY:
+        count = panel_data.get("verifiers", 1)
+        verifiers = "1 verifier" if count == 1 else f"{count} verifiers"
+    else:
+        verifiers = "debate panel"
+    head = (data.get("scope") or {}).get("head")
+    owners = suggest_owners(Path(info.project), head, finding.file, finding.line_start, finding.line_end)
+    body = render_issue(finding, owners, head, data.get("level", Level.DEFAULT), verifiers)
+    path = run_dir / "issues" / f"{finding.id}.md"
+    if args.dry_run:
+        print(f"[dry-run] would write {path}")
+        print(body, end="")
+        return EXIT_OK
+    write_text(path, body, dry_run=False)
+    print(body, end="")
+    return EXIT_OK
 
 
 # ---------------------------------------------------------------------------
@@ -4188,6 +4675,8 @@ def build_parser() -> argparse.ArgumentParser:
     add("adjudicate", cmd_adjudicate, "compute agreement labels into adjudication.json")
     report = add("report", cmd_report, "write report.json and print the report")
     report.add_argument("--format", choices=("json", "markdown"), default="markdown")
+    issue = add("issue", cmd_issue, "render one delivered finding as an issue body in the run directory")
+    issue.add_argument("--finding", required=True, help="the id of a delivered finding or design question")
     add("clean", cmd_clean, "remove the run directory")
     notice = add("notice", cmd_notice, "add a notice for the report (for example, a missing tool)")
     notice.add_argument("text")
